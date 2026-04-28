@@ -1,0 +1,43 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Log files
+*.log
+app.log
+
+# Environment
+.env
+.venv/
+venv/
+env/
+ENV/
+
+# IDEs
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Test output
+htmlcov/
+.coverage
+.tox/
+.pytest_cache/
+
+# Mypy / Pylint
+.mypy_cache/
+.pylint.d/
+
+# FastAPI/Starlette specific (optional)
+instance/
+*.db
+*.sqlite3
+
+# Build artifacts
+build/
+dist/
+*.egg-info/

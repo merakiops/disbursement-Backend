@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDA Report</title>
+    <link rel="stylesheet" href="report_styles.css">
+</head>
+
+<body>
+    <div class="page">
+        <!-- HEADER -->
+        <div class="header">
+            <div class="header-top">
+                <div class="logo-left">
+                    <img src="https://meraki-disbursement.s3.us-east-1.amazonaws.com/static_objects/meraki_logo.jpeg"
+                        alt="Meraki Logo" class="logo">
+                </div>
+
+                <div class="company-info">
+                    <h1>{{company_name}}</h1>
+                </div>
+            </div>
+
+            <div class="header-bottom">
+                <div class="report-type">Report: <strong>{{report_type}}</strong></div>
+                <div class="date">Date: <strong>{{report_date}}</strong></div>
+            </div>
+        </div>
+
+        <!-- CONTENT -->
+        <div class="content">
+            <div class="section client-info">
+                <h3>Client Information</h3>
+                <div class="address">
+                    <strong>{{client_name}}</strong> <br>
+
+                    {{client_address}}
+                </div>
+            </div>
+
+            <div class="section port-agent">
+                <div class="section-invoice">
+                    <h3> Port Agent Details</h3>
+                    <div class="invoice">Invoice No: <strong>{{invoice_ref_no}}</strong></div>
+                </div>
+                <div class="address">
+                    <strong>{{portagent_name}}</strong> <br>
+
+                    {{portagent_address}}
+                </div>
+                <div class="agent-info">
+                    <div class="agent-labels">
+                        <div class="agent-item">
+                            <span class="label">Account Holder</span>
+                            <span class="value"><strong>{{account_holder}}</strong></span>
+                        </div>
+                        <div class="agent-item">
+                            <span class="label">Account Number</span>
+                            <span class="value"><strong>{{current_account_number}}</strong></span>
+                        </div>
+                        <div class="agent-item">
+                            <span class="label">Bank Name</span>
+                            <span class="value"><strong>{{bank_name}}</strong></span>
+                        </div>
+                        <div class="agent-item">
+                            <span class="label">IFSC Code</span>
+                            <span class="value"><strong>{{ifsc_code}}</strong></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="section vessel-info">
+            <h3>Vessel & Voyage Information</h3>
+            <div class="vessel-labels">
+                <div class="vessel-item">
+                    <span class="label">Vessel Name</span>
+                    <span class="value"><strong>{{vessel_name}}</strong></span>
+                </div>
+                <div class="vessel-item">
+                    <span class="label">Port Name</span>
+                    <span class="value"><strong>{{country_name}},{{port_name}}</strong></span>
+                </div>
+                <div class="vessel-item">
+                    <span class="label">Voyage</span>
+                    <span class="value"><strong>{{voyage_no}}</strong></span>
+                </div>
+                <div class="vessel-item">
+                    <span class="label">ROE(Rate of Exchange)</span>
+                    <span class="value"><strong>{{pda_roe}}</strong></span>
+                </div>
+            </div>
+            <div class="vessel-labels">
+                <div class="vessel-item">
+                    <span class="label">From Currency</span>
+                    <span class="value"><strong>{{pda_currency_from}}</strong></span>
+                </div>
+                <div class="vessel-item">
+                    <span class="label">TO Currency</span>
+                    <span class="value"><strong>{{pda_currency_to}}</strong></span>
+                </div>
+                <div class="vessel-item">
+                    <span class="label">ETA</span>
+                    <span class="value"><strong>{{eta}}</strong></span>
+                </div>
+                <div class="vessel-item">
+                    <span class="label">ETD</span>
+                    <span class="value"><strong>{{etd}}</strong></span>
+                </div>
+            </div>
+            <div class="roe-explanation" style="margin-top: 15px;">
+                1 Unit of {{pda_currency_from}} = {{pda_roe}} ROE unit of {{pda_currency_to}}
+            </div>
+        </div>
+
+        <div class="bottom-section">
+            <!-- <div class="cost-allocation">
+                    <h3>Cost Allocation & Currency</h3>
+                    <hr>
+                    <div class="cost-items">
+                        <div class="cost-item">
+                            <span class="cost-label">Meraki Total</span>
+                            <span class="cost-amount">{{meraki_pda_amount}}</span>
+                        </div>
+                        <div class="cost-item">
+                            <span class="cost-label">PDA Agent Amount</span>
+                            <span class="cost-amount">{{portagent_pda_amount}}</span>
+                        </div>
+                        <div class="cost-item">
+                            <span class="cost-label">Conversion Rate</span>
+                            <span class="cost-amount">{{conversion_rate}}</span>
+                        </div>
+                        <div class="cost-item">
+                            <span class="cost-label">Conversion Amount</span>
+                            <span class="cost-amount">{{currency_conversion}}</span>
+                        </div>
+                    </div>
+                </div> -->
+
+            <div class="balance-summary">
+                <h3>Payment Summary</h3>
+                <hr>
+                <div class="summary-items">
+                    <div class="summary-item">
+                        <span class="summary-label">Conversion Rate</span>
+                        <span class="summary-amount">{{conversion_rate}}</span>
+                    </div>
+                    <div class="summary-item">
+                        <span class="summary-label">Total Amount</span>
+                        <span class="summary-amount">{{currency_conversion}}</span>
+                    </div>
+                    <div class="summary-item">
+                        <span class="summary-label">Advance Percentage</span>
+                        <span class="summary-amount">{{advance_percentage}}</span>
+                    </div>
+                    <div class="summary-item">
+                        <span class="summary-label">Remittance</span>
+                        <span class="summary-amount">{{pda_remittance}}</span>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    </div>
+    </div>
+
+    <!-- SERVICE EXPENSE PAGES -->
+    {% set ns = namespace(counter=0) %}
+    {% for chunk in service_charge.chunks %}
+    <div class="page table-page">
+        <div class="header">
+            <div class="header-top">
+                <div class="logo-left">
+                    <img src="https://meraki-disbursement.s3.us-east-1.amazonaws.com/static_objects/meraki_logo.jpeg"
+                        alt="Meraki Logo" class="logo">
+                </div>
+                <div class="company-info">
+                    <h1>{{company_name}}</h1>
+                </div>
+
+            </div>
+            <div class="header-bottom">
+                <div class="report-type">Report: <strong>{{report_type}}</strong></div>
+                <div class="date">Date: <strong>{{report_date}}</strong></div>
+            </div>
+        </div>
+        <div class="content">
+            <div class="section expense-details">
+                <h3>Port Expense Details</h3>
+                <table class="expense-table">
+                    <colgroup>
+                        <col style="width:70px; white-space: nowrap;" />
+                        <col style="width:auto;" />
+                        <col style="width:120px;" />
+                    </colgroup>
+                    <thead>
+                        <tr>
+                            <th>S.&nbsp;No</th>
+                            <th>Description</th>
+                            <th style="text-align: center;">Amount <br />({{pda_currency_from}})</th>
+                            <th style="text-align: center;">Amount<br />({{pda_currency_to}})</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for services in chunk %}
+                        {% set ns.counter = ns.counter + 1 %}
+                        <tr style="min-height: 60px;">
+                            <td>{{ ns.counter }}</td>
+                            <td>
+                                <div class="service-title"><strong>{{ services.service }}</strong></div>
+                                {% if services.info_msg %}
+                                <div class="service-info">({{ services.info_msg }})</div>
+                                {% endif %}
+                            </td>
+                            <td style="text-align: center;">{{ services.total }}</td>
+                            <td style="text-align: right;"><span>{{ "%.2f"|format((services.total * pda_roe) | round(2))
+                                    if services.total and pda_roe else 0 }}</span></td>
+                        </tr>
+                        {% endfor %}
+                        {% if loop.last %}
+                        <tr class="total-row">
+                            <td></td>
+                            <td><strong>Agent Total</strong></td>
+                            <td><strong>{{ service_charge.grand_total }}</strong></td>
+                            <td><strong><span>{{ "%.2f"|format((service_charge.grand_total * pda_roe) | round(2)) if
+                                        service_charge.grand_total and pda_roe else 0 }}</span></strong></td>
+                        </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</body>
+
+</html>
