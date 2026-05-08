@@ -224,22 +224,11 @@ app.include_router(disbursementFilter,tags=["filter"])
 app.include_router(DashboardController, tags=["Dashboard"])
 app.include_router(dynamic_table_controller, tags=["Dynamic Table Creation"])
 
-# BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-# CERT_FILE_PATH = os.path.join(BASE_DIR, "certs", "server-crt.pem")
-# KEY_FILE_PATH = os.path.join(BASE_DIR, "certs", "server-key.pem")
-
-#print("CERT_FILE_PATH:", CERT_FILE_PATH)
-#print("KEY_FILE_PATH:", KEY_FILE_PATH)
-#print("Cert exists:", os.path.exists(CERT_FILE_PATH))
-#print("Key exists:", os.path.exists(KEY_FILE_PATH))
-
 # === Main entrypoint ===
 if __name__ == "__main__":
     uvicorn.run(
         "main:app",
         host=HOST,
         port=8081,
-        reload=True,
-        # ssl_keyfile=KEY_FILE_PATH,
-        # ssl_certfile=CERT_FILE_PATH
+        reload=True
     )
