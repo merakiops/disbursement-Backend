@@ -341,7 +341,10 @@ def enrich_vessel_info(vessel_obj, port_agent_pda_json):
 
         # Bind the whole object, not individual keys
         if isinstance(additional_props, dict):
-            setattr(vessel_obj, "additional_properties", additional_props)
+            if isinstance(vessel_obj, dict):
+                vessel_obj["additional_properties"] = additional_props 
+            else:
+                setattr(vessel_obj, "additional_properties", additional_props)
 
     except Exception as e:
         print(f"Error enriching vessel info: {e}")

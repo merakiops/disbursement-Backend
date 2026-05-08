@@ -121,7 +121,7 @@ def bracket_calculation_for_suez_canal(db: Session,cargo_qty: str,service_name: 
                     "tariff_percent": f"{rate:.2f}",
                     "formula_result": "Basic Value * Movement * Tariff %",
                     "formula_inputs": formula_inputs,
-                    "optional": "N",
+                    "optional": "Y" if sub["optional"]== "Y" else "N",
                     "operational_flag": "+",
                     "hide": "Y",
                     "sub_total": sub_total,
@@ -209,7 +209,7 @@ def reference_calculation_egypt(services, vessel, service_name, sub_name, db,dto
                         (ss for ss in reversed(matching_subs) if ss.get("is_bracket_item") != "true"),
                         matching_subs[-1]
                     )
-
+           
             if ref_sub and ref_sub.get("sub_total", 0) > 0 and ((ref_sub.get("optional", '')=='N')or (ref_sub.get("optional", '')=='Y' and ref_sub.get("hide", '')=='Y')):
                 # If referenced sub is hidden, hide current sub too
                 if current_sub and ref_sub.get("hide") == "Y":

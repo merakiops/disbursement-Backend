@@ -8,9 +8,9 @@ from cryptography.hazmat.backends import default_backend
 # Load environment variables from .env file
 #load_dotenv()
 load_dotenv('.env') 
-env = os.getenv('ENV', 'stag') 
+env = os.getenv('ENV', 'prod') 
 env_files = {
-        'stag': '.env.stag'
+        'prod': '.env.prod'
     }
 
 env_file = env_files.get(env, '.env')  # Default to .env if no match

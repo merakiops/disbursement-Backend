@@ -14,6 +14,7 @@ from app.models.txn_pda_vessel_details import PdaVesselDetails
 from app.tariff_rule_calculation.suez_canal import bracket_calculation_for_suez_canal,reference_calculation_egypt
 from app.core.constants import CountryName
 import logging
+from decimal import Decimal, ROUND_HALF_UP
 
 SCHEMA_NAME=Config.SCHEMA_NAME
 logger = logging.getLogger("app_logger")
@@ -318,8 +319,37 @@ def range_calculation(db: Session,vsl_attr: str,service_name: str,vessel: Any,re
         "formula": f"Range:{service_name}:{resultant_col}->{value}"
     }
 
+def evaluate_formula(formula: str, rate: float, vessel,dto,take) -> float:
+    try:
+        formula_lower = formula.strip().lower()
+        
+        if formula_lower in ['rate','fixed']:
+            return rate
+        
+        # First replace 'rate' with its value
+        formula_expr = formula.lower().replace('rate', str(rate))
+        
+        # Extract vessel properties (excluding 'rate')
+        var_names = extract_vsl_property(formula_expr)
+        var_names = {name for name in var_names if name.lower() != 'rate'}
+        
+        if var_names:
+            context = build_variables(vessel, var_names,dto)
+            context.update({
+                "remaining":take,
+                "take":take,
+                "value":take
+            })
+            for var_name, var_value in context.items():
+                formula_expr = formula_expr.replace(var_name, str(var_value))
+                formula_expr = formula_expr.replace(var_name.upper(), str(var_value))
+        return eval(formula_expr)
+        
+    except Exception as e:
+        return rate*take
 
-def bracket_calculation(db: Session,cargo_qty: str,service_name: str,vessel: Any,country_id:int=None,port_id:int=None) -> List[Dict[str, Any]]:
+
+def bracket_calculation(db: Session,cargo_qty: str,service_name: str,vessel: Any,country_id:int=None,port_id:int=None,sub=None,dto=None) -> List[Dict[str, Any]]:
     """
     Calculates a tiered fee structure based on cargo quantity and tariff brackets.
     """
@@ -327,29 +357,63 @@ def bracket_calculation(db: Session,cargo_qty: str,service_name: str,vessel: Any
         vessel_attr = cargo_qty.strip()
         qty_value = float(get_vessel_attr(vessel, vessel_attr) or 0)
         logger.info(f"Vessel attribute '{vessel_attr}' value: {qty_value}")
+        additional_prop=False
+        formula_result = [p.strip().strip('()') for p in re.split(r'[+\-*/]', sub["formula_result"])]
+        formula_result = [p for p in formula_result if p]  # Remove empty strings
 
+        if formula_result[-1].lower().replace(" ","") not in ["basicvalue","tariff%","tariff", "movement"]: 
+            additional_attr=formula_result[-1]
+            additional_value=get_vessel_attr(vessel, additional_attr) if formula_result[-1]!="roe" else dto.roe
+            if "*(1/" in sub["formula_result"].replace(" ","").lower():  #this is a exception case where the (1/roe is handled)
+                additional_value=1/float(additional_value)
+            else:
+                additional_value=additional_value
+            additional_prop=True
         if qty_value <= 0:
             logger.info("Cargo quantity <= 0, skipping bracket calculation.")
             return []
-
         table_name = f"txn_{service_name.lower().replace(' ', '_')}"
-        query = f"""
-            SELECT bracket, min_range, max_range, rate
-            FROM {SCHEMA_NAME}.{table_name}
-            where port=:port_id
-            ORDER BY COALESCE(min_range, 0)
+        # Check if fixed column exists
+        check_column_query = f"""
+            SELECT column_name FROM information_schema.columns 
+            WHERE table_name = :table_name AND column_name = 'formula' AND table_schema = :schema_name
         """
+        has_formula = db.execute(text(check_column_query), {"table_name": table_name, "schema_name": SCHEMA_NAME}).fetchone()
+        
+        if has_formula:
+            query = f"""
+                SELECT bracket, min_range, max_range, rate, formula
+                FROM {SCHEMA_NAME}.{table_name}
+                where port=:port_id
+                ORDER BY COALESCE(min_range, 0)
+            """
+            
+        else:
+            query = f"""
+                SELECT bracket, min_range, max_range, rate
+                FROM {SCHEMA_NAME}.{table_name}
+                where port=:port_id
+                ORDER BY COALESCE(min_range, 0)
+            """
 
         logger.info(f"Executing query: {query}")
         rows = db.execute(text(query),{"port_id":port_id}).fetchall()
         logger.info(f"Found {len(rows)} brackets")
         if not rows:
-            query = f"""
-            SELECT bracket, min_range, max_range, rate
-            FROM {SCHEMA_NAME}.{table_name}
-            where country=:country_id
-            ORDER BY COALESCE(min_range, 0)
-        """
+            if has_formula:
+                query = f"""
+                SELECT bracket, min_range, max_range, rate, formula
+                FROM {SCHEMA_NAME}.{table_name}
+                where country=:country_id
+                ORDER BY COALESCE(min_range, 0)
+            """
+            else:
+                query = f"""
+                SELECT bracket, min_range, max_range, rate
+                FROM {SCHEMA_NAME}.{table_name}
+                where country=:country_id
+                ORDER BY COALESCE(min_range, 0)
+            """
 
             logger.info(f"Executing query: {query}")
             rows = db.execute(text(query),{"country_id":country_id}).fetchall()
@@ -358,7 +422,12 @@ def bracket_calculation(db: Session,cargo_qty: str,service_name: str,vessel: Any
         cursor = 1
 
         for idx, row in enumerate(rows, start=1):
-            bracket_name, min_q, max_q, rate = row
+            if has_formula:
+                bracket_name, min_q, max_q, rate, formula = row
+            else:
+                bracket_name, min_q, max_q, rate = row
+                formula=None
+            # bracket_name, min_q, max_q, rate = row
             min_q = 1 if not min_q or int(min_q) <= 0 else int(min_q)
             max_q = None if not max_q else int(max_q)
             rate = float(rate or 0)
@@ -371,7 +440,24 @@ def bracket_calculation(db: Session,cargo_qty: str,service_name: str,vessel: Any
             take = max(0, end - start + 1)
 
             if take > 0:
-                subtotal = take * rate
+                if additional_prop:
+                    if formula:
+                        subtotal = evaluate_formula(formula, rate,vessel,dto,take)
+                        formula_inputs=f"{subtotal} * {additional_value}"
+                     
+                    else:
+                        subtotal = take * rate
+                        formula_inputs=f"{take} * {rate} *{additional_value}"
+                    additional_value = float(additional_value)
+                    subtotal=round(subtotal * additional_value, 2)
+                    
+                else:
+                    if formula:
+                        subtotal = evaluate_formula(formula, rate,vessel,dto,take)
+                        formula_inputs=subtotal
+                    else:
+                        subtotal = take * rate
+                        formula_inputs=f"{take} * {rate}"
                 logger.info(f"Adding bracket {idx}: take={take}, rate={rate}, subtotal={subtotal}")
                 breakdown.append({
                     "name": bracket_name or f"Bracket {idx}",
@@ -381,10 +467,10 @@ def bracket_calculation(db: Session,cargo_qty: str,service_name: str,vessel: Any
                     "movement": "1",
                     "tariff_percent": f"{rate:.2f}",
                     "formula_result": "Basic Value * Movement * Tariff %",
-                    "optional": "Y",
+                    "optional": "Y" if sub["optional"]== "Y" else "N",
                     "operational_flag": "+",
                     "sub_total": subtotal,
-                    "formula_inputs": f"{take} * {rate}",
+                    "formula_inputs": formula_inputs,
                     "hide": "Y",
                     "is_bracket_item": "true"
                 })
@@ -818,7 +904,7 @@ def volume_calculate(vessel):
     return vol_value
 
 
-def reference_calculation(services, vessel, service_name, sub_name, db,dto):
+def reference_calculation(services, vessel, service_name, sub_name, db,dto,current_sub=None):
     
     try:
         # Locate the parent service
@@ -834,7 +920,7 @@ def reference_calculation(services, vessel, service_name, sub_name, db,dto):
                  if isinstance(ss, dict) and ss.get("name", "").lower() == sub_name.lower()),
                 None
             )
-
+         
             if ref_sub and ref_sub.get("sub_total", 0) > 0 and ((ref_sub.get("optional", '')=='N')or (ref_sub.get("optional", '')=='Y' and ref_sub.get("hide", '')=='Y')):
                 # Reference found with a calculated value
                 return {
@@ -868,6 +954,17 @@ def calculate_service_total_roe(service: dict, vessel, db, disbursement_type:str
     
     for sub in service.get("subService", []):
         if isinstance(sub, dict) and sub.get("optional") == "N":
+            # # ── NEW: Skip bracket parent without |System ──────────────
+            # basic_value = sub.get("basic_value", "")
+            # unique_key = sub.get("unique_key", "")
+            
+            # # Check if it's a bracket and doesn't have |System suffix
+            # if (isinstance(basic_value, str) and 
+            #     basic_value.lower().startswith("bracket") and 
+            #     "|system" not in unique_key.lower()):
+            #     logger.info(f"Skipping bracket parent '{sub.get('name')}' (no |System) from total calculation")
+            #     continue
+            # # ── END NEW ───────────────────────────────────────────────
             sub_total = sub.get("sub_total", 0)
             total += sub_total
             if sub_total > 0:
@@ -1011,7 +1108,12 @@ def get_movement_value(sub: dict, vessel, db: Session,current_service, disbursem
                     # Try vessel attribute
                     val = get_vessel_attr(vessel, value)
                     numeric_value = safe_float(val, 1.0) if val not in (None, 0) else None
-
+                    if numeric_value is not None and number_part != '*1':
+                        try:
+                            numeric_value = eval(f"{numeric_value}{number_part}")
+                            logger.info(f"Applied operation: {val}{number_part} = {numeric_value}")
+                        except Exception as e:
+                            logger.error(f"Error applying operation {number_part}: {e}")
             
 
         logger.info(f"Converted movement to numeric value: {numeric_value}")
@@ -1085,6 +1187,25 @@ def get_movement_value(sub: dict, vessel, db: Session,current_service, disbursem
         if base_movement.startswith("slab"):
             return calculate_slab_movement(base_movement,sub,dto,vessel)
 
+        if base_movement.replace(" ","").lower().startswith("roundoff"):
+            parts = [p.strip() for p in base_movement.split(":")]
+            parts[0] = 'na'
+            base = ":".join(parts)
+            
+            # Temporarily update sub movement to evaluate
+            original_movement = sub.get('movement')
+            sub['movement'] = base
+            
+            res_value = get_movement_value(sub, vessel, db, current_service, disbursement_seq, disbursement_type, dto, services)
+            
+            # Restore original movement
+            sub['movement'] = original_movement
+            
+            if isinstance(res_value, (int, float)):
+                rounded_value = float(Decimal(str(res_value)).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP))
+                return rounded_value
+            
+            return 1.0
         
         return numeric_value if numeric_value is not None and numeric_value>=0 else 0
 
@@ -1260,7 +1381,7 @@ def evaluate_basic_value(basic_value: str, sub, vessel, db: Session, services: l
             if country_obj.name.strip()==CountryName.EGYPT:
                 return reference_calculation_egypt(services, vessel,service_name, sub_service, db,dto,sub)
                
-            return reference_calculation(services, vessel,service_name, sub_service, db,dto)
+            return reference_calculation(services, vessel,service_name, sub_service, db,dto,sub)
 
         # Case 3: Range calculation
         if isinstance(basic_value, str) and basic_value.startswith("range:"):
@@ -1289,7 +1410,7 @@ def evaluate_basic_value(basic_value: str, sub, vessel, db: Session, services: l
                 if '|' not in basic_value:
                     cargo_qty = parts[1] 
                     service_name = parts[2]
-                    return bracket_calculation(db, cargo_qty, service_name, vessel,dto.country_id,dto.port_id)
+                    return bracket_calculation(db, cargo_qty, service_name, vessel,dto.country_id,dto.port_id,sub,dto)
                 else:
                     cargo_and_suez = parts[1].split('|')
 
@@ -1312,7 +1433,7 @@ def evaluate_basic_value(basic_value: str, sub, vessel, db: Session, services: l
             #     return evaluate_sum_basic_value_turkey(basic_value, services, vessel, db, dto, sub)
             return evaluate_sum_basic_value(basic_value, services,vessel,db,dto)
         
-        if isinstance(basic_value, str) and basic_value.startswith("round"):
+        if isinstance(basic_value, str) and not basic_value.replace(" ","").lower().startswith("roundoff") and basic_value.startswith("round") :
             if '%' in basic_value:
                 percentage=True
                 return calculate_round_off(basic_value, vessel,sub=sub,percentage=percentage,dto=dto)
@@ -1327,7 +1448,18 @@ def evaluate_basic_value(basic_value: str, sub, vessel, db: Session, services: l
             vsl_attr, service_name, resultant_col = parts
             resultant_col=resultant_col.replace(" ","_")
             return discrete_value_calculation(db, vsl_attr, service_name, vessel, resultant_col,dto.country_id,dto.port_id,sub)
-
+        if basic_value.replace(" ","").lower().startswith("roundoff"):
+            parts = [p.strip() for p in basic_value.split(":")]
+            parts[0] = 'fixed'
+            base = ":".join(parts)
+            res_obj = evaluate_basic_value(base, sub, vessel, db, services, current_service, dto, disbursement_seq, disbursement_type)
+            
+            if isinstance(res_obj, dict):
+                value = res_obj.get('value', 0)
+                rounded_value = float(Decimal(str(value)).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP))
+                return {'value': rounded_value, 'formula': f"roundup({value})={rounded_value}"}
+            
+            return {'value': 0, 'formula': 'roundup_error'}
     except Exception as e:
         # Roll back DB transaction on ANY error to prevent "InFailedSqlTransaction"
         db.rollback()
@@ -1390,7 +1522,7 @@ def evaluate_tariff_percent(tariff_value: str, sub,vessel, db: Session, current_
                     if len(parts) > 1:
                         value_part = parts[1]
                     return with_vessel_attr_calculation(value_part, vessel, sub, dto,services,'False',db)           
-            return reference_calculation(services, vessel,service_name, sub_service, db,dto)
+            return reference_calculation(services, vessel,service_name, sub_service, db,dto,sub)
 
         # Case 3: Range calculation
         if isinstance(tariff_value, str) and tariff_value.startswith("range:"):
@@ -1430,7 +1562,7 @@ def evaluate_tariff_percent(tariff_value: str, sub,vessel, db: Session, current_
             if '|' not in tariff_value:
                 cargo_qty = parts[1] 
                 service_name = parts[2]
-                return bracket_calculation(db, cargo_qty, service_name, vessel,dto.country_id,dto.port_id)
+                return bracket_calculation(db, cargo_qty, service_name, vessel,dto.country_id,dto.port_id,sub)
             else:
                 cargo_and_suez = parts[1].split('|')
                 if len(cargo_and_suez) < 2 or '=' not in cargo_and_suez[1]:
@@ -1455,7 +1587,7 @@ def evaluate_tariff_percent(tariff_value: str, sub,vessel, db: Session, current_
             return evaluate_sum_basic_value(tariff_value, services,vessel,db,dto)
         
         # Case 6: round off calculation
-        if isinstance(tariff_value, str) and tariff_value.startswith("round"):
+        if isinstance(tariff_value, str) and not tariff_value.replace(" ","").lower().startswith("roundoff") and tariff_value.startswith("round"):
             if '%' in tariff_value:
                 # tariff_value=tariff_value.replace(" ","")
                 return calculate_round_off(tariff_value, vessel,percentage=True,sub=sub,dto=dto)
@@ -1470,7 +1602,20 @@ def evaluate_tariff_percent(tariff_value: str, sub,vessel, db: Session, current_
             vsl_attr, service_name, resultant_col = parts
             resultant_col=resultant_col.replace(" ","_")
             return discrete_value_calculation(db, vsl_attr, service_name, vessel, resultant_col,dto.country_id,dto.port_id,sub)
+
+        if tariff_value.replace(" ","").lower().startswith("roundoff"):
+            parts = [p.strip() for p in tariff_value.split(":")]
+            parts[0] = 'fixed'
+            base = ":".join(parts)
+            res_obj = evaluate_tariff_percent(base, sub, vessel, db, current_service, services, dto)
             
+            if isinstance(res_obj, dict):
+                value = res_obj.get('value', 0)
+                rounded_value = float(Decimal(str(value)).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP))
+                return {'value': rounded_value, 'formula': f"roundoff({value})={rounded_value}"}
+            
+            return {'value': 0, 'formula': 'roundoff_error'}  
+        
     except Exception as e:
         # Ensure clean DB state
         db.rollback()
@@ -1514,15 +1659,16 @@ def calculate_subservice(sub: dict, vessel, db: Session, services: list = None, 
                 "sub_total": br.get("sub_total", 0),
                 "formula_inputs": br.get("formula_inputs"),
                 "hide": "Y" if br.get("hide") == "Y" or br.get("is_bracket_item") == "true" else br.get("hide", "Y"),
-                "optional":"N"
+                "optional":"Y"    #this attached breakup are for debugging 
+
             })
             sub_total+=br.get("sub_total", 0)
             results.append(new_sub)
         
             base_sub.update({
                 "sub_total": sub_total,
-                "optional":"Y",
-                "hide": "Y"
+                # "optional":"Y", #this will be exculded from the total calculation of the service total
+                # "hide": "Y"                   # to handle optional functionality
             })
         results.append(base_sub) # append the base sub to the bracket
         

@@ -59,9 +59,9 @@ from fastapi.exceptions import RequestValidationError
 
 HOST = socket.gethostbyname(socket.gethostname())
 # === Load environment variables ===
-environment = os.getenv("env", "stag")
+environment = os.getenv("env", "prod")
 env_files = {
-    "stag": ".env.stag"
+    "prod": ".env.prod",
 }
 env_file = env_files.get(environment, ".env")
 load_dotenv(env_file)
@@ -224,6 +224,14 @@ app.include_router(disbursementFilter,tags=["filter"])
 app.include_router(DashboardController, tags=["Dashboard"])
 app.include_router(dynamic_table_controller, tags=["Dynamic Table Creation"])
 
+# BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+# CERT_FILE_PATH = os.path.join(BASE_DIR, "certs", "server-crt.pem")
+# KEY_FILE_PATH = os.path.join(BASE_DIR, "certs", "server-key.pem")
+
+#print("CERT_FILE_PATH:", CERT_FILE_PATH)
+#print("KEY_FILE_PATH:", KEY_FILE_PATH)
+#print("Cert exists:", os.path.exists(CERT_FILE_PATH))
+#print("Key exists:", os.path.exists(KEY_FILE_PATH))
 
 # === Main entrypoint ===
 if __name__ == "__main__":
@@ -231,5 +239,7 @@ if __name__ == "__main__":
         "main:app",
         host=HOST,
         port=8081,
-        reload=True
+        reload=True,
+        # ssl_keyfile=KEY_FILE_PATH,
+        # ssl_certfile=CERT_FILE_PATH
     )
