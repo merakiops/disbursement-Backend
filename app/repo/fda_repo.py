@@ -194,27 +194,38 @@ class FDARepository:
     def get_disbursement_objects_for_completed_pda(db: Session):
         status = StatusRepository.get_status_details_by_name('COMPLETED', db)
         
-        results = (
-                db.query(
-                    TxnDisbursement.disbursement_id,
-                    TxnDisbursement.created_by,
-                    TxnDisbursement.disbursement_seq
-                )
-                .join(PDAModel, TxnDisbursement.disbursement_seq == PDAModel.disbursement_seq)
-                .outerjoin(TxnFDA, TxnDisbursement.disbursement_seq == TxnFDA.disbursement_seq)  
-                .filter(
-                    or_(
-                        TxnDisbursement.fda == None,
-                        TxnFDA.state == 'D'  
-                    ),
-                    PDAModel.status == status.status_id,
-                    or_(
-                        func.upper(func.trim(PDAModel.state)) != 'D',
-                        PDAModel.state == None
-                    )
-                )
-                .all()
+        active_fda_exists = (
+            db.query(TxnFDA.disbursement_seq)
+            .filter(
+                TxnFDA.disbursement_seq == TxnDisbursement.disbursement_seq,
+                TxnFDA.state != 'D'
             )
+            .exists()
+        )
+
+        results = (
+            db.query(
+                TxnDisbursement.disbursement_id,
+                TxnDisbursement.created_by,
+                TxnDisbursement.disbursement_seq
+            )
+            .join(
+                PDAModel,
+                TxnDisbursement.disbursement_seq == PDAModel.disbursement_seq
+            )
+            .filter(
+                PDAModel.status == status.status_id,
+
+                or_(
+                    func.upper(func.trim(PDAModel.state)) != 'D',
+                    PDAModel.state == None
+                ),
+
+                ~active_fda_exists
+            )
+            .distinct()
+            .all()
+        )
 
         return [
             {"disbursement_id": i.disbursement_id, "created_by": i.created_by, "disbursement_seq":i.disbursement_seq}
@@ -338,7 +349,6 @@ class FDARepository:
                     traceback.print_exc()
                     raise HTTPException(status_code=500, detail=f"Failed to save disbursement: {str(e)}")   
         else:
-            print("The port id and country id and vessel id are not matching")
             raise HTTPException(status_code=400,
                                 detail=f"Port ID or Country ID does not match with the original PDA record.")
     
@@ -363,6 +373,7 @@ class FDARepository:
                     )
 
                 pda_vsl.fda_vsl_dtls =  fda_dto.portagent_fda_data.get("vessel", {})
+                pda_vsl.ma_vsl_id = fda_dto.portagent_fda_data.get("vessel", {}).get("vsl_id")
                 db.commit()
         except Exception:
             db.rollback()
@@ -413,6 +424,7 @@ class FDARepository:
         disbursement_dtl.etd = fda_dto.etd
         disbursement_dtl.vessel_stay = fda_dto.vessel_stay
         disbursement_dtl.roe_agent = fda_dto.roe
+        disbursement_dtl.vsl_id = fda_dto.vessel.vsl_id
 
         if fda_dto.fda_submit == 'Y':
             status = StatusRepository.get_status_details_by_name('COMPLETED',db)

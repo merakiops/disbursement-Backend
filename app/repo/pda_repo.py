@@ -977,6 +977,7 @@ class PDARepository:
                     )
 
                 pda_vsl.vsl_dtls =  pda_dto.portagent_pda_data.get("vessel", {})
+                pda_vsl.ma_vsl_id = pda_dto.portagent_pda_data.get("vessel", {}).get("vsl_id")
                 db.commit()
         
         except Exception:
@@ -1032,7 +1033,7 @@ class PDARepository:
         disbursement_dtl.etd = pda_dto.etd
         disbursement_dtl.vessel_stay = pda_dto.vessel_stay
         disbursement_dtl.roe_agent = pda_dto.roe
-    
+        disbursement_dtl.vsl_id = pda_dto.vessel.vsl_id
         db.add(disbursement_dtl)
         db.commit()
         db.refresh(disbursement_dtl.pda)
