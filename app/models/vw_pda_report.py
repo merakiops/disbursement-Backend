@@ -42,4 +42,8 @@ class PdaReport(Base):
     pda_roe = Column(Float)
     pda_currency_from = Column(String)
     pda_currency_to = Column(String)
+    pmt_curr_to = Column(String)
+    system_service_charge = Column(JSON)
+    pmt_curr_from=Column(String) #for the error msg
+    
     
