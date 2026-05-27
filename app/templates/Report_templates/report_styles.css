@@ -22,7 +22,7 @@ body {
     width: 210mm;
     min-height: 297mm;
     margin: 0 auto;
-    padding: 20mm;
+    padding: 10mm;
     background: white;
     position: relative;
     page-break-after: always;
@@ -63,14 +63,17 @@ body {
     border: none !important;
 }
 
-.logo, .logo-left img, .logo-right img {
+.logo,
+.logo-left img,
+.logo-right img {
     width: 60px;
     height: auto;
 }
 
 /* Compact header for continuation pages: smaller logos, no large title */
 .header.small-header {
-    border-bottom: none; /* don't show the thick line */
+    border-bottom: none;
+    /* don't show the thick line */
     padding-bottom: 0;
     margin-bottom: 0;
 }
@@ -120,13 +123,12 @@ body {
 
 .report-type {
     text-align: left;
-    color:black
+    color: black
 }
 
 .date {
     text-align: right;
-    color:black
-
+    color: black
 }
 
 .invoice {
@@ -140,7 +142,7 @@ body {
 .section {
     border: 2px solid #4472C4;
     border-radius: 8px;
-    padding: 15px;
+    padding: 6px 6px 6px 6px;
     margin-bottom: 20px;
     /* Remove background fill for the section block so table data appears on a
        clean background. Keep border to preserve section outline. */
@@ -151,7 +153,7 @@ body {
     color: #4472C4;
     font-size: 16px;
     font-weight: bold;
-    margin-bottom: 12px;
+    margin-bottom: 10px;
 }
 
 .address {
@@ -161,7 +163,7 @@ body {
 
 .address strong {
     color: #333;
-}   
+}
 
 /* ===============================
    FLEXBOX DATA STYLES
@@ -184,10 +186,9 @@ hr {
 }
 
 .agent-labels {
-    display: flex;
-    flex-wrap: nowrap;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 15px;
-    overflow-x: hidden; /* Add horizontal scroll if needed */
 }
 
 .agent-item {
@@ -215,19 +216,35 @@ hr {
 }
 
 /* Vessel Information Flexbox */
-.vessel-labels {
+/* .vessel-labels {
     display: flex;
     flex-wrap: nowrap;
     gap: 15px;
     overflow-x: hidden;
     margin-bottom: 15px;
+} */
+
+/* Vessel Information Flexbox */
+.vessel-labels {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 15px;
+    overflow-x: hidden;
+    margin-bottom: 15px;
 }
 
-.vessel-item {
+/* .vessel-item {
     display: flex;
     flex-direction: column;
     flex: 1;
     min-width: 150px;
+} */
+.vessel-item {
+    flex: 1 1 150px;
+    min-width: 0;
+    word-break: break-all;
+    overflow-wrap: anywhere;
+    white-space: normal;
 }
 
 .vessel-item .label {
@@ -238,12 +255,18 @@ hr {
     hyphens: auto;
 }
 
-.vessel-item .value {
+/* .vessel-item .value {
     color: #333;
     font-size: 13px;
     word-wrap: break-word;
     overflow-wrap: break-word;
     hyphens: auto;
+} */
+
+.vessel-item .value {
+    display: block;
+    word-break: break-all;
+    overflow-wrap: anywhere;
 }
 
 /* Vessel Information Grid */
@@ -306,15 +329,17 @@ hr {
     .date-info {
         width: 100%;
     }
-    
+
     .date-item {
-        min-width: 120px; /* Slightly smaller on tablets */
+        min-width: 120px;
+        /* Slightly smaller on tablets */
     }
 }
 
 @media screen and (max-width: 480px) {
     .date-item {
-        min-width: 100px; /* Even smaller on mobile */
+        min-width: 100px;
+        /* Even smaller on mobile */
     }
 }
 
@@ -342,7 +367,7 @@ hr {
     margin-bottom: 12px;
 }
 
-.balance-summary{
+.balance-summary {
     flex: 1;
     border: 2px solid #4472C4;
     border-radius: 8px;
@@ -358,25 +383,29 @@ hr {
 }
 
 /* Cost Items Flexbox */
-.cost-items, .summary-items {
+.cost-items,
+.summary-items {
     display: flex;
     flex-direction: column;
     gap: 8px;
 }
 
-.cost-item, .summary-item {
+.cost-item,
+.summary-item {
     display: flex;
     justify-content: space-between;
     align-items: center;
     padding: 6px 0;
 }
 
-.cost-label, .summary-label {
+.cost-label,
+.summary-label {
     color: #333;
     flex: 1;
 }
 
-.cost-amount, .summary-amount {
+.cost-amount,
+.summary-amount {
     text-align: right;
     font-weight: bold;
     color: #333;
@@ -420,26 +449,27 @@ hr {
 .expense-table {
     width: 100%;
     border-collapse: collapse;
-    margin-top: 10px;
+    margin-top: 2px;
     min-width: 500px;
     table-layout: fixed;
 }
 
 .expense-table th,
 .expense-table td {
-    white-space: normal; 
-    word-break: break-word;
-    overflow-wrap: anywhere;
+    white-space: normal;
+    word-break: break-all;
+    overflow-wrap: break-word;
     vertical-align: top;
-    margin-top: 6mm;
+    margin-top: 5mm;
 }
 
 .page.table-end .content {
-    padding-bottom: 6mm; /* smaller space left at page bottom before next table page */
+    padding-bottom: 6mm;
+    /* smaller space left at page bottom before next table page */
 }
 
 .page.continued .content {
-    padding-top: 6mm; 
+    padding-top: 6mm;
 }
 
 .page.table-page {
@@ -456,36 +486,58 @@ hr {
     padding-bottom: 4mm;
 }
 
-.expense-table th:first-child,
-.expense-table td:first-child {
-    width: 60px;
+.expense-table th:nth-child(1),
+.expense-table td:nth-child(1) {
+    width: 40px;
     text-align: center;
 }
 
-.expense-table th:last-child,
-.expense-table td:last-child {
-    width: 120px;
-    text-align: right; 
+.expense-table th:nth-child(2),
+.expense-table td:nth-child(2) {
+    width: auto;
+}
+
+.expense-table th:nth-child(3),
+.expense-table td:nth-child(3),
+.expense-table th:nth-child(4),
+.expense-table td:nth-child(4),
+.expense-table th:nth-child(5),
+.expense-table td:nth-child(5) {
+    width: 12ch;
+    text-align: right;
+}
+
+/* Black bold styling only for data rows, not header/total row */
+.expense-table tbody tr:not(.total-row) td:nth-child(3),
+.expense-table tbody tr:not(.total-row) td:nth-child(4),
+.expense-table tbody tr:not(.total-row) td:nth-child(5) {
+    color: #000;
+    font-weight: bold;
 }
 
 .expense-table thead th {
     background: #4472C4;
     color: #fff;
-    padding: 12px 14px;
+    padding: 12px 2px;
     font-weight: bold;
     text-align: left;
     border: none;
 }
 
-.expense-table thead th:first-child { text-align: center; }
-.expense-table thead th:last-child { text-align: right; }
+.expense-table thead th:first-child {
+    text-align: center;
+}
+
+.expense-table thead th:last-child {
+    text-align: right;
+}
 
 /* Keep header labels on a single line for PDFs and desktop */
 .expense-table thead th {
-    white-space: nowrap;       
-    overflow: hidden;         
-    text-overflow: ellipsis;  
-    vertical-align: middle;   
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    vertical-align: middle;
 }
 
 /* Service title and info styling inside table cells */
@@ -493,11 +545,13 @@ hr {
     font-weight: 700;
     color: #222;
     margin-bottom: 4px;
+    font-size: 11px;
     line-height: 1.15;
 }
+
 .expense-table .service-info {
     color: #6b6b6b;
-    font-size: 12px;
+    font-size: 10px;
     font-style: italic;
     line-height: 1.3;
     margin-top: 4px;
@@ -506,26 +560,19 @@ hr {
 
 .expense-table td {
     border: none;
-    padding: 8px 12px;
+    padding: 8px 2px;
     vertical-align: middle;
 }
 
-.expense-table tr:nth-child(odd) { background: #ffffff; }
-.expense-table tr:nth-child(even) { background: #edf6ff; }
-
-.expense-table th:first-child,
-.expense-table td:first-child {
-    width: 60px;
-    text-align: center;
+.expense-table tr:nth-child(odd) {
+    background: #ffffff;
 }
 
-.expense-table th:last-child,
-.expense-table td:last-child {
-    width: 120px;
-    text-align: right;
+.expense-table tr:nth-child(even) {
+    background: #edf6ff;
 }
 
-.expense-table td:last-child { border-right: none; }
+/* Column widths moved up to main table styles */
 
 /* Description column responsiveness */
 .expense-table th:nth-child(2),
@@ -547,6 +594,29 @@ hr {
     color: #fff;
 }
 
+.expense-table td:nth-child(1),
+.expense-table td:nth-child(2),
+.expense-table td:nth-child(3),
+.expense-table td:nth-child(4),
+.expense-table td:nth-child(5),
+.total-row td:nth-child(1),
+.total-row td:nth-child(2),
+.total-row td:nth-child(3),
+.total-row td:nth-child(4),
+.total-row td:nth-child(5),
+.expense-table th:nth-child(1),
+.expense-table th:nth-child(2),
+.expense-table th:nth-child(3),
+.expense-table th:nth-child(4),
+.expense-table th:nth-child(5) {
+    font-size: 11px;
+}
+
+.expense-table th,
+.expense-table td {
+    margin: 0;
+}
+
 /* ===============================
    RESPONSIVE STYLES
 =================================*/
@@ -555,69 +625,73 @@ hr {
 @media screen and (max-width: 768px) {
     .page {
         width: 100%;
-        padding: 15mm;
+        padding: 8mm;
         margin: 0;
     }
-    
+
     .header-top {
         flex-direction: column;
         text-align: center;
         gap: 10px;
     }
-    
-    .logo, .logo-left img, .logo-right img {
+
+    .logo,
+    .logo-left img,
+    .logo-right img {
         width: 50px;
     }
-    
+
     .company-info {
         order: -1;
         padding: 0;
     }
-    
+
     .company-info h1 {
         font-size: 16px;
         margin-bottom: 10px;
     }
-    
+
     .header-bottom {
         flex-direction: column;
         text-align: center;
         gap: 8px;
     }
-    
-    .report-type, .date, .invoice {
+
+    .report-type,
+    .date,
+    .invoice {
         text-align: center;
     }
-    
+
     .bottom-section {
         flex-direction: column;
         gap: 15px;
     }
-    
+
     .agent-labels {
         font-size: 12px;
         gap: 10px;
     }
-    
+
     .agent-item {
         min-width: 120px;
     }
-    
+
     .expense-table {
         font-size: 12px;
         min-width: 400px;
     }
-    
+
     .expense-table th,
     .expense-table td {
         padding: 6px 8px;
     }
-    
+
     .expense-details {
         -webkit-overflow-scrolling: touch;
         scrollbar-width: thin;
     }
-    
+
     .expense-details::after {
         content: '';
         position: absolute;
@@ -625,7 +699,7 @@ hr {
         right: 0;
         bottom: 0;
         width: 10px;
-        background: linear-gradient(to left, rgba(0,0,0,0.1), transparent);
+        background: linear-gradient(to left, rgba(0, 0, 0, 0.1), transparent);
         pointer-events: none;
     }
 }
@@ -635,42 +709,44 @@ hr {
     body {
         font-size: 12px;
     }
-    
+
     .page {
-        padding: 10mm;
+        padding: 6mm;
     }
-    
+
     .header {
         margin-bottom: 20px;
     }
-    
+
     .company-info h1 {
         font-size: 14px;
     }
-    
+
     .header-bottom {
         font-size: 10px;
     }
-    
+
     .section {
         padding: 12px;
         margin-bottom: 15px;
     }
-    
+
     .section h3 {
         font-size: 14px;
         margin-bottom: 10px;
     }
-    
-    .logo, .logo-left img, .logo-right img {
+
+    .logo,
+    .logo-left img,
+    .logo-right img {
         width: 40px;
     }
-    
+
     .agent-labels {
         flex-direction: column;
         gap: 8px;
     }
-    
+
     .agent-item {
         display: flex;
         flex-direction: row;
@@ -681,7 +757,7 @@ hr {
         margin-bottom: 8px;
         min-width: auto;
     }
-    
+
     .agent-item .label {
         font-weight: bold;
         color: #4472C4;
@@ -689,17 +765,17 @@ hr {
         margin-right: 10px;
         flex: 1;
     }
-    
+
     .agent-item .value {
         text-align: right;
         flex: 1;
     }
-    
+
     .vessel-labels {
         flex-direction: column;
         gap: 8px;
     }
-    
+
     .vessel-item {
         display: flex;
         flex-direction: row;
@@ -710,7 +786,7 @@ hr {
         margin-bottom: 8px;
         min-width: auto;
     }
-    
+
     .vessel-item .label {
         font-weight: bold;
         color: #4472C4;
@@ -718,14 +794,14 @@ hr {
         margin-right: 10px;
         flex: 1;
     }
-    
+
     .vessel-item .value {
         text-align: right;
         flex: 1;
         white-space: normal;
         overflow: visible;
     }
-    
+
     .vessel-details {
         display: block;
     }
@@ -733,11 +809,11 @@ hr {
     .vsl-items .vsl-name {
         width: 35% !important;
     }
-    
+
     .date-info {
         display: block;
     }
-    
+
     .date-item {
         display: flex;
         flex-direction: row;
@@ -747,7 +823,7 @@ hr {
         padding-bottom: 8px;
         margin-bottom: 8px;
     }
-    
+
     .date-item .label {
         font-weight: bold;
         color: #4472C4;
@@ -755,22 +831,22 @@ hr {
         margin-right: 10px;
         flex: 1;
     }
-    
+
     .date-item .value {
         text-align: right;
         flex: 1;
     }
-    
+
     .cost-items,
     .summary-items {
         font-size: 11px;
     }
-    
+
     .expense-table {
-        font-size: 10px;
+        font-size: 8px;
         min-width: 300px;
     }
-    
+
     .expense-table th,
     .expense-table td {
         padding: 4px 6px;
@@ -782,19 +858,19 @@ hr {
         text-overflow: clip;
         overflow: visible;
     }
-    
+
     .expense-table th:first-child,
     .expense-table td:first-child {
         width: 35px;
         min-width: 35px;
     }
-    
+
     .expense-table th:last-child,
     .expense-table td:last-child {
         width: 70px;
         min-width: 70px;
     }
-    
+
     .expense-table th:nth-child(2),
     .expense-table td:nth-child(2) {
         width: auto;
@@ -803,13 +879,15 @@ hr {
         hyphens: auto;
     }
 
-    .expense-table .service-info { min-height: 16px; }
-    
+    .expense-table .service-info {
+        min-height: 16px;
+    }
+
     .expense-details {
         border-radius: 8px;
-        box-shadow: inset 0 0 10px rgba(0,0,0,0.1);
+        box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.1);
     }
-    
+
     .expense-table thead th {
         position: sticky;
         top: 0;
@@ -821,32 +899,32 @@ hr {
 /* Extra Small Mobile (320px and below) */
 @media screen and (max-width: 320px) {
     .page {
-        padding: 8mm;
+        padding: 5mm;
     }
-    
+
     .section {
         padding: 10px;
     }
-    
+
     .expense-table {
         min-width: 280px;
         border-collapse: collapse;
     }
-    
+
     .expense-table th,
     .expense-table td {
         padding: 3px 4px;
         font-size: 9px;
         line-height: 1.3;
     }
-    
+
     .expense-table th:first-child,
     .expense-table td:first-child {
         width: 30px;
         min-width: 30px;
         font-size: 8px;
     }
-    
+
     .expense-table th:last-child,
     .expense-table td:last-child {
         width: 60px;
@@ -854,18 +932,20 @@ hr {
         font-size: 8px;
     }
 
-    .expense-table .service-info { min-height: 14px; }
-    
+    .expense-table .service-info {
+        min-height: 14px;
+    }
+
     .expense-table th:nth-child(2),
     .expense-table td:nth-child(2) {
         max-width: 120px;
-        font-size: 8px;
+        font-size: 7px;
     }
-    
+
     .company-info h1 {
         font-size: 12px;
     }
-    
+
     .header-bottom {
         font-size: 9px;
     }
@@ -877,28 +957,28 @@ hr {
         flex-direction: row;
         justify-content: space-between;
     }
-    
+
     .company-info {
         order: 0;
     }
-    
+
     .header-bottom {
         flex-direction: row;
         justify-content: space-between;
     }
-    
+
     .report-type {
         text-align: left;
     }
-    
+
     .date {
         text-align: right;
     }
-    
+
     .invoice {
         text-align: center;
     }
-    
+
     .bottom-section {
         flex-direction: row;
     }
