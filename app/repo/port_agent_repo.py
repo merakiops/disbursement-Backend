@@ -76,7 +76,6 @@ class PortAgentRepository:
                     "phone_number": port_data.phone_number or company.phone_number,
                     "address": port_data.address or company.address,
                     "status": 'Y' or company.status,
-                    "bank_details_id": company.bank_details_id,         
                 }
                 incoming_name = (port_data.company_name or "").strip()
                 existing_name = (company.company_name or "").strip()
@@ -103,19 +102,13 @@ class PortAgentRepository:
                     username=username,
                     unique_check_columns=["company_name","address"]
                 )
+                    old_id_obj = db.query(MaCompany).filter(MaCompany.company_id==port_data.company_id).first()
+                    new_id_obj = db.query(MaCompany).filter(MaCompany.company_id==company.company_id).first()
+                    if old_id_obj and new_id_obj:
+                        old_id_obj.bank_details_id = new_id_obj.bank_details_id or None
                 
-                    # old_id_obj = db.query(MaCompany).filter(MaCompany.company_id==port_data.company_id).first()
-                    # new_id_obj = db.query(MaCompany).filter(MaCompany.company_id==company.company_id).first()
-                    # if old_id_obj and new_id_obj:
-                    #     new_id_obj.bank_details_id = old_id_obj.bank_details_id
-                company = db.query(MaCompany).filter(
-                            MaCompany.company_id == company.company_id
-                        ).first()    
-                bank_id=None
-                if port_data.bank_details.bank_details_id:
-                    bank_id = db.query(MaCompany).filter(MaCompany.bank_details_id==port_data.bank_details.bank_details_id).first()
-                if port_data.bank_details:
-                    bank_data = port_data.bank_details
+                bank_id = db.query(MaCompany).filter(MaCompany.bank_details_id==port_data.bank_details.bank_details_id).first()
+                bank_data = port_data.bank_details
                 # update the bank details if the both company_id and bank_details_id is present
                 if (bank_data and bank_data.bank_details_id) or bank_id:
                     existing_bank = db.query(BankDetails).filter_by(bank_details_id=bank_data.bank_details_id).first()
@@ -136,7 +129,7 @@ class PortAgentRepository:
                     existing_bank.iban_number = bank_data.iban_number
                     existing_bank.branch_address = bank_data.branch_address
                     existing_bank.updated_by =  username
-                    company.bank_details_id = existing_bank.bank_details_id 
+
                     new_bank_details = existing_bank
                 # Create new bank details if no bank_details_id is provided
                 elif bank_data:
@@ -158,9 +151,9 @@ class PortAgentRepository:
                         updated_by=username,
                     )
                     db.add(new_bank_details)
-                    company.bank_details_id = None
                     db.flush()  # Ensure ID is available
-                    company.bank_details_id = new_bank_details.bank_details_id or None
+                    company.bank_details_id = new_bank_details.bank_details_id
+
 
 
                 db.commit()

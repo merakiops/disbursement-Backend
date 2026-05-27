@@ -45,6 +45,3 @@ class FdaReport(Base):
     fda_roe = Column(Float)
     fda_currency_from = Column(String)
     fda_currency_to = Column(String)
-    pmt_curr_to = Column(String)
-    pmt_curr_from=Column(String) #for the error msg
-    system_service_charge = Column(JSON)
