@@ -111,8 +111,32 @@
                         <span class="value"><strong>{{etd}}</strong></span>
                     </div>
                 </div>
+
+                <!-- add three more fields to identify the currency conversion -->
+                 
+                <div class="vessel-labels">
+                    <div class="vessel-item">
+                        <span class="label">Payment Currency from</span>
+                        <span class="value"><strong>{{pmt_curr_from}}</strong></span>
+                    </div>
+                    <div class="vessel-item">
+                        <span class="label">Payment Currency to</span>
+                        <span class="value"><strong>{{pmt_curr_to}}</strong></span>
+                    </div>
+                    <div class="vessel-item">
+                        <span class="label">Conversion Rate</span>
+                        <span class="value"><strong>{{conversion_rate}}</strong></span>
+                    </div>
+                    <div class="vessel-item">
+                        <span class="label"></span>
+                        <span class="value"><strong></strong></span>
+                    </div>
+                    
+                </div>
+
+
                 <div class="roe-explanation" style="margin-top: 15px;">
-                    1 Unit of {{fda_currency_from}} = {{fda_roe}} ROE unit of {{fda_currency_to}}
+                    1 Unit of {{fda_currency_from}} = {{fda_roe}} ROE unit of {{fda_currency_to}}; 1 Unit of {{pmt_curr_from}} = {{conversion_rate}} Payment rate unit of {{pmt_curr_to}} 
                 </div>
             </div>
 
@@ -173,7 +197,8 @@
     <!-- SERVICE EXPENSE PAGES -->
     {% set ns = namespace(counter=0) %}
     {% for chunk in service_charge.chunks %}
-    <div class="page table-page">
+    {% set system_chunk = system_service_charge.chunks[loop.index0] if system_service_charge.chunks and loop.index0 <
+        system_service_charge.chunks|length else [] %} <div class="page table-page">
         <div class="header">
             <div class="header-top">
                 <div class="logo-left">
@@ -191,25 +216,33 @@
         </div>
         <div class="content">
             <div class="section expense-details">
-                <h3>Port Expense Details</h3>
+                    <h3>Port Expense Details</h3>
                 <table class="expense-table">
                     <colgroup>
-                        <col style="width:70px; white-space: nowrap;" />
-                        <col style="width:auto" />
-                        <col style="width:120px" />
+                        <col style="width:50px; white-space: nowrap;" />
+                        <col style="width:auto;" />
+                        <col style="width:12ch;" />
+                        <col style="width:12ch;" />
+                        <!-- <col style="width:12ch;" /> -->
                     </colgroup>
                     <thead>
                         <tr>
                             <th>S.&nbsp;No</th>
                             <th>Description</th>
-                            <th style="text-align: center;">Amount <br />({{fda_currency_from}})</th>
-                            <th style="text-align: center;">Amount <br />({{fda_currency_to}})</th>
+                            <th style="text-align: center;">
+                                Meraki Amount
+                                <br />
+                                ({% if pmt_curr_to %}{{pmt_curr_to}}{% else %}NA{% endif %})
+                            </th>
+                            <th style="text-align: center;">Agent Amount <br />({% if pmt_curr_to %}{{pmt_curr_to}}{% else %}NA{% endif %})</th>
+                            <!-- <th style="text-align: center;">Amount <br />({{fda_currency_to}})</th> wanted only two column -->
                         </tr>
                     </thead>
                     <tbody>
                         {% for services in chunk %}
-                        {% set ns.counter = ns.counter + 1 %}
-                        <tr style="min-height: 60px;">
+                        {% set system_services = system_chunk[loop.index0] if system_chunk and loop.index0 <
+                            system_chunk|length else {} %} {% set ns.counter=ns.counter + 1 %} <tr
+                            style="min-height: 60px;">
                             <td>{{ ns.counter }}</td>
                             <td>
                                 <div class="service-title"><strong>{{ services.service }}</strong></div>
@@ -217,26 +250,38 @@
                                 <div class="service-info">({{ services.info_msg }})</div>
                                 {% endif %}
                             </td>
-                            <td style="text-align: center;">{{ services.total }}</td>
-                            <td style="text-align: right;"><span>{{ "%.2f"|format((services.total * fda_roe) | round(2))
-                                    if services.total and fda_roe else 0 }}</span></td>
-                        </tr>
-                        {% endfor %}
-                        {% if loop.last %}
-                        <tr class="total-row">
-                            <td></td>
-                            <td><strong>Agent Total</strong></td>
-                            <td><strong>{{ service_charge.grand_total }}</strong></td>
-                            <td><strong><span>{{ "%.2f"|format((service_charge.grand_total * fda_roe) | round(2)) if
-                                        service_charge.grand_total and fda_roe else 0 }}</span></strong></td>
-                        </tr>
-                        {% endif %}
+                            <td style="text-align: right;">
+                                {% if system_services and system_services.total and system_services.total|float != 0 %}
+                                {{ "%.2f"|format(system_services.total|float) }}
+                                {% else %}
+                                -
+                                {% endif %}
+                            </td>
+                            <td style="text-align: right;">{{ services.total }}</td>
+                            <!-- <td style="text-align: right;"><span>{{ "%.2f"|format((services.total|float * fda_roe|float)
+                                    | round(2))
+                                    if services.total and fda_roe else 0 }}</span></td>  removed because wanted only two columns-->
+                            </tr>
+                            {% endfor %}
+                            {% if loop.last %}
+                            <tr class="total-row">
+                                <td></td>
+                                <td><strong>Total</strong></td>
+                                <td style="text-align: right;">{{ "%.2f"|format(system_service_charge.grand_total|float)
+                                    if system_service_charge.grand_total else "0.00" }}</td>
+                                <td style="text-align: right;"><strong>{{ service_charge.grand_total }}</strong></td>
+                                <!-- <td style="text-align: right;"><strong><span>{{
+                                            "%.2f"|format((service_charge.grand_total|float * fda_roe|float) | round(2))
+                                            if
+                                            service_charge.grand_total and fda_roe else 0 }}</span></strong></td> -->
+                            </tr>
+                            {% endif %}
                     </tbody>
                 </table>
             </div>
         </div>
-    </div>
-    {% endfor %}
+        </div>
+        {% endfor %}
 </body>
 
 </html>

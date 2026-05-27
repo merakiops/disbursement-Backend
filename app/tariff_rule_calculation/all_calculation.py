@@ -1027,7 +1027,7 @@ def calculate_service_total_roe(service: dict, vessel, db, disbursement_type:str
     
     # Process info_msg placeholders
     info_msg = service.get("info_msg", "")
-    if info_msg and '{$' in info_msg:
+    if info_msg and ('{$' in info_msg or "balance amount" in info_msg.lower()):
         attach_info_field(db, service, vessel, disbursement_seq, disbursement_type="pda")
     
     return service
@@ -3091,8 +3091,8 @@ def attach_info_field(db, service, vessel, disbursement_id, disbursement_type="p
             placeholder = match.group(1)
             full_placeholder = match.group(0) 
             balance_amount = None
-
             if disbursement_id:
+                print("the id is",disbursement_id)
                 disbursement_id = disbursement_id if isinstance(disbursement_id, int) else disbursement_id[3::]
                 dis_obj = db.query(TxnDisbursement).filter(
                     TxnDisbursement.disbursement_seq == disbursement_id
@@ -3102,22 +3102,22 @@ def attach_info_field(db, service, vessel, disbursement_id, disbursement_type="p
                     vessel_obj = db.query(getattr(PdaVesselDetails, col_type))\
                                    .filter(PdaVesselDetails.pda_vsl_id == dis_obj.pda_vsl_id)\
                                    .first()
-                    if vessel_obj:
-                        vessel_data = vessel_obj[0]
+                    if vessel_obj and vessel_obj[0]:
+                        vessel_data = vessel_obj[0] 
                         additional_props = vessel_data.get('additional_properties', {})
                         balance_amount = next(
                             (value for key, value in additional_props.items()
                             if key.lower() == placeholder.lower()),
                             None
                         )
-
             if not balance_amount:
                 balance_amount = get_vessel_attr(vessel, placeholder)
             if balance_amount is None:
                 balance_amount = 0
-            
-            service["info_msg"] = info_msg.replace(full_placeholder, str(balance_amount)) if placeholder in info_msg else info_msg.replace(info_msg.split(' ')[-1], str(balance_amount))
-
+            if full_placeholder in info_msg:
+                service["info_msg"] = info_msg.replace(full_placeholder, str(balance_amount))
+            else:
+                service["info_msg"] = info_msg
     except Exception as e:
         logger.error(f"Error in attach_info_field: {e}")
         return
