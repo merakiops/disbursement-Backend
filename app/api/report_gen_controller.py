@@ -54,20 +54,11 @@ async def report_generation(request: Request,dto:PdaReportRequestDTO, db: Sessio
     elif service_data is None:
         report_dict["service_charge"] = []
     
-    # Process system_service_charge (system/payment currency) #Modification of view is required
-    system_service_data = report_dict.get("system_service_charge")
-    if isinstance(system_service_data, str):
-        try:
-            report_dict["system_service_charge"] = json.loads(system_service_data)
-        except json.JSONDecodeError:
-            report_dict["system_service_charge"] = []
-    elif system_service_data is None:
-        report_dict["system_service_charge"] = []
-    
-    # Chunk both service charges for pagination
     report_dict = pda_report_service.chunk_service_items(report_dict)
+
     # Render the HTML using the report data
     html_content = template.render(**report_dict) 
+
     # Generate PDF from the HTML
     css_path = os.path.join(TEMPLATE_DIR, "report_styles.css")
     pdf_content = HTML(string=html_content, base_url=TEMPLATE_DIR).write_pdf(
