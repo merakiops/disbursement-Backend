@@ -184,10 +184,9 @@ hr {
 }
 
 .agent-labels {
-    display: flex;
-    flex-wrap: nowrap;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 15px;
-    overflow-x: hidden; /* Add horizontal scroll if needed */
 }
 
 .agent-item {
@@ -215,19 +214,35 @@ hr {
 }
 
 /* Vessel Information Flexbox */
-.vessel-labels {
+/* .vessel-labels {
     display: flex;
     flex-wrap: nowrap;
     gap: 15px;
     overflow-x: hidden;
     margin-bottom: 15px;
+} */
+
+/* Vessel Information Flexbox */
+.vessel-labels {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 15px;
+    overflow-x: hidden;
+    margin-bottom: 15px;
 }
 
-.vessel-item {
+/* .vessel-item {
     display: flex;
     flex-direction: column;
     flex: 1;
     min-width: 150px;
+} */
+.vessel-item {
+    flex: 1 1 150px;
+    min-width: 0;              
+    word-break: break-all;
+    overflow-wrap: anywhere;
+    white-space: normal;
 }
 
 .vessel-item .label {
@@ -238,12 +253,18 @@ hr {
     hyphens: auto;
 }
 
-.vessel-item .value {
+/* .vessel-item .value {
     color: #333;
     font-size: 13px;
     word-wrap: break-word;
     overflow-wrap: break-word;
     hyphens: auto;
+} */
+
+.vessel-item .value {
+    display: block;             
+    word-break: break-all;
+    overflow-wrap: anywhere;
 }
 
 /* Vessel Information Grid */
