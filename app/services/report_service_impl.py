@@ -81,16 +81,16 @@ class PdaReportServiceImpl(PdaReportService):
             
             report_dict["system_service_charge"]["chunks"] = chunks
             # Calculate grand total from chunks
-            grand_total = 0
+            # grand_total = 0
 
-            for chunk in chunks:
-                for item in chunk:
-                    try:
-                        grand_total += float(item.get("total") or 0)
-                    except Exception:
-                        pass
+            # for chunk in chunks:
+            #     for item in chunk:
+            #         try:
+            #             grand_total += float(item.get("total") or 0)
+            #         except Exception:
+            #             pass
 
-            report_dict["system_service_charge"]["grand_total"] = round(grand_total, 2)
+            # report_dict["system_service_charge"]["grand_total"] = round(grand_total, 2)
             
 
             # add the info msg from system_service_charge to service charges
