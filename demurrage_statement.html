@@ -1,0 +1,809 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <style>
+        @page {
+            size: A4;
+            margin: 0;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: Helvetica, Arial, sans-serif;
+            font-size: 8.5pt;
+            color: #1C2B3A;
+            background: white;
+        }
+
+        /* ── HEADER ─────────────────────────────────────────────────────── */
+        .header {
+            background: #0A1628;
+            height: 4.5cm;
+            display: flex;
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* Diagonal stripe overlay */
+        .header::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: repeating-linear-gradient(135deg,
+                    transparent,
+                    transparent 18px,
+                    #122038 18px,
+                    #122038 27px);
+        }
+
+        /* Gold bottom rule */
+        .header::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: #B8965A;
+        }
+
+        .header-left {
+            position: relative;
+            z-index: 2;
+            flex: 1;
+            padding: 0.48cm 0 0 1.8cm;
+        }
+
+        .co-name {
+            font-size: 19pt;
+            font-weight: bold;
+            color: white;
+            letter-spacing: 0.5px;
+            line-height: 1;
+        }
+
+        .co-underline {
+            height: 2px;
+            background: #B8965A;
+            width: fit-content;
+            /* Match width of EAKOMARINE text visually */
+            margin-top: 3px;
+            min-width: 3.2cm;
+            max-width: 3.8cm;
+        }
+
+        .co-sub {
+            font-size: 9.5pt;
+            font-weight: bold;
+            color: #A8C4DC;
+            margin-top: 6px;
+            letter-spacing: 0.3px;
+        }
+
+        .co-tagline {
+            font-size: 7.5pt;
+            color: #B8965A;
+            margin-top: 7px;
+        }
+
+        .co-dots {
+            margin-top: 8px;
+            display: flex;
+            gap: 5px;
+            align-items: center;
+        }
+
+        .co-dots span {
+            display: inline-block;
+            width: 5px;
+            height: 5px;
+            border-radius: 50%;
+            background: #1E3A58;
+        }
+
+        /* Gold vertical divider */
+        .header-divider {
+            position: relative;
+            z-index: 2;
+            width: 3px;
+            background: #B8965A;
+            align-self: stretch;
+        }
+
+        .header-right {
+            position: relative;
+            z-index: 2;
+            width: 6.8cm;
+            background: #1A3A5C;
+            padding: 0.42cm 0 0 0.42cm;
+        }
+
+        .doc-title {
+            font-size: 10pt;
+            font-weight: bold;
+            color: #B8965A;
+            letter-spacing: 0.5px;
+            margin-bottom: 10px;
+        }
+
+        .doc-divider {
+            height: 0.5px;
+            background: #8A6A3A;
+            margin-bottom: 8px;
+            margin-right: 0.5cm;
+        }
+
+        .doc-info {
+            font-size: 7pt;
+            color: #8AAAC8;
+            line-height: 1.9;
+        }
+
+        /* ── SIDEBAR + CONTENT WRAPPER ───────────────────────────────────── */
+        .page-body {
+            display: flex;
+            min-height: calc(29.7cm - 4.5cm - 1.4cm);
+        }
+
+        .sidebar {
+            width: 0.85cm;
+            background: #0A1628;
+            flex-shrink: 0;
+        }
+
+        .content {
+            flex: 1;
+            padding: 0.6cm 1.5cm 0.6cm 1.0cm;
+        }
+
+        /* ── FOOTER ─────────────────────────────────────────────────────── */
+        .footer {
+            background: #0A1628;
+            height: 1.4cm;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .footer::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: #B8965A;
+        }
+
+        .footer p {
+            font-size: 6.5pt;
+            color: #8AAAC8;
+            text-align: center;
+            letter-spacing: 0.3px;
+        }
+
+        /* ── SECTION HEADERS ─────────────────────────────────────────────── */
+        .section-label {
+            font-size: 7.5pt;
+            font-weight: bold;
+            color: #B8965A;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 3px;
+            padding-bottom: 2px;
+        }
+
+        .section-rule {
+            height: 1.5px;
+            background: #B8965A;
+            margin-bottom: 6px;
+        }
+
+        .section-block {
+            margin-bottom: 10px;
+        }
+
+        /* ── NET BOX ─────────────────────────────────────────────────────── */
+        .net-box {
+            background: #0A1628;
+            border-top: 2.5px solid #B8965A;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 9px 10px;
+            margin-bottom: 14px;
+        }
+
+        .net-label {
+            font-size: 12pt;
+            font-weight: bold;
+            color: white;
+        }
+
+        .net-value {
+            font-size: 13pt;
+            font-weight: bold;
+            color: #B8965A;
+        }
+
+        /* ── KV TABLE ────────────────────────────────────────────────────── */
+        .kv-wrap {
+            display: flex;
+            gap: 0;
+        }
+
+        .kv-half {
+            flex: 1;
+        }
+
+        .kv-row {
+            display: flex;
+        }
+
+        .kv-row:nth-child(even) {
+            background: #EEF4FA;
+        }
+
+        .kv-row:nth-child(odd) {
+            background: white;
+        }
+
+        .kv-key {
+            font-size: 8pt;
+            font-weight: bold;
+            color: #4A6A8A;
+            width: 3.6cm;
+            padding: 4px 4px 4px 8px;
+            flex-shrink: 0;
+        }
+
+        .kv-val {
+            font-size: 8.5pt;
+            color: #1C2B3A;
+            padding: 4px 4px 4px 4px;
+            flex: 1;
+        }
+
+        /* ── DATA TABLES ─────────────────────────────────────────────────── */
+        .sub-label {
+            font-size: 8pt;
+            font-weight: bold;
+            color: #2B5F8E;
+            margin-top: 6px;
+            margin-bottom: 3px;
+        }
+
+        table.data-tbl {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 0;
+        }
+
+        table.data-tbl thead tr {
+            background: #1A3A5C;
+        }
+
+        table.data-tbl thead th {
+            font-size: 7.5pt;
+            font-weight: bold;
+            color: white;
+            padding: 4px 7px;
+            text-align: left;
+        }
+
+        table.data-tbl thead th.r {
+            text-align: right;
+        }
+
+        table.data-tbl tbody tr:nth-child(odd) {
+            background: white;
+        }
+
+        table.data-tbl tbody tr:nth-child(even) {
+            background: #EEF4FA;
+        }
+
+        table.data-tbl tbody td {
+            font-size: 7.5pt;
+            color: #1C2B3A;
+            padding: 4px 7px;
+            border: 0.3px solid #C2D4E8;
+        }
+
+        table.data-tbl tbody td.r {
+            text-align: right;
+        }
+
+        table.data-tbl tfoot tr td {
+            border-bottom: 0.8px solid #B8965A;
+        }
+
+        /* Deduction table header */
+        table.ded-tbl thead tr {
+            background: #4A6A8A;
+        }
+
+        table.ded-tbl tbody td.neg {
+            font-weight: bold;
+            color: #A93226;
+            text-align: right;
+        }
+
+        /* ── PORT SUMMARY ────────────────────────────────────────────────── */
+        .port-sum {
+            background: #EEF4FA;
+            border-top: 0.5px solid #B8965A;
+            border-bottom: 1.5px solid #2B5F8E;
+            margin-top: 0;
+        }
+
+        .port-sum-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 4px 8px;
+        }
+
+        .port-sum-key {
+            font-size: 8pt;
+            font-weight: bold;
+            color: #4A6A8A;
+        }
+
+        .port-sum-val {
+            font-size: 8.5pt;
+            font-weight: bold;
+            color: #1C2B3A;
+        }
+
+        .port-sum-val.neg {
+            color: #A93226;
+        }
+
+        .port-sum-val.blue {
+            color: #2B5F8E;
+        }
+
+        /* ── LAYTIME SUMMARY ─────────────────────────────────────────────── */
+        .sum-tbl {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .sum-tbl tr td {
+            font-size: 8pt;
+            font-weight: bold;
+            color: #4A6A8A;
+            padding: 5px 10px;
+            border-bottom: 0.3px solid #C2D4E8;
+        }
+
+        .sum-tbl tr td.val {
+            text-align: right;
+            color: #1C2B3A;
+        }
+
+        .sum-tbl tr td.neg {
+            text-align: right;
+            color: #A93226;
+            font-weight: bold;
+        }
+
+        .sum-tbl tr td.blue {
+            text-align: right;
+            color: #2B5F8E;
+            font-weight: bold;
+        }
+
+        .sum-tbl tr.bg-white td {
+            background: white;
+        }
+
+        .sum-tbl tr.bg-ice td {
+            background: #EEF4FA;
+        }
+
+        .sum-tbl tr.bg-wake td {
+            background: #D6E6F5;
+        }
+
+        /* ── FINANCIAL ───────────────────────────────────────────────────── */
+        .fin-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 7px 10px;
+            border-bottom: 0.4px solid #C2D4E8;
+        }
+
+        .fin-row:nth-child(odd) {
+            background: white;
+        }
+
+        .fin-row:nth-child(even) {
+            background: #EEF4FA;
+        }
+
+        .fin-lbl {
+            font-size: 9.5pt;
+            color: #1C2B3A;
+        }
+
+        .fin-val {
+            font-size: 9.5pt;
+            font-weight: bold;
+            color: #1C2B3A;
+        }
+
+        .fin-val.neg {
+            color: #A93226;
+        }
+
+        /* ── NOTES ───────────────────────────────────────────────────────── */
+        .note {
+            font-size: 7.5pt;
+            color: #4A6A8A;
+            line-height: 1.7;
+        }
+
+        /* ── PAGE BREAK ──────────────────────────────────────────────────── */
+        .page-break {
+            page-break-before: always;
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- ════════════════════════════════════════════════════════════════ -->
+    <!--  PAGE 1                                                         -->
+    <!-- ════════════════════════════════════════════════════════════════ -->
+
+    <!-- HEADER -->
+    <div class="header">
+        <div class="header-left">
+            <div class="co-name">EAKOMARINE</div>
+            <div class="co-underline"></div>
+            <div class="co-sub">TECHNICAL MANAGEMENT PRIVATE LIMITED</div>
+            <div class="co-tagline">Ship Management &nbsp;&bull;&nbsp; Marine Operations &nbsp;&bull;&nbsp; Technical
+                Services</div>
+            <div class="co-dots">
+                <span></span><span></span><span></span><span></span><span></span>
+                <span></span><span></span><span></span><span></span><span></span>
+                <span></span><span></span><span></span><span></span>
+            </div>
+        </div>
+        <div class="header-divider"></div>
+        <div class="header-right">
+            <div class="doc-title">DEMURRAGE STATEMENT</div>
+            <div class="doc-divider"></div>
+            <div class="doc-info">
+                Vessel: MT HANNA<br>
+                CP: ASBATANKVOY / 14 Apr 2026<br>
+                Ref: Hanna/Samaria
+            </div>
+        </div>
+    </div>
+
+    <div class="page-body">
+        <div class="sidebar"></div>
+        <div class="content">
+
+            <!-- NET DEMURRAGE BOX (top of page 1) -->
+            <div class="net-box">
+                <span class="net-label">NET DEMURRAGE DUE</span>
+                <span class="net-value">USD 1,71,024.48</span>
+            </div>
+
+            <!-- VOYAGE PARTICULARS -->
+            <div class="section-block">
+                <div class="section-label">VOYAGE PARTICULARS</div>
+                <div class="section-rule"></div>
+                <div class="kv-wrap">
+                    <div class="kv-half">
+                        <div class="kv-row">
+                            <div class="kv-key">Vessel Name</div>
+                            <div class="kv-val">MT Hanna</div>
+                        </div>
+                        <div class="kv-row">
+                            <div class="kv-key">Charterparty</div>
+                            <div class="kv-val">ASBATANKVOY</div>
+                        </div>
+                        <div class="kv-row">
+                            <div class="kv-key">CP Date</div>
+                            <div class="kv-val">14 April 2026</div>
+                        </div>
+                        <div class="kv-row">
+                            <div class="kv-key">Laycan</div>
+                            <div class="kv-val">20&ndash;25 Apr 2026 (00:00&ndash;23:59)</div>
+                        </div>
+                        <div class="kv-row">
+                            <div class="kv-key">Laycan Narrowed</div>
+                            <div class="kv-val">28 Apr 2026 (0001&ndash;2359)</div>
+                        </div>
+                    </div>
+                    <div class="kv-half">
+                        <div class="kv-row">
+                            <div class="kv-key">Allowed Laytime</div>
+                            <div class="kv-val">84.00 hrs &nbsp;|&nbsp; Loading Terms</div>
+                        </div>
+                        <div class="kv-row">
+                            <div class="kv-key">Demurrage Rate</div>
+                            <div class="kv-val">USD 65,000 / Day PDPR</div>
+                        </div>
+                        <div class="kv-row">
+                            <div class="kv-key">Address Commission</div>
+                            <div class="kv-val">2.5%</div>
+                        </div>
+                        <div class="kv-row">
+                            <div class="kv-key">CP Speed</div>
+                            <div class="kv-val">12.5 Knots</div>
+                        </div>
+                        <div class="kv-row">
+                            <div class="kv-key">Actual Rotation</div>
+                            <div class="kv-val">YES</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- PORT 1 -->
+            <div class="section-block">
+                <div class="section-label">PORT 1 &mdash; NOVOROSSYISK (LOAD) &nbsp;|&nbsp; TERMINAL: SHESKHARIS</div>
+                <div class="section-rule"></div>
+
+                <div class="sub-label">Laytime Events</div>
+                <table class="data-tbl">
+                    <thead>
+                        <tr>
+                            <th style="width:40%">Event / Description</th>
+                            <th class="r" style="width:22%">Start (Local)</th>
+                            <th class="r" style="width:22%">End (Local)</th>
+                            <th class="r" style="width:16%">Hrs Used</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>NOR Tendered &rarr; Cargo Documents</td>
+                            <td class="r">28 Apr 2026 &nbsp;00:01</td>
+                            <td class="r">12 May 2026 &nbsp;16:30</td>
+                            <td class="r">352.48</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <div class="sub-label" style="margin-top:5px">Deductions Applied</div>
+                <table class="data-tbl ded-tbl">
+                    <thead>
+                        <tr>
+                            <th style="width:38%">Deduction Type</th>
+                            <th class="r" style="width:22%">From</th>
+                            <th class="r" style="width:24%">To</th>
+                            <th class="r" style="width:16%">Hrs Deducted</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>First Day Window (NOR to Start)</td>
+                            <td class="r">28 Apr 2026 &nbsp;00:01</td>
+                            <td class="r">28 Apr 2026 &nbsp;06:01</td>
+                            <td class="neg">6.00</td>
+                        </tr>
+                        <tr>
+                            <td>Inward Passage</td>
+                            <td class="r">10 May 2026 &nbsp;15:00</td>
+                            <td class="r">11 May 2026 &nbsp;00:01</td>
+                            <td class="neg">9.02</td>
+                        </tr>
+                        <tr>
+                            <td>Document Allowance</td>
+                            <td class="r">12 May 2026 &nbsp;09:30</td>
+                            <td class="r">12 May 2026 &nbsp;12:30</td>
+                            <td class="neg">3.00</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <div class="port-sum" style="margin-top:4px">
+                    <div class="port-sum-row"><span class="port-sum-key">Gross Laytime Used</span><span
+                            class="port-sum-val">352.48 hrs</span></div>
+                    <div class="port-sum-row"><span class="port-sum-key">Total Deductions</span><span
+                            class="port-sum-val neg">&minus; 18.02 hrs</span></div>
+                    <div class="port-sum-row"><span class="port-sum-key">Net Laytime Used</span><span
+                            class="port-sum-val blue">334.46 hrs</span></div>
+                </div>
+            </div>
+
+            <!-- PORT 2 -->
+            <div class="section-block">
+                <div class="section-label">PORT 2 &mdash; MARMARA EREGLISI (DISCHARGE)</div>
+                <div class="section-rule"></div>
+
+                <div class="sub-label">Laytime Events</div>
+                <table class="data-tbl">
+                    <thead>
+                        <tr>
+                            <th style="width:40%">Event / Description</th>
+                            <th class="r" style="width:22%">Start (Local)</th>
+                            <th class="r" style="width:22%">End (Local)</th>
+                            <th class="r" style="width:16%">Hrs Used</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>NOR Tendered &rarr; Hose Disconnected</td>
+                            <td class="r">16 May 2026 &nbsp;11:24</td>
+                            <td class="r">19 May 2026 &nbsp;02:30</td>
+                            <td class="r">63.10</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <div class="sub-label" style="margin-top:5px">Deductions Applied</div>
+                <table class="data-tbl ded-tbl">
+                    <thead>
+                        <tr>
+                            <th style="width:38%">Deduction Type</th>
+                            <th class="r" style="width:22%">From</th>
+                            <th class="r" style="width:24%">To</th>
+                            <th class="r" style="width:16%">Hrs Deducted</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>First Day Window (NOR)</td>
+                            <td class="r">16 May 2026 &nbsp;11:24</td>
+                            <td class="r">16 May 2026 &nbsp;17:24</td>
+                            <td class="neg">6.00</td>
+                        </tr>
+                        <tr>
+                            <td>Inward Passage</td>
+                            <td class="r">17 May 2026 &nbsp;12:30</td>
+                            <td class="r">17 May 2026 &nbsp;15:18</td>
+                            <td class="neg">2.80</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <div class="port-sum" style="margin-top:4px">
+                    <div class="port-sum-row"><span class="port-sum-key">Gross Laytime Used</span><span
+                            class="port-sum-val">63.10 hrs</span></div>
+                    <div class="port-sum-row"><span class="port-sum-key">Total Deductions</span><span
+                            class="port-sum-val neg">&minus; 8.80 hrs</span></div>
+                    <div class="port-sum-row"><span class="port-sum-key">Net Laytime Used</span><span
+                            class="port-sum-val blue">54.30 hrs</span></div>
+                </div>
+            </div>
+
+        </div><!-- /content -->
+    </div><!-- /page-body -->
+
+    <!-- FOOTER PAGE 1 -->
+    <div class="footer">
+        <p>EAKOMARINE TECHNICAL MANAGEMENT PRIVATE LIMITED &nbsp;&middot;&nbsp; Demurrage Statement &nbsp;&middot;&nbsp;
+            MT HANNA &nbsp;&middot;&nbsp; CP: 14 Apr 2026 &nbsp;&middot;&nbsp; CONFIDENTIAL</p>
+    </div>
+
+
+    <!-- ════════════════════════════════════════════════════════════════ -->
+    <!--  PAGE 2                                                         -->
+    <!-- ════════════════════════════════════════════════════════════════ -->
+    <div class="page-break"></div>
+
+    <!-- HEADER PAGE 2 -->
+    <div class="header">
+        <div class="header-left">
+            <div class="co-name">EAKOMARINE</div>
+            <div class="co-underline"></div>
+            <div class="co-sub">TECHNICAL MANAGEMENT PRIVATE LIMITED</div>
+            <div class="co-tagline">Ship Management &nbsp;&bull;&nbsp; Marine Operations &nbsp;&bull;&nbsp; Technical
+                Services</div>
+            <div class="co-dots">
+                <span></span><span></span><span></span><span></span><span></span>
+                <span></span><span></span><span></span><span></span><span></span>
+                <span></span><span></span><span></span><span></span>
+            </div>
+        </div>
+        <div class="header-divider"></div>
+        <div class="header-right">
+            <div class="doc-title">DEMURRAGE STATEMENT</div>
+            <div class="doc-divider"></div>
+            <div class="doc-info">
+                Vessel: MT HANNA<br>
+                CP: ASBATANKVOY / 14 Apr 2026<br>
+                Ref: Hanna/Samaria
+            </div>
+        </div>
+    </div>
+
+    <div class="page-body">
+        <div class="sidebar"></div>
+        <div class="content">
+
+            <!-- LAYTIME SUMMARY -->
+            <div class="section-block">
+                <div class="section-label">LAYTIME CALCULATION SUMMARY</div>
+                <div class="section-rule"></div>
+                <table class="sum-tbl">
+                    <tr class="bg-white">
+                        <td>Total Gross Laytime Used (Both Ports)</td>
+                        <td class="val">415.58 hrs</td>
+                    </tr>
+                    <tr class="bg-ice">
+                        <td>Less: Total Deductions</td>
+                        <td class="neg">26.82 hrs</td>
+                    </tr>
+                    <tr class="bg-white">
+                        <td>Allowed Laytime (Reversible SHINC)</td>
+                        <td class="val">84.00 hrs</td>
+                    </tr>
+                    <tr class="bg-wake">
+                        <td>Time on Demurrage</td>
+                        <td class="blue">304.77 hrs &nbsp;(12.699 days)</td>
+                    </tr>
+                </table>
+            </div>
+
+            <!-- FINANCIAL SETTLEMENT -->
+            <div class="section-block">
+                <div class="section-label">FINANCIAL SETTLEMENT</div>
+                <div class="section-rule"></div>
+                <div class="fin-row">
+                    <span class="fin-lbl">Gross Demurrage &nbsp;(12.699 days &times; USD 65,000)</span>
+                    <span class="fin-val">USD 8,25,409.72</span>
+                </div>
+                <div class="fin-row">
+                    <span class="fin-lbl">Less: Undisputed Demurrage</span>
+                    <span class="fin-val">USD 6,33,750.00</span>
+                </div>
+                <div class="fin-row">
+                    <span class="fin-lbl">Less: Address Commission @ 2.5%</span>
+                    <span class="fin-val neg">(USD 20,635.24)</span>
+                </div>
+                <div style="margin-top:3px">
+                    <div class="net-box">
+                        <span class="net-label">NET DEMURRAGE DUE</span>
+                        <span class="net-value">USD 1,71,024.48</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- NOTES -->
+            <div class="section-block">
+                <div class="section-label">NOTES &amp; CONDITIONS</div>
+                <div class="section-rule"></div>
+                <p class="note">1.&nbsp; Laytime is calculated on a fully <strong>reversible basis</strong> across all
+                    ports as per ASBATANKVOY Charterparty.</p>
+                <p class="note">2.&nbsp; All times are expressed in <strong>local port time</strong> unless otherwise
+                    stated.</p>
+                <p class="note">3.&nbsp; Deductions applied: First Day Window (6 hrs per NOR per port), Inward Passage,
+                    Document Allowance.</p>
+                <p class="note">4.&nbsp; Demurrage accrues at <strong>USD 65,000 per day</strong> pro-rata (PDPR) after
+                    expiry of allowed laytime.</p>
+                <p class="note">5.&nbsp; Address Commission of <strong>2.5%</strong> is deducted from the gross
+                    demurrage amount.</p>
+                <p class="note">6.&nbsp; This statement is subject to mutual agreement between Owners and Charterers and
+                    final audit.</p>
+                <p class="note">7.&nbsp; Any disputes shall be resolved as per the arbitration clause in the
+                    Charterparty.</p>
+            </div>
+
+        </div><!-- /content -->
+    </div><!-- /page-body -->
+
+    <!-- FOOTER PAGE 2 -->
+    <div class="footer">
+        <p>EAKOMARINE TECHNICAL MANAGEMENT PRIVATE LIMITED &nbsp;&middot;&nbsp; Demurrage Statement &nbsp;&middot;&nbsp;
+            MT HANNA &nbsp;&middot;&nbsp; CP: 14 Apr 2026 &nbsp;&middot;&nbsp; CONFIDENTIAL</p>
+    </div>
+
+</body>
+
+</html>

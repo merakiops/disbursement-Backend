@@ -41,6 +41,7 @@ from app.db import get_db  # your db session generator
 from app.constants.constants import ALLOWED_ORIGINS
 from app.config import Config
 from app.api.test import testrouter
+from demurrage.api.router import router as demurrage_router
 from app.core.jwtService import (
     get_token_from_cache,
     store_token_in_cache,
@@ -57,7 +58,10 @@ from app.exceptions.AppException import AppException
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.exceptions import RequestValidationError
 
-HOST = socket.gethostbyname(socket.gethostname())
+try:
+    HOST = socket.gethostbyname(socket.gethostname())
+except Exception:
+    HOST = "0.0.0.0"
 # === Load environment variables ===
 environment = os.getenv("env", "prod")
 env_files = {
@@ -69,7 +73,10 @@ load_dotenv(env_file)
 print(f"Loaded environment: {environment}")
 print(f"Using .env file: {env_file}")
 
-HOST = socket.gethostbyname(socket.gethostname())
+try:
+    HOST = socket.gethostbyname(socket.gethostname())
+except Exception:
+    HOST = "0.0.0.0"
 
 # === Initialize FastAPI app ===
 app = FastAPI(docs_url="/api/docs")
@@ -223,6 +230,7 @@ app.include_router(commHistoryController,tags=["communication history"])
 app.include_router(disbursementFilter,tags=["filter"])
 app.include_router(DashboardController, tags=["Dashboard"])
 app.include_router(dynamic_table_controller, tags=["Dynamic Table Creation"])
+app.include_router(demurrage_router)
 
 # === Main entrypoint ===
 if __name__ == "__main__":

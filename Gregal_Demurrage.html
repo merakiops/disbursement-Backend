@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: Helvetica, Arial, sans-serif;
+  font-size: 8.5pt; color: #1C2B3A; background: white;
+  padding: 0.5cm 1.4cm 0.5cm 0cm;
+  border-left: 0.85cm solid #0A1628;
+}
+.section-block { margin-bottom: 10px; }
+.section-label {
+  font-size: 7.5pt; font-weight: bold; color: #B8965A;
+  text-transform: uppercase; letter-spacing: 0.4px; padding-bottom: 2px;
+}
+.section-rule { height: 1.5px; background: #B8965A; margin-bottom: 6px; }
+
+.net-box {
+  background: #0A1628; border-top: 2.5px solid #B8965A;
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 9px 10px; margin-bottom: 14px;
+}
+.net-label { font-size: 12pt; font-weight: bold; color: white; }
+.net-value { font-size: 13pt; font-weight: bold; color: #B8965A; }
+
+.kv-wrap { display: flex; }
+.kv-half { flex: 1; }
+.kv-row  { display: flex; }
+.kv-row:nth-child(even) { background: #EEF4FA; }
+.kv-row:nth-child(odd)  { background: white; }
+.kv-key {
+  font-size: 8pt; font-weight: bold; color: #4A6A8A;
+  width: 3.6cm; padding: 4px 4px 4px 8px; flex-shrink: 0;
+}
+.kv-val { font-size: 8.5pt; color: #1C2B3A; padding: 4px; flex: 1; }
+
+.sub-label {
+  font-size: 8pt; font-weight: bold; color: #2B5F8E;
+  margin-top: 6px; margin-bottom: 3px;
+}
+table.data-tbl { width: 100%; border-collapse: collapse; }
+table.data-tbl thead tr { background: #1A3A5C; }
+table.data-tbl thead th {
+  font-size: 7.5pt; font-weight: bold; color: white; padding: 4px 7px; text-align: left;
+}
+table.data-tbl thead th.r { text-align: right; }
+table.data-tbl tbody tr:nth-child(odd)  { background: white; }
+table.data-tbl tbody tr:nth-child(even) { background: #EEF4FA; }
+table.data-tbl tbody td {
+  font-size: 7.5pt; color: #1C2B3A; padding: 4px 7px; border: 0.3px solid #C2D4E8;
+}
+table.data-tbl tbody td.r   { text-align: right; }
+table.ded-tbl thead tr      { background: #4A6A8A; }
+table.ded-tbl tbody td.neg  { font-weight: bold; color: #A93226; text-align: right; }
+
+.port-sum {
+  background: #EEF4FA;
+  border-top: 0.5px solid #B8965A; border-bottom: 1.5px solid #2B5F8E;
+}
+.port-sum-row { display: flex; justify-content: space-between; padding: 4px 8px; }
+.port-sum-key { font-size: 8pt; font-weight: bold; color: #4A6A8A; }
+.port-sum-val       { font-size: 8.5pt; font-weight: bold; color: #1C2B3A; }
+.port-sum-val.neg   { color: #A93226; }
+.port-sum-val.blue  { color: #2B5F8E; }
+
+.sum-tbl { width: 100%; border-collapse: collapse; }
+.sum-tbl tr td {
+  font-size: 8pt; font-weight: bold; color: #4A6A8A;
+  padding: 5px 10px; border-bottom: 0.3px solid #C2D4E8;
+}
+.sum-tbl tr td.val  { text-align: right; color: #1C2B3A; }
+.sum-tbl tr td.neg  { text-align: right; color: #A93226; font-weight: bold; }
+.sum-tbl tr td.blue { text-align: right; color: #2B5F8E; font-weight: bold; }
+.sum-tbl tr.bg-white td { background: white; }
+.sum-tbl tr.bg-ice   td { background: #EEF4FA; }
+.sum-tbl tr.bg-wake  td { background: #D6E6F5; }
+
+.fin-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 7px 10px; border-bottom: 0.4px solid #C2D4E8;
+}
+.fin-row:nth-child(odd)  { background: white; }
+.fin-row:nth-child(even) { background: #EEF4FA; }
+.fin-lbl { font-size: 9.5pt; color: #1C2B3A; }
+.fin-val { font-size: 9.5pt; font-weight: bold; color: #1C2B3A; }
+.fin-val.neg { color: #A93226; }
+
+.note { font-size: 7.5pt; color: #4A6A8A; line-height: 1.7; }
+.comments { font-size: 7pt; color: #6A8AAA; font-style: italic; }
+.page-break { page-break-before: always; }
+</style>
+</head>
+<body>
+
+
+<div class="net-box">
+  <span class="net-label">NET DEMURRAGE DUE</span>
+  <span class="net-value">USD 8,69,375.00</span>
+</div>
+
+<div class="section-block">
+  <div class="section-label">VOYAGE PARTICULARS</div>
+  <div class="section-rule"></div>
+  <div class="kv-wrap">
+    <div class="kv-half"><div class="kv-row"><div class="kv-key">Vessel Name</div><div class="kv-val">MT Gregal</div></div><div class="kv-row"><div class="kv-key">Charterparty</div><div class="kv-val">EXXONMOBILVOY2005</div></div><div class="kv-row"><div class="kv-key">CP Date</div><div class="kv-val">01 April 2026</div></div><div class="kv-row"><div class="kv-key">Laycan</div><div class="kv-val">24th – 29th April 2026 (00:01–23:59) IN CHOPT</div></div><div class="kv-row"><div class="kv-key">Laycan Narrowed</div><div class="kv-val">05 May 2026 (00:00–23:59)</div></div><div class="kv-row"><div class="kv-key">Allowed Laytime</div><div class="kv-val">96.00 hrs + 7.7 hrs Extra  |  SHINC</div></div></div>
+    <div class="kv-half"><div class="kv-row"><div class="kv-key">Demurrage Rate</div><div class="kv-val">USD 2,00,000 / Day PDPR</div></div><div class="kv-row"><div class="kv-key">Address Commission</div><div class="kv-val">2.5%</div></div><div class="kv-row"><div class="kv-key">CP Speed</div><div class="kv-val">12.00–12.5 Knots WSNP IN CHOP</div></div><div class="kv-row"><div class="kv-key">Actual Rotation</div><div class="kv-val">YES</div></div><div class="kv-row"><div class="kv-key">Freight</div><div class="kv-val">Lumpsum USD 16,000,000  |  BSS 1:1</div></div></div>
+  </div>
+</div>
+
+<div class="section-block">
+  <div class="section-label">PORT 1 — NOVOROSSYISK (LOAD)  |  TERMINAL: SHESKHARIS</div>
+  <div class="section-rule"></div>
+
+  <div class="sub-label">Laytime Events</div>
+  <table class="data-tbl">
+    <thead><tr>
+      <th style="width:40%">Event / Description</th>
+      <th class="r" style="width:22%">Start (Local)</th>
+      <th class="r" style="width:22%">End (Local)</th>
+      <th class="r" style="width:16%">Hrs Used</th>
+    </tr></thead>
+    <tbody><tr><td>Commenced Loading → Documents on Board</td><td class='r'>04 May 2026  22:18</td><td class='r'>09 May 2026  13:12</td><td class='r'>110.90</td></tr></tbody>
+  </table>
+
+  <div class="sub-label" style="margin-top:5px">Deductions Applied</div>
+  <table class="data-tbl ded-tbl">
+    <thead><tr>
+          <th style="width:28%">Deduction Type</th>
+          <th class="r" style="width:18%">From</th>
+          <th class="r" style="width:18%">To</th>
+          <th class="r" style="width:10%">Hrs</th>
+          <th style="width:26%">Remarks</th>
+        </tr></thead>
+    <tbody><tr><td>First Day Window</td><td class='r'>04 May 2026  22:18</td><td class='r'>05 May 2026  04:18</td><td class='neg'>6.00</td><td class='comments'></td></tr><tr><td>Inward Passage</td><td class='r'>04 May 2026  12:15</td><td class='r'>04 May 2026  17:36</td><td class='neg'>5.35</td><td class='comments'>Permission for entrance to Fwd Tug Cast Off</td></tr><tr><td>Immigration / Port Authority</td><td class='r'>04 May 2026  18:24</td><td class='r'>04 May 2026  20:30</td><td class='neg'>2.10</td><td class='comments'>Formalities to complete tank inspection</td></tr><tr><td>Others (UAV Attack)</td><td class='r'>05 May 2026  13:24</td><td class='r'>06 May 2026  04:54</td><td class='neg'>7.75</td><td class='comments'>Loading suspended – Loading resumed (UAV Attack)</td></tr><tr><td>Others (UAV Attack)</td><td class='r'>07 May 2026  01:18</td><td class='r'>09 May 2026  09:30</td><td class='neg'>28.10</td><td class='comments'>UAV Attack</td></tr><tr><td>Others (Outward Clearance)</td><td class='r'>09 May 2026  09:30</td><td class='r'>09 May 2026  13:12</td><td class='neg'>3.70</td><td class='comments'>Outward Clearance</td></tr><tr><td>Document Allowance</td><td class='r'>06 May 2026  22:54</td><td class='r'>07 May 2026  01:54</td><td class='neg'>3.00</td><td class='comments'></td></tr></tbody>
+  </table>
+
+  <div class="port-sum" style="margin-top:4px">
+    <div class="port-sum-row">
+      <span class="port-sum-key">Gross Laytime Used</span>
+      <span class="port-sum-val">110.90 hrs</span>
+    </div>
+    <div class="port-sum-row">
+      <span class="port-sum-key">Total Deductions</span>
+      <span class="port-sum-val neg">− 56.00 hrs</span>
+    </div>
+    <div class="port-sum-row">
+      <span class="port-sum-key">Net Laytime Used</span>
+      <span class="port-sum-val blue">54.90 hrs</span>
+    </div>
+  </div>
+</div>
+<div class="section-block">
+  <div class="section-label">PORT 2 — MUNDRA (DISCHARGE)  |  TERMINAL: APSEZ SPM</div>
+  <div class="section-rule"></div>
+
+  <div class="sub-label">Laytime Events</div>
+  <table class="data-tbl">
+    <thead><tr>
+      <th style="width:40%">Event / Description</th>
+      <th class="r" style="width:22%">Start (Local)</th>
+      <th class="r" style="width:22%">End (Local)</th>
+      <th class="r" style="width:16%">Hrs Used</th>
+    </tr></thead>
+    <tbody><tr><td>NORT → Hose Disconnected</td><td class='r'>27 May 2026  21:42</td><td class='r'>03 Jun 2026  18:18</td><td class='r'>164.60</td></tr></tbody>
+  </table>
+
+  <div class="sub-label" style="margin-top:5px">Deductions Applied</div>
+  <table class="data-tbl ded-tbl">
+    <thead><tr>
+          <th style="width:28%">Deduction Type</th>
+          <th class="r" style="width:18%">From</th>
+          <th class="r" style="width:18%">To</th>
+          <th class="r" style="width:10%">Hrs</th>
+          <th style="width:26%">Remarks</th>
+        </tr></thead>
+    <tbody><tr><td>First Day Window</td><td class='r'>27 May 2026  21:42</td><td class='r'>28 May 2026  03:42</td><td class='neg'>6.00</td><td class='comments'>NOR</td></tr><tr><td>Inward Passage</td><td class='r'>02 Jun 2026  04:24</td><td class='r'>02 Jun 2026  07:12</td><td class='neg'>2.80</td><td class='comments'></td></tr></tbody>
+  </table>
+
+  <div class="port-sum" style="margin-top:4px">
+    <div class="port-sum-row">
+      <span class="port-sum-key">Gross Laytime Used</span>
+      <span class="port-sum-val">164.60 hrs</span>
+    </div>
+    <div class="port-sum-row">
+      <span class="port-sum-key">Total Deductions</span>
+      <span class="port-sum-val neg">− 8.80 hrs</span>
+    </div>
+    <div class="port-sum-row">
+      <span class="port-sum-key">Net Laytime Used</span>
+      <span class="port-sum-val blue">155.80 hrs</span>
+    </div>
+  </div>
+</div>
+
+<div class="page-break"></div>
+
+
+<div class="section-block">
+  <div class="section-label">LAYTIME CALCULATION SUMMARY</div>
+  <div class="section-rule"></div>
+  <table class="sum-tbl"><tr class="bg-white"><td>Total Gross Laytime Used (Both Ports)</td><td class="val">275.50 hrs</td></tr><tr class="bg-ice"><td>Less: Total Deductions</td><td class="neg">64.80 hrs</td></tr><tr class="bg-white"><td>Allowed Laytime (SHINC)</td><td class="val">96.00 hrs</td></tr><tr class="bg-ice"><td>Additional / Extra Laytime</td><td class="val">7.70 hrs</td></tr><tr class="bg-wake"><td>Time on Demurrage</td><td class="blue">107.00 hrs  (4.7917 days)</td></tr></table>
+</div>
+
+<div class="section-block">
+  <div class="section-label">FINANCIAL SETTLEMENT</div>
+  <div class="section-rule"></div>
+  <div class="fin-row"><span class="fin-lbl">Gross Demurrage  (4.7917 days × USD 2,00,000)</span><span class="fin-val ">USD 9,58,333.33</span></div><div class="fin-row"><span class="fin-lbl">Less: Undisputed Demurrage</span><span class="fin-val ">USD 0.00</span></div><div class="fin-row"><span class="fin-lbl">Less: Address Commission @ 2.5%</span><span class="fin-val neg">(USD 22,291.67)</span></div>
+  <div style="margin-top:3px">
+<div class="net-box">
+  <span class="net-label">NET DEMURRAGE DUE</span>
+  <span class="net-value">USD 8,69,375.00</span>
+</div></div>
+</div>
+
+<div class="section-block">
+  <div class="section-label">NOTES &amp; CONDITIONS</div>
+  <div class="section-rule"></div>
+  <p class="note">1.&nbsp; Laytime is calculated on a <strong>SHINC reversible basis</strong> across all ports as per EXXONMOBILVOY2005 Charterparty.</p><p class="note">2.&nbsp; All times are expressed in <strong>local port time</strong> unless otherwise stated.</p><p class="note">3.&nbsp; Deductions applied: First Day Window, Inward Passage, Immigration/Port Authority, UAV Attack (Others), Outward Clearance, Document Allowance.</p><p class="note">4.&nbsp; Demurrage accrues at <strong>USD 2,00,000 per day</strong> pro-rata (PDPR) after expiry of allowed laytime.</p><p class="note">5.&nbsp; Address Commission of <strong>2.5%</strong> is deducted from the gross demurrage amount.</p><p class="note">6.&nbsp; Extra Laytime of <strong>7.7 hrs</strong> (Early Loading allowance) included in allowed laytime calculation.</p><p class="note">7.&nbsp; This statement is subject to mutual agreement between Owners and Charterers and final audit.</p><p class="note">8.&nbsp; Any disputes shall be resolved as per the arbitration clause in the Charterparty.</p>
+</div>
+
+</body>
+</html>
