@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["src/app/pages/master/client/client.component.css"],
+  "sourcesContent": ["mat-icon {\n  font-size: 17px;\n}\n\n.search {\n  font-size: 22px;\n}\n\n.vessel-outer-layer {\n  width: 250px !important;\n  /* or whatever fixed width you need */\n  max-width: 250px !important;\n}\n\n\n.vessel-column {\n  width: 220px !important;\n  /* or whatever fixed width you need */\n  max-width: 220px !important;\n  white-space: nowrap;\n  overflow: hidden;\n  text-overflow: ellipsis;\n}\n\n.close-icon {\n  margin-top: 3px;\n}"],
+  "mappings": ";AAAA;AACE,aAAW;AACb;AAEA,CAAC;AACC,aAAW;AACb;AAEA,CAAC;AACC,SAAO;AAEP,aAAW;AACb;AAGA,CAAC;AACC,SAAO;AAEP,aAAW;AACX,eAAa;AACb,YAAU;AACV,iBAAe;AACjB;AAEA,CAAC;AACC,cAAY;AACd;",
+  "names": []
+}

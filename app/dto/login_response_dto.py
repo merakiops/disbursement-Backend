@@ -33,8 +33,8 @@ class LoginResponseDTO(BaseModel):
     """
     status: str
     status_code: int
-    token: Optional[TokenResponse]
-    expires: Optional[str]    
+    token: Optional[TokenResponse | str] = None
+    expires: Optional[str] = None
     detail: Optional[str]=None
     uuid: Optional[str]= None
     is_mfa_enabled: Optional[str]= None

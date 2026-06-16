@@ -4,7 +4,8 @@ import socket
 import logging
 from logging.handlers import RotatingFileHandler
 from fastapi import FastAPI, Request, Response
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 from starlette.middleware.cors import CORSMiddleware
 import jwt
 import pytz
@@ -58,10 +59,6 @@ from app.exceptions.AppException import AppException
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.exceptions import RequestValidationError
 
-try:
-    HOST = socket.gethostbyname(socket.gethostname())
-except Exception:
-    HOST = "0.0.0.0"
 # === Load environment variables ===
 environment = os.getenv("env", "prod")
 env_files = {
@@ -73,10 +70,7 @@ load_dotenv(env_file)
 print(f"Loaded environment: {environment}")
 print(f"Using .env file: {env_file}")
 
-try:
-    HOST = socket.gethostbyname(socket.gethostname())
-except Exception:
-    HOST = "0.0.0.0"
+HOST = "0.0.0.0"
 
 # === Initialize FastAPI app ===
 app = FastAPI(docs_url="/api/docs")
@@ -102,6 +96,11 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException):
+    if exc.status_code == 404 and not request.url.path.startswith("/api"):
+        index_path = os.path.join(os.path.dirname(__file__), "frontend", "index.html")
+        if os.path.exists(index_path):
+            return FileResponse(index_path)
+
     logger.warning(f"HTTPException: {traceback.format_exc()}")
     return JSONResponse(
         status_code=exc.status_code,
@@ -231,6 +230,9 @@ app.include_router(disbursementFilter,tags=["filter"])
 app.include_router(DashboardController, tags=["Dashboard"])
 app.include_router(dynamic_table_controller, tags=["Dynamic Table Creation"])
 app.include_router(demurrage_router)
+
+# === Serve Frontend Static Files ===
+app.mount("/", StaticFiles(directory="frontend", html=True), name="frontend")
 
 # === Main entrypoint ===
 if __name__ == "__main__":

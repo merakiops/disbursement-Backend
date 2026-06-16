@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["src/app/pages/master/country/country.component.css"],
+  "sourcesContent": ["\n.mat-icon {\nfont-size: 17px;\n}\n"],
+  "mappings": ";AACA,CAAC;AACD,aAAW;AACX;",
+  "names": []
+}

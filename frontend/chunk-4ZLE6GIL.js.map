@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["src/app/auth/login/login.signal.service.ts"],
+  "sourcesContent": ["import { Injectable, signal } from '@angular/core';\n\n@Injectable({ providedIn: 'root' })\nexport class LoginSignalService {\n  // Private signals\n  private _userName = signal<string>('');\n  private _role = signal<string>('');\n  private _uuid = signal<string>('');\n  private _otpNreset = signal<boolean>(false);\n\n  // Public readonly signals (getters)\n  readonly userName = this._userName;\n  readonly role = this._role;\n  readonly uuid = this._uuid;\n  readonly otpNreset = this._otpNreset;\n\n  // Setters\n  setUserName(name: string) {\n    this._userName.set(name);\n  }\n\n  setRole(role: string) {\n    this._role.set(role);\n  }\n\n  setuuid(uuid: string) {\n    this._uuid.set(uuid);\n  }\n\n  setOtpNReset(flag: boolean) {\n    this._otpNreset.set(flag);\n  }\n}\n"],
+  "mappings": ";;;;;;AAGM,IAAO,qBAAP,MAAO,oBAAkB;;EAErB,YAAY,OAAe,EAAE;EAC7B,QAAQ,OAAe,EAAE;EACzB,QAAQ,OAAe,EAAE;EACzB,aAAa,OAAgB,KAAK;;EAGjC,WAAW,KAAK;EAChB,OAAO,KAAK;EACZ,OAAO,KAAK;EACZ,YAAY,KAAK;;EAG1B,YAAY,MAAY;AACtB,SAAK,UAAU,IAAI,IAAI;EACzB;EAEA,QAAQ,MAAY;AAClB,SAAK,MAAM,IAAI,IAAI;EACrB;EAEA,QAAQ,MAAY;AAClB,SAAK,MAAM,IAAI,IAAI;EACrB;EAEA,aAAa,MAAa;AACxB,SAAK,WAAW,IAAI,IAAI;EAC1B;;qCA5BW,qBAAkB;EAAA;4EAAlB,qBAAkB,SAAlB,oBAAkB,WAAA,YADL,OAAM,CAAA;;",
+  "names": []
+}

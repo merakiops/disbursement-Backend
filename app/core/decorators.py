@@ -236,7 +236,7 @@ async def refresh_token_middleware(request: Request, call_next):
                         key="Token",
                         value=new_access_token,
                         httponly=True,
-                        secure=True,
+                        secure=request.url.scheme == "https",
                         samesite="lax",
                         expires=(datetime.now(timezone.utc) + timedelta(minutes=int(Config.JWT_ACCESS_TOKEN_EXPIRES))),
                         max_age=int(Config.JWT_ACCESS_TOKEN_EXPIRES) * 60

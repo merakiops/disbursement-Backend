@@ -45,9 +45,6 @@ user = None
 @Auth_controller.post('/api/v1/auth/token', response_model=LoginResponseDTO)
 async def login(background_tasks: BackgroundTasks,request: Request, body: LoginRequestDTO,db: Session = Depends(get_db)):
     logger.info("Entering auth_route")
-
-    # Get the data from the request body
-    data = await request.json()
     username = body.username.strip().lower()
     password = body.password
     client_ip = request.client.host if request.client else "unknown"
@@ -107,12 +104,12 @@ async def login(background_tasks: BackgroundTasks,request: Request, body: LoginR
     useremail = user.email
     is_mfa_enabled = 'N'
     is_first_login = user.is_first_login
-    uuid = None
+    response_uuid = str(uuid.uuid4())
 
     if user.is_mfa_enabled =='Y' and user.email:
         # Generate OTP and UUID
         otp,user_uuid = generate_otp_and_uuid()
-        uuid = user_uuid
+        response_uuid = user_uuid
         subject = "Your OTP Code for Meraki PDA App login"
         # message = (
         #         f"Dear User,\n\n"
@@ -148,9 +145,9 @@ async def login(background_tasks: BackgroundTasks,request: Request, body: LoginR
         content=LoginResponseDTO(
         status="success",
         status_code=200,
-        token=None,  # token not included in body if you're using cookies
+        token=token,
         expires=expires.isoformat(),
-        uuid= uuid,
+        uuid=response_uuid,
         is_mfa_enabled = is_mfa_enabled,
         is_first_login =is_first_login,
         name=user.name,
@@ -168,7 +165,7 @@ async def login(background_tasks: BackgroundTasks,request: Request, body: LoginR
             key="Token",
             value=token,
             httponly=True,
-            secure=True,
+            secure=request.url.scheme == "https",
             samesite="lax",
             expires=expires_dt,
             max_age=expiry_seconds

@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["angular:styles/component:css;b607db86542330d723d0ed4610c9e09230800b37a5326b452d75adc0e2b0c333;/Users/nebula/Projects/disbursement-Frontend/src/app/components/stale-session-dialog.component.ts"],
+  "sourcesContent": ["\n  .dialog-container {\n    text-align: center;\n    padding: 24px;\n    min-width: 300px;\n  }\n  .title {\n    font-size: 20px;\n    margin-bottom: 10px;\n    color: #d32f2f;\n  }\n  .message {\n    font-size: 16px;\n    margin-bottom: 20px;\n  }\n  .actions {\n    display: flex;\n    justify-content: center;\n    gap: 10px;\n  }\n"],
+  "mappings": ";AACE,CAAC;AACC,cAAY;AACZ,WAAS;AACT,aAAW;AACb;AACA,CAAC;AACC,aAAW;AACX,iBAAe;AACf,SAAO;AACT;AACA,CAAC;AACC,aAAW;AACX,iBAAe;AACjB;AACA,CAAC;AACC,WAAS;AACT,mBAAiB;AACjB,OAAK;AACP;",
+  "names": []
+}

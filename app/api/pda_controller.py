@@ -251,7 +251,7 @@ async def reviewValidateOtp(request: Request, background_tasks: BackgroundTasks,
         key="Token",
         value=token,
         httponly=True,
-        secure=True,
+        secure=request.url.scheme == "https",
         samesite="lax",
         expires=expires_dt,
         max_age=expiry_seconds

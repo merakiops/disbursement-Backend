@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["src/app/pages/master/user-management/user-management.component.css"],
+  "sourcesContent": [".mat-icon {\n    font-size: 17px;\n}\n\n.close-icon {\n    margin-top: 3px;\n}\n\n.reset-icon {\n    margin-top: 6px;\n}\n\n.reset-icon-button {\n    width: 32px;\n    height: 32px;\n    padding: 0;\n    cursor: pointer;\n    /* border: 1px solid #dcdcdc; */\n    border-radius: 4px;\n    margin-top: 2px;\n    background-color: var(--color-action) !important;\n    color: var(--app-text-primary) !important;\n}\n\n.reset-icon-button:hover {\n    background-color: var(--color-primary-hover) !important;\n    color: var(--color-error-muted) !important;\n}"],
+  "mappings": ";AAAA,CAAC;AACG,aAAW;AACf;AAEA,CAAC;AACG,cAAY;AAChB;AAEA,CAAC;AACG,cAAY;AAChB;AAEA,CAAC;AACG,SAAO;AACP,UAAQ;AACR,WAAS;AACT,UAAQ;AAER,iBAAe;AACf,cAAY;AACZ,oBAAkB,IAAI;AACtB,SAAO,IAAI;AACf;AAEA,CAZC,iBAYiB;AACd,oBAAkB,IAAI;AACtB,SAAO,IAAI;AACf;",
+  "names": []
+}

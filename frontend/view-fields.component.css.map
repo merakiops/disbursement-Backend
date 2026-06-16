@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["src/app/components/create-port/view-fields/view-fields.component.css"],
+  "sourcesContent": [".header-title {\n    margin-left: 10px;\n    text-align: center;\n}\n\nmat-chip-list {\n    display: flex;\n    flex-wrap: wrap;\n    gap: 10px;\n}\n\nmat-button {\n    border: none;\n}\n\n.dialog-header {\n    display: flex;\n    justify-content: space-between;\n    align-items: center;\n    /* background-color: #f2f2f2; */\n    padding: 2px 8px;\n    /* font-weight: 500; */\n    font-size: 22px;\n    /* border-bottom: 1px solid #ddd; */\n    gap: 10px;\n}\n\n.modalContainer {\n    padding: 5px 8px !Important;\n}"],
+  "mappings": ";AAAA,CAAC;AACG,eAAa;AACb,cAAY;AAChB;AAEA;AACI,WAAS;AACT,aAAW;AACX,OAAK;AACT;AAEA;AACI,UAAQ;AACZ;AAEA,CAAC;AACG,WAAS;AACT,mBAAiB;AACjB,eAAa;AAEb,WAAS,IAAI;AAEb,aAAW;AAEX,OAAK;AACT;AAEA,CAAC;AACG,WAAS,IAAI;AACjB;",
+  "names": []
+}

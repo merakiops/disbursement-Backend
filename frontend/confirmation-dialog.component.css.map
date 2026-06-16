@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["angular:styles/component:css;e08a01125c44862103d61e6925e4c544ff2ffd7089cfd8599725fb892185b7fd;/Users/nebula/Projects/disbursement-Frontend/src/app/components/confirmation-dialog.component.ts"],
+  "sourcesContent": ["\n    .dialog-container {\n      text-align: center;\n      padding: 24px;\n      min-width: 300px;\n    }\n    .title {\n      font-size: 20px;\n      margin-bottom: 10px;\n      color: #d32f2f;\n    }\n    .message {\n      font-size: 16px;\n    }\n    button {\n      width: 100px;\n      margin: 0 5px;\n    }\n  "],
+  "mappings": ";AACI,CAAC;AACC,cAAY;AACZ,WAAS;AACT,aAAW;AACb;AACA,CAAC;AACC,aAAW;AACX,iBAAe;AACf,SAAO;AACT;AACA,CAAC;AACC,aAAW;AACb;AACA;AACE,SAAO;AACP,UAAQ,EAAE;AACZ;",
+  "names": []
+}

@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["src/app/constants/mailRegex.constants.ts"],
+  "sourcesContent": ["export const mailRegex = /^[^\\s@]+@[^\\s@]+\\.(com|org|net|in|co|edu|gov|io|ai|global)$/i;\n"],
+  "mappings": ";AAAO,IAAM,YAAY;",
+  "names": []
+}

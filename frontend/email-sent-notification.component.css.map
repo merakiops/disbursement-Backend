@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["src/app/pages/pda/email-sent-notification/email-sent-notification.component.css"],
+  "sourcesContent": [" ::ng-deep .email-dialog-style .mat-mdc-dialog-surface {\n     border-radius: 20px !important;\n     overflow: hidden;\n\n }\n\n\n button {\n     background-color: blue;\n     border-radius: 6px;\n     height: 27px;\n     width: 50px;\n     color: white;\n     border: none;\n }"],
+  "mappings": ";AAAC,UAAU,CAAC,mBAAmB,CAAC;AAC3B,iBAAe;AACf,YAAU;AAEd;AAGA;AACI,oBAAkB;AAClB,iBAAe;AACf,UAAQ;AACR,SAAO;AACP,SAAO;AACP,UAAQ;AACZ;",
+  "names": []
+}

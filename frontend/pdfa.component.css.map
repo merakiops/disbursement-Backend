@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["src/app/pages/pdfa/pdfa.component.css"],
+  "sourcesContent": ["mat-card {\n  background-color: var(--color-bg-dark-1) !important;\n  border: 1px solid var(--color-bg-dark-2) !important;\n  color: var(--color-white) !important;\n}\n\n.subtitle {\n  margin-bottom: 12px;\n  color: var(--color-text-light-1) !important;\n  font-size: 14px;\n}\n"],
+  "mappings": ";AAAA;AACE,oBAAkB,IAAI;AACtB,UAAQ,IAAI,MAAM,IAAI;AACtB,SAAO,IAAI;AACb;AAEA,CAAC;AACC,iBAAe;AACf,SAAO,IAAI;AACX,aAAW;AACb;",
+  "names": []
+}

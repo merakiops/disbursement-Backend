@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["src/app/components/port-agent-form/pa-form-submit-success-page/succuss-response-shared.component.service.ts"],
+  "sourcesContent": ["import { Injectable } from '@angular/core';\nimport { BehaviorSubject } from 'rxjs';\n\n@Injectable({\n    providedIn: 'root',\n})\nexport class SuccessMessageService {\n    private successMessageSubject = new BehaviorSubject<string>(\"\");\n\n    successMessage$ = this.successMessageSubject.asObservable();\n\n    setSuccessMessage(message: string): void {\n        this.successMessageSubject.next(message);\n    }\n}\n"],
+  "mappings": ";;;;;;AAMM,IAAO,wBAAP,MAAO,uBAAqB;EACtB,wBAAwB,IAAI,gBAAwB,EAAE;EAE9D,kBAAkB,KAAK,sBAAsB,aAAY;EAEzD,kBAAkB,SAAe;AAC7B,SAAK,sBAAsB,KAAK,OAAO;EAC3C;;qCAPS,wBAAqB;EAAA;4EAArB,wBAAqB,SAArB,uBAAqB,WAAA,YAFlB,OAAM,CAAA;;",
+  "names": []
+}

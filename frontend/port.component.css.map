@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["src/app/pages/master/port/port.component.css"],
+  "sourcesContent": [".mat-icon {\n  font-size: 17px;\n}\n\n.close-icon {\n  margin-top: 3px;\n}\n\n.close-icon:hover {\n  color: lightcoral;\n}\n"],
+  "mappings": ";AAAA,CAAC;AACC,aAAW;AACb;AAEA,CAAC;AACC,cAAY;AACd;AAEA,CAJC,UAIU;AACT,SAAO;AACT;",
+  "names": []
+}

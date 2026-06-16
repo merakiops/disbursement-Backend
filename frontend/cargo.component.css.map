@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["src/app/pages/master/cargo/cargo.component.css"],
+  "sourcesContent": [".mat-icon {\n    font-size: 17px;\n}\n\n.close-icon {\n    margin-top: 3px;\n}"],
+  "mappings": ";AAAA,CAAC;AACG,aAAW;AACf;AAEA,CAAC;AACG,cAAY;AAChB;",
+  "names": []
+}

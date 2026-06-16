@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["src/app/pages/master/master.signal.service.ts"],
+  "sourcesContent": ["// signal.service.ts\nimport { Injectable, signal } from '@angular/core';\n\n@Injectable({ providedIn: 'root' })\nexport class MasterSignalService {\n    private _masterTabName = signal<string>(''); // private signal\n\n    // Getter for signal\n    readonly masterTabName = this._masterTabName;\n\n    // Setter\n    setMasterTabName(name: string) {\n        this._masterTabName.set(name);\n    }\n}"],
+  "mappings": ";;;;;;AAIM,IAAO,sBAAP,MAAO,qBAAmB;EACpB,iBAAiB,OAAe,EAAE;;;EAGjC,gBAAgB,KAAK;;EAG9B,iBAAiB,MAAY;AACzB,SAAK,eAAe,IAAI,IAAI;EAChC;;qCATS,sBAAmB;EAAA;4EAAnB,sBAAmB,SAAnB,qBAAmB,WAAA,YADN,OAAM,CAAA;;",
+  "names": []
+}

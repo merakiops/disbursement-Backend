@@ -2380,7 +2380,7 @@ def evaluate_sum_basic_value(basic_value: str, services: list,vessel,db,dto):
                     elif ref_service and isinstance(ref_service.get("total"),str):
                         logger.info(f"   Calculating service total for '{param}'")
                         service_total = calculate_service_total_roe(service=ref_service,vessel=vessel,db=db,dto=dto)
-                        logger.info(f"   Calculated service total '{param}': {ref_service.get("total")}")
+                        # logger.info(f"   Calculated service total '{param}': {ref_service.get("total")}")
                         param_value = float(ref_service.get("total", 0) )
                         param_formula = f"{param}({service_total})"
                         

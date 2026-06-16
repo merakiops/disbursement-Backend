@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["src/app/pages/pdfa/return-pda/return-pda.component.css"],
+  "sourcesContent": [".subtitle {\n  margin-bottom: 12px;\n  color: #555;\n  font-size: 14px;\n}\n\n.form {\n  padding: 5px 300px 0px 300px;\n}\n\n\n.example-full-width {\n  max-width: 100%;\n}\n\n.button_click {\n   width: 100%;\n    max-width: 160px;\n    margin: 5px 5px 0px 0px;\n    background-color: #3C50E0 !important;\n    border: none;\n    height: 33px;\n    border-radius: 4px;\n    color: white !important;\n    align-items: center;\n    transition: margin-top 0.3s ease;\n}\n"],
+  "mappings": ";AAAA,CAAC;AACC,iBAAe;AACf,SAAO;AACP,aAAW;AACb;AAEA,CAAC;AACC,WAAS,IAAI,MAAM,IAAI;AACzB;AAGA,CAAC;AACC,aAAW;AACb;AAEA,CAAC;AACE,SAAO;AACN,aAAW;AACX,UAAQ,IAAI,IAAI,IAAI;AACpB,oBAAkB;AAClB,UAAQ;AACR,UAAQ;AACR,iBAAe;AACf,SAAO;AACP,eAAa;AACb,cAAY,WAAW,KAAK;AAChC;",
+  "names": []
+}
