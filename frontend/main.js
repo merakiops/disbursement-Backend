@@ -45,14 +45,14 @@ import {
 } from "./chunk-BAX6ITZM.js";
 import {
   AuthSessionService
-} from "./chunk-EY4LAK3R.js";
+} from "./chunk-GU2FBX5T.js";
 import {
   Router,
   RouterOutlet,
   provideRouter,
   withComponentInputBinding
 } from "./chunk-F2E3SSFC.js";
-import "./chunk-2ZCMGA6L.js";
+import "./chunk-V427WR54.js";
 import {
   BrowserModule,
   DomRendererFactory2,
@@ -176,20 +176,20 @@ var routes = [
   {
     path: "login",
     canActivate: [NoAuthGuard],
-    loadComponent: () => import("./chunk-373OZ7VF.js").then((m) => m.LoginComponent)
+    loadComponent: () => import("./chunk-357LQ6HH.js").then((m) => m.LoginComponent)
   },
   {
     path: "otp",
     canActivate: [NoAuthGuard],
-    loadComponent: () => import("./chunk-UCM6FL2X.js").then((m) => m.OtpComponent)
+    loadComponent: () => import("./chunk-M4ZSCG3Y.js").then((m) => m.OtpComponent)
   },
   {
     path: "forgot-password",
-    loadComponent: () => import("./chunk-QIKCFEBX.js").then((m) => m.ForgetPswdComponent)
+    loadComponent: () => import("./chunk-ODZU7XS5.js").then((m) => m.ForgetPswdComponent)
   },
   {
     path: "reset-password/:token",
-    loadComponent: () => import("./chunk-72IBK5LM.js").then((m) => m.ResetPasswordComponent)
+    loadComponent: () => import("./chunk-O45BTYCQ.js").then((m) => m.ResetPasswordComponent)
   },
   // ── Truly public routes (NO guard) ─────────────────────────────────────
   // These routes are accessible by anyone regardless of session state.
@@ -197,30 +197,30 @@ var routes = [
   // sets sessionValid$ = false, and that false state can leak into other guards.
   {
     path: "pda-disburesement/approval/:token",
-    loadComponent: () => import("./chunk-DEVH5KQD.js").then((m) => m.ClientApprovalFormComponent)
+    loadComponent: () => import("./chunk-TASFTWG7.js").then((m) => m.ClientApprovalFormComponent)
   },
   {
     path: "pda-disburesement/:token",
-    loadComponent: () => import("./chunk-373OZ7VF.js").then((m) => m.LoginComponent),
+    loadComponent: () => import("./chunk-357LQ6HH.js").then((m) => m.LoginComponent),
     data: { isDisbursement: true }
   },
   {
     path: "port-agent-form",
-    loadComponent: () => import("./chunk-3BPYEHWQ.js").then((m) => m.PortAgentFormComponent)
+    loadComponent: () => import("./chunk-5SG2NBAO.js").then((m) => m.PortAgentFormComponent)
   },
   {
     path: "submit/success",
-    loadComponent: () => import("./chunk-5QAG4G5Y.js").then((m) => m.PaFormSubmitSuccessPageComponent)
+    loadComponent: () => import("./chunk-RLVN4OAF.js").then((m) => m.PaFormSubmitSuccessPageComponent)
   },
   {
     path: "pdfa",
-    loadChildren: () => import("./chunk-CEH2PUAY.js").then((m) => m.PdfaRoutes)
+    loadChildren: () => import("./chunk-Q5C3YWWS.js").then((m) => m.PdfaRoutes)
   },
   // ── Protected routes (AuthGuard) ────────────────────────────────────────
   {
     path: "layout",
     canActivate: [AuthGuard],
-    loadChildren: () => import("./chunk-WW2LBYYQ.js").then((m) => m.LayoutRoutes)
+    loadChildren: () => import("./chunk-NICLDBCV.js").then((m) => m.LayoutRoutes)
   }
 ];
 

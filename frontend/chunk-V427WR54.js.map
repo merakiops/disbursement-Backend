@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["src/environments/environment.development.ts"],
+  "sourcesContent": ["export const environment = {\n    baseurl: \"/api/v1\",\n    environment: \"development\"\n};"],
+  "mappings": ";AAAO,IAAM,cAAc;EACvB,SAAS;EACT,aAAa;;",
+  "names": []
+}
