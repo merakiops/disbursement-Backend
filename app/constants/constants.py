@@ -9,7 +9,9 @@ ALLOWED_ORIGINS = [
     "http://127.0.0.1:8081",
     "http://0.0.0.0:8081",
     "http://localhost:4200",
-    "http://127.0.0.1:4200"
+    "http://127.0.0.1:4200",
+    "https://dev.merakishippingservices.com"
+
 ]
 
 ALLOWED_ROLE_IDS=[1,2]

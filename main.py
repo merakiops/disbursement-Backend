@@ -58,6 +58,7 @@ import traceback
 from app.exceptions.AppException import AppException
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.exceptions import RequestValidationError
+from fastapi.encoders import jsonable_encoder
 
 # === Load environment variables ===
 environment = os.getenv("env", "prod")
@@ -114,14 +115,33 @@ async def http_exception_handler(request: Request, exc: HTTPException):
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
-    logger.warning(f"Validation error: {exc.errors()}")
+    errors = exc.errors()
+    logger.warning(f"Validation error: {errors}")
+    
+    # Clean up non-serializable objects (like ValueError) from the error details
+    cleaned_errors = []
+    for err in errors:
+        if isinstance(err, dict):
+            c_err = dict(err)
+            if "ctx" in c_err and isinstance(c_err["ctx"], dict):
+                c_ctx = {}
+                for k, v in c_err["ctx"].items():
+                    if isinstance(v, Exception):
+                        c_ctx[k] = str(v)
+                    else:
+                        c_ctx[k] = v
+                c_err["ctx"] = c_ctx
+            cleaned_errors.append(c_err)
+        else:
+            cleaned_errors.append(err)
+
     return JSONResponse(
         status_code=422,
         content={
             "status": "error",
             "status_code": 422,
             "error": "Validation Error",
-            "details": exc.errors(),
+            "details": jsonable_encoder(cleaned_errors),
         },
     )
 
