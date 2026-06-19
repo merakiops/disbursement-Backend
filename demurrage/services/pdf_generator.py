@@ -43,7 +43,21 @@ def generate_demurrage_pdf(voyage: Voyage) -> io.BytesIO:
 
     VESSEL_CAPS   = (voyage.vessel or "UNKNOWN").upper()
     CP_TERMS      = voyage.charterparty_terms or ""
-    CP_DATE       = voyage.laycan or ""
+    cp_date_str = ""
+    if voyage.cp_date:
+        if isinstance(voyage.cp_date, datetime):
+            cp_date_str = voyage.cp_date.strftime("%d %b %Y")
+        else:
+            cp_date_str = str(voyage.cp_date)
+
+    bl_date_str = ""
+    if voyage.bl_date:
+        if isinstance(voyage.bl_date, datetime):
+            bl_date_str = voyage.bl_date.strftime("%d %b %Y")
+        else:
+            bl_date_str = str(voyage.bl_date)
+
+    CP_DATE       = cp_date_str
     CLIENT        = voyage.client_name or ""
 
     # Dynamic Laycan Narrowed formatting
@@ -62,7 +76,8 @@ def generate_demurrage_pdf(voyage: Voyage) -> io.BytesIO:
     voyage_particulars = [
         ("Vessel Name", voyage.vessel or ""),
         ("Charterparty", voyage.charterparty_terms or ""),
-        ("CP Date", voyage.laycan or ""),  # Mapping as CP Date
+        ("CP Date", cp_date_str),
+        ("BL Date", bl_date_str),
         ("Laycan", voyage.laycan or ""),
         ("Laycan Narrowed", laycan_narrowed_str),
         ("Allowed Laytime (hours)", f"{voyage.allowed_laytime_hours:.2f} hrs"),
@@ -70,7 +85,6 @@ def generate_demurrage_pdf(voyage: Voyage) -> io.BytesIO:
         ("Demurrage Rate", f"USD {voyage.demurrage_rate_usd_per_day:,.2f} / Day PDPR"),
         ("Address Commission", f"{voyage.address_commission_percent}%"),
         ("CP Speed", voyage.cp_speed or ""),
-        ("Actual Rotation", voyage.actual_rotation or ""),
         ("Freight", voyage.freight or ""),
         ("Timebar Clause", voyage.timebar_clause or "")
     ]

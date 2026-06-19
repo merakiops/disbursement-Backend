@@ -30,6 +30,9 @@ class Voyage(Base):
     timebar_clause = Column(String(255), nullable=True)
     additional_laytime = Column(String(100), nullable=True)
     client_name = Column(String(100), nullable=True)
+    bl_date = Column(DateTime, nullable=False)
+    cp_date = Column(DateTime, nullable=False)
+
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
 

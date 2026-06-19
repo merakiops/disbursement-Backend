@@ -11,14 +11,14 @@ def calculate_time_used_hours(start_time: datetime, end_time: datetime) -> float
     diff = end_time - start_time
     # Convert seconds to hours
     hours = diff.total_seconds() / 3600.0
-    return round(hours, 4)
+    return hours
 
 
 def calculate_total_deductions_hours(deduction_times: List[float]) -> float:
     """
     Sum of all deduction times in hours.
     """
-    return round(sum(deduction_times), 4)
+    return sum(deduction_times)
 
 
 def calculate_demurrage_time(
@@ -31,7 +31,7 @@ def calculate_demurrage_time(
     """
     net_used = total_used_laytime - total_deductions
     demurrage = net_used - allowed_laytime_hours
-    return round(max(0.0, demurrage), 4)
+    return max(0.0, demurrage)
 
 
 def calculate_gross_demurrage_cost(
@@ -42,7 +42,7 @@ def calculate_gross_demurrage_cost(
     Formula: gross_demurrage_cost = (demurrage_time * demurrage_rate_usd_per_day) / 24
     """
     cost = (demurrage_time_hours * demurrage_rate_usd_per_day) / 24.0
-    return round(cost, 2)
+    return cost
 
 
 def calculate_add_commission(
@@ -54,7 +54,7 @@ def calculate_add_commission(
     Note: Calculated as a negative value representing a discount/reduction.
     """
     commission = (-gross_demurrage_cost) * (address_commission_percent / 100.0)
-    return round(commission, 2)
+    return commission
 
 
 def calculate_net_demurrage(
@@ -67,4 +67,4 @@ def calculate_net_demurrage(
     Note: add_commission is negative, so adding it reduces the net demurrage.
     """
     net = gross_demurrage_cost - undisputed_demurrage_paid + add_commission
-    return round(net, 2)
+    return net

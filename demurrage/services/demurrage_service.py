@@ -41,10 +41,13 @@ class DemurrageService:
                 cp_speed=str(voyage_data.cp_speed) if voyage_data.cp_speed is not None else None,
                 timebar_clause=voyage_data.timebar_clause,
                 additional_laytime=voyage_data.additional_laytime,
+                bl_date=voyage_data.bl_date,
+                cp_date=voyage_data.cp_date,
                 client_name=voyage_data.client_name
             )
             db.add(db_voyage)
             db.flush()  # Gets db_voyage.id for foreign keys
+
 
             # 2. Process Load Port Operation
             load_data = payload.load_port

@@ -19,6 +19,8 @@ class VoyageCreateSchema(BaseModel):
     timebar_clause: Optional[str] = None
     additional_laytime: Optional[str] = None
     client_name: Optional[str] = None
+    bl_date: datetime
+    cp_date: datetime
 
 
 class PortOperationCreateSchema(BaseModel):

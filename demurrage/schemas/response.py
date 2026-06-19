@@ -73,7 +73,8 @@ class VoyageResponseSchema(BaseModel):
     client_name: Optional[str] = None
     created_at: datetime
     updated_at: datetime
-
+    bl_date: datetime
+    cp_date: datetime
 
 class DemurrageCaseResponseSchema(BaseModel):
     model_config = ConfigDict(from_attributes=True)
