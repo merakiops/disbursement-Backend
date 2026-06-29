@@ -68,5 +68,20 @@ class Config:
 
     JWT_ACCESS_TOKEN_EXPIRES = os.getenv('JWT_ACCESS_TOKEN_EXPIRES', 60)  # Default to 15 mins if not set
     JWT_ALGORITHM = os.getenv('JWT_ALGORITHM', 'RS256')
-    JWT_PUBLIC_KEY = JWT_PUBLIC_KEY  # Public key for verifying JWTs
+    # JWT_PUBLIC_KEY = JWT_PUBLIC_KEY  # Public key for verifying JWTs
+    JWT_PUBLIC_KEY = os.getenv('JWT_PUBLIC_KEY_value')  # Public key for verifying JWTs
     JWT_PRIVATE_KEY = private_key  # Use the decrypted private key for signing JWTs
+
+if "ENVIRONMENT" in os.environ:
+    ENVIRONMENT = os.environ["ENVIRONMENT"]
+else:
+    ENVIRONMENT = ""
+
+if (ENVIRONMENT == "LOCAL") or (ENVIRONMENT == "DEV") or (ENVIRONMENT == ""):
+
+     SECRET_KEY ="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"
+elif ENVIRONMENT == "PROD":
+
+    SECRET_KEY =  "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"
+else:
+    print("No env selected")
