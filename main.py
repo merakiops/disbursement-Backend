@@ -253,7 +253,7 @@ app.include_router(demurrage_router)
 
 # === Serve Frontend Static Files ===
 app.mount("/", StaticFiles(directory="frontend", html=True), name="frontend")
-
+print("===========>Hello")
 # === Main entrypoint ===
 if __name__ == "__main__":
     uvicorn.run(
