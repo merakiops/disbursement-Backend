@@ -67,7 +67,7 @@ class Config:
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
     JWT_ACCESS_TOKEN_EXPIRES = os.getenv('JWT_ACCESS_TOKEN_EXPIRES', 60)  # Default to 15 mins if not set
-    JWT_ALGORITHM = os.getenv('JWT_ALGORITHM', 'RS256')
+    # JWT_ALGORITHM = os.getenv('JWT_ALGORITHM', 'RS256')
     # JWT_PUBLIC_KEY = JWT_PUBLIC_KEY  # Public key for verifying JWTs
     JWT_PUBLIC_KEY = os.getenv('JWT_PUBLIC_KEY_value')  # Public key for verifying JWTs
     JWT_PRIVATE_KEY = private_key  # Use the decrypted private key for signing JWTs
@@ -87,3 +87,4 @@ class Config:
 #     print("No env selected")
 
 JWT_PUBLIC_KEY_value ="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"
+JWT_ALGORITHM='HS256'
