@@ -79,9 +79,9 @@ else:
 
 if (ENVIRONMENT == "LOCAL") or (ENVIRONMENT == "DEV") or (ENVIRONMENT == ""):
 
-     SECRET_KEY ="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"
+     JWT_PUBLIC_KEY_value ="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"
 elif ENVIRONMENT == "PROD":
 
-    SECRET_KEY =  "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"
+    JWT_PUBLIC_KEY_value =  "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"
 else:
     print("No env selected")
