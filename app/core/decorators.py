@@ -62,7 +62,8 @@ def jwt_required(f):
         try:
             print("token===>", token)
             # Safely decode the token without signature verification to inspect the user
-            decoded = jwt.decode(token, options={"verify_signature": False})
+            # decoded = jwt.decode(token, options={"verify_signature": False})
+            decoded =jwt.decode(token, Config.JWT_PUBLIC_KEY, algorithms=[Config.JWT_ALGORITHM])
             print("decoded===>", decoded)
         except Exception as e:
             raise HTTPException(status_code=401, detail="Invalid token format")
