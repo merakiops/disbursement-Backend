@@ -50,10 +50,10 @@ with open(PRIVATE_KEY_PATH, 'rb') as private_file:
         password=private_key_password.encode(),  # Password for decryption
         backend=default_backend()
     )
-
+JWT_PUBLIC_KEY_value ="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"
 # Load the public key for JWT verification
 with open(PUBLIC_KEY_PATH, 'r') as public_file:
-    JWT_PUBLIC_KEY = public_file.read()
+    JWT_PUBLIC_KEY = JWT_PUBLIC_KEY_value
 
 # Now the private key is decrypted and you can use it for signing JWTs
 
