@@ -38,7 +38,7 @@ def generate_demurrage_pdf(voyage: Voyage) -> io.BytesIO:
     PANEL_W  = 6.8 * cm
 
     # ── Dynamic Context & Data mapping ─────────────────────────────────
-    COMPANY       = "MERAKI SHIPPING"
+    COMPANY       = ""
     DOC_TITLE     = "DEMURRAGE STATEMENT"
 
     VESSEL_CAPS   = (voyage.vessel or "UNKNOWN").upper()
@@ -63,26 +63,36 @@ def generate_demurrage_pdf(voyage: Voyage) -> io.BytesIO:
     # Dynamic Laycan Narrowed formatting
     laycan_narrowed_str = ""
     if voyage.laycan_narrowed_date:
-        laycan_narrowed_str = voyage.laycan_narrowed_date
+        date_part = voyage.laycan_narrowed_date
+        try:
+            # Parse '2026-05-30' -> '30 May 2026'
+            parsed_date = datetime.strptime(voyage.laycan_narrowed_date.split("T")[0], "%Y-%m-%d")
+            date_part = parsed_date.strftime("%d %b %Y")
+        except ValueError:
+            pass
+        
+        laycan_narrowed_str = date_part
         time_details = []
         if voyage.laycan_narrowed_start_time:
             time_details.append(voyage.laycan_narrowed_start_time)
         if voyage.laycan_narrowed_end_time:
             time_details.append(voyage.laycan_narrowed_end_time)
         if time_details:
-            laycan_narrowed_str += f" ({' to '.join(time_details)})"
+            # Use ndash or hyphen for the range
+            laycan_narrowed_str += f" ({'–'.join(time_details)})"
 
     # Build Voyage Particulars list matching test_report.py keys
     voyage_particulars = [
         ("Vessel Name", voyage.vessel or ""),
+        ("Voyage No", "3"),
         ("Charterparty", voyage.charterparty_terms or ""),
         ("CP Date", cp_date_str),
         ("BL Date", bl_date_str),
         ("Laycan", voyage.laycan or ""),
         ("Laycan Narrowed", laycan_narrowed_str),
-        ("Allowed Laytime (hours)", f"{voyage.allowed_laytime_hours:.2f} hrs"),
+        ("Allowed Laytime (hours)", f"{voyage.allowed_laytime_hours:.2f} hrs | SHINC"),
         ("Additional Laytime", f"{voyage.additional_laytime or '0.00'} hrs"),
-        ("Demurrage Rate", f"USD {voyage.demurrage_rate_usd_per_day:,.2f} / Day PDPR"),
+        ("Demurrage Rate", f"USD {voyage.demurrage_rate_usd_per_day:,.2f} PDPR"),
         ("Address Commission", f"{voyage.address_commission_percent}%"),
         ("CP Speed", voyage.cp_speed or ""),
         ("Freight", voyage.freight or ""),
@@ -199,7 +209,8 @@ def generate_demurrage_pdf(voyage: Voyage) -> io.BytesIO:
         px = W - PANEL_W + 0.40 * cm
         canvas.setFont('Helvetica-Bold', 10)
         canvas.setFillColor(C_GOLD)
-        canvas.drawString(px, H - 1.60 * cm, f"Vessel: {VESSEL_CAPS}")
+        vessel_display = f"Vessel: {VESSEL_CAPS}  |  Voy: 3"
+        canvas.drawString(px, H - 1.60 * cm, vessel_display)
         canvas.setStrokeColor(C_GDIM)
         canvas.setLineWidth(0.5)
         canvas.line(px, H - 2.15 * cm, W - 0.5 * cm, H - 2.15 * cm)
@@ -221,7 +232,7 @@ def generate_demurrage_pdf(voyage: Voyage) -> io.BytesIO:
         canvas.setFont('Helvetica', 6.5)
         canvas.setFillColor(C_MID)
         canvas.drawCentredString(W / 2, 0.50 * cm,
-            f"{COMPANY}  \u00b7  {DOC_TITLE}  \u00b7  "
+            f"{DOC_TITLE}  \u00b7  "
             f"{VESSEL_CAPS}  \u00b7  CP: {CP_TERMS}  \u00b7  CONFIDENTIAL")
 
         canvas.restoreState()
