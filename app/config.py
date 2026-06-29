@@ -72,16 +72,18 @@ class Config:
     JWT_PUBLIC_KEY = os.getenv('JWT_PUBLIC_KEY_value')  # Public key for verifying JWTs
     JWT_PRIVATE_KEY = private_key  # Use the decrypted private key for signing JWTs
 
-if "ENVIRONMENT" in os.environ:
-    ENVIRONMENT = os.environ["ENVIRONMENT"]
-else:
-    ENVIRONMENT = ""
+# if "ENVIRONMENT" in os.environ:
+#     ENVIRONMENT = os.environ["ENVIRONMENT"]
+# else:
+#     ENVIRONMENT = ""
 
-if (ENVIRONMENT == "LOCAL") or (ENVIRONMENT == "DEV") or (ENVIRONMENT == ""):
+# if (ENVIRONMENT == "LOCAL") or (ENVIRONMENT == "DEV") or (ENVIRONMENT == ""):
 
-     JWT_PUBLIC_KEY_value ="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"
-elif ENVIRONMENT == "PROD":
+#      JWT_PUBLIC_KEY_value ="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"
+# elif ENVIRONMENT == "PROD":
 
-    JWT_PUBLIC_KEY_value =  "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"
-else:
-    print("No env selected")
+#     JWT_PUBLIC_KEY_value =  "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"
+# else:
+#     print("No env selected")
+
+JWT_PUBLIC_KEY_value ="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"
