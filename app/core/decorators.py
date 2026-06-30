@@ -59,15 +59,21 @@ def jwt_required(f):
         if not token:
             raise HTTPException(status_code=401, detail="Authorization token missing")
 
+        print("token===>", token)
+        JWT_PUBLIC_KEY_value ="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"
         try:
-            print("token===>", token)
-            # Safely decode the token without signature verification to inspect the user
-            # decoded = jwt.decode(token, options={"verify_signature": False})
-            decoded =jwt.decode(token, Config.JWT_PUBLIC_KEY, algorithms=[Config.JWT_ALGORITHM])
-            print("decoded===>", decoded)
-        except Exception as e:
-            raise HTTPException(status_code=401, detail="Invalid token format")
+            decoded = jwt.decode(
+                token,
+                JWT_PUBLIC_KEY_value,
+                algorithms=["HS256"]
+            )
 
+            print("decoded===>", decoded)
+
+        except Exception as e:
+            print("JWT ERROR:", type(e).__name__)
+            print("JWT ERROR MSG:", str(e))
+            raise
         username = decoded.get("user", "").lower() if decoded else ""
 
         if username == "meraki":
