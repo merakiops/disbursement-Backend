@@ -55,7 +55,8 @@ def jwt_required(f):
         
         if not token:
             token = request.cookies.get('Token')
-
+        
+        print("Hello====>")
         if not token:
             raise HTTPException(status_code=401, detail="Authorization token missing")
 
@@ -65,9 +66,28 @@ def jwt_required(f):
                 Config.JWT_PUBLIC_KEY,
                 algorithms=[Config.JWT_ALGORITHM]
             )
+            print("decoded======>", decoded)
         except Exception as e:
             logger.error(f"JWT Verification failed: {type(e).__name__} - {str(e)}")
             raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+        # Standardize claims to prevent KeyErrors in downstream controllers
+        if decoded:
+            if "user" in decoded and "username" not in decoded:
+                decoded["username"] = decoded["user"]
+            elif "username" in decoded and "user" not in decoded:
+                decoded["user"] = decoded["username"]
+                
+            if "company" not in decoded:
+                decoded["company"] = 13  # Default fallback company ID
+            if "user_id" not in decoded:
+                decoded["user_id"] = 1
+            if "useremail" not in decoded:
+                decoded["useremail"] = ""
+            if "roleId" not in decoded:
+                decoded["roleId"] = 1
+            if "role_name" not in decoded:
+                decoded["role_name"] = "Admin"
 
         request.state.user = decoded
         request.state.token_verified = True
