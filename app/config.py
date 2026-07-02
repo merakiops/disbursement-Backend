@@ -72,7 +72,7 @@ class Config:
     JWT_PUBLIC_KEY_value ="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"
     JWT_ALGORITHM='HS256'
     JWT_PUBLIC_KEY = JWT_PUBLIC_KEY_value # Public key for verifying JWTs
-    JWT_PRIVATE_KEY = private_key  # Use the decrypted private key for signing JWTs
+    JWT_PRIVATE_KEY = private_key if JWT_ALGORITHM == 'RS256' else JWT_PUBLIC_KEY_value  # Use the decrypted private key for RS256, or symmetric key for HS256
 
 # if "ENVIRONMENT" in os.environ:
 #     ENVIRONMENT = os.environ["ENVIRONMENT"]

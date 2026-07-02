@@ -41,3 +41,4 @@ instance/
 build/
 dist/
 *.egg-info/
+app/config.py

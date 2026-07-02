@@ -59,33 +59,23 @@ def jwt_required(f):
         if not token:
             raise HTTPException(status_code=401, detail="Authorization token missing")
 
-        print("token===>", token)
-        JWT_PUBLIC_KEY_value ="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"
         try:
             decoded = jwt.decode(
                 token,
-                JWT_PUBLIC_KEY_value,
-                algorithms=["HS256"]
+                Config.JWT_PUBLIC_KEY,
+                algorithms=[Config.JWT_ALGORITHM]
             )
-
-            print("decoded===>", decoded)
-
         except Exception as e:
-            print("JWT ERROR:", type(e).__name__)
-            print("JWT ERROR MSG:", str(e))
-            raise
-        username = decoded.get("user", "").lower() if decoded else ""
+            logger.error(f"JWT Verification failed: {type(e).__name__} - {str(e)}")
+            raise HTTPException(status_code=401, detail="Invalid or expired token")
 
-        if username == "meraki":
-            request.state.user = decoded
-            request.state.token_verified = True
-            
-            if inspect.iscoroutinefunction(f):
-                return await f(request=request, db=db, *args, **kwargs)
-            else:
-                return f(request=request, db=db, *args, **kwargs)
+        request.state.user = decoded
+        request.state.token_verified = True
+        
+        if inspect.iscoroutinefunction(f):
+            return await f(request=request, db=db, *args, **kwargs)
         else:
-            raise HTTPException(status_code=403, detail="Access denied")
+            return f(request=request, db=db, *args, **kwargs)
 
     return decorated_function
 

@@ -6,6 +6,21 @@ Description:
     and encryption/decryption of JWT tokens using AES-GCM.
 """
 import binascii
+# === Patch bcrypt for passlib compatibility ===
+import bcrypt
+if not hasattr(bcrypt, "__about__"):
+    class MockAbout:
+        __version__ = getattr(bcrypt, "__version__", "4.0.0")
+    bcrypt.__about__ = MockAbout()
+
+if not hasattr(bcrypt, "_original_hashpw"):
+    bcrypt._original_hashpw = bcrypt.hashpw
+    def _patched_hashpw(password, salt):
+        if isinstance(password, bytes) and len(password) > 72:
+            password = password[:72]
+        return bcrypt._original_hashpw(password, salt)
+    bcrypt.hashpw = _patched_hashpw
+
 from passlib.context import CryptContext
 import os
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM

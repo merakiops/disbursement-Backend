@@ -1,3 +1,18 @@
+# === Patch bcrypt for passlib compatibility ===
+import bcrypt
+if not hasattr(bcrypt, "__about__"):
+    class MockAbout:
+        __version__ = getattr(bcrypt, "__version__", "4.0.0")
+    bcrypt.__about__ = MockAbout()
+
+if not hasattr(bcrypt, "_original_hashpw"):
+    bcrypt._original_hashpw = bcrypt.hashpw
+    def _patched_hashpw(password, salt):
+        if isinstance(password, bytes) and len(password) > 72:
+            password = password[:72]
+        return bcrypt._original_hashpw(password, salt)
+    bcrypt.hashpw = _patched_hashpw
+
 from dotenv import load_dotenv
 import os
 import socket
@@ -253,7 +268,7 @@ app.include_router(demurrage_router)
 
 # === Serve Frontend Static Files ===
 app.mount("/", StaticFiles(directory="frontend", html=True), name="frontend")
-print("===========>Hello")
+
 # === Main entrypoint ===
 if __name__ == "__main__":
     uvicorn.run(
