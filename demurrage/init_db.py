@@ -20,6 +20,17 @@ def init_db():
         # Create all tables defined in models.py
         Base.metadata.create_all(bind=engine)
         logger.info("Demurrage database tables initialized successfully.")
+
+        # Dynamically add voyage_no column if it doesn't exist (database migration fallback)
+        try:
+            with engine.connect() as conn:
+                schema_prefix = f"{DEMURRAGE_DB_SCHEMA}." if DEMURRAGE_DB_SCHEMA else ""
+                conn.execute(text(f"ALTER TABLE {schema_prefix}voyages ADD COLUMN voyage_no VARCHAR(100);"))
+                conn.commit()
+                logger.info("Database migration: Added voyage_no column to voyages table successfully.")
+        except Exception as e:
+            # Column already exists or table alter failed, which is expected on subsequent runs
+            logger.debug(f"Adding voyage_no column skipped (it probably already exists): {e}")
     except Exception as e:
         logger.error(f"Failed to initialize demurrage database: {e}")
         raise e

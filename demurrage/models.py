@@ -14,7 +14,9 @@ class Voyage(Base):
     __table_args__ = {"schema": DEMURRAGE_DB_SCHEMA} if DEMURRAGE_DB_SCHEMA else {}
 
     id = Column(Integer, primary_key=True, autoincrement=True, index=True)
+    voyage_no = Column(String(100), nullable=True)
     vessel = Column(String(100), nullable=False)
+
     charterparty_terms = Column(String(255), nullable=True)  # Made nullable to allow empty/None inputs
     allowed_laytime_hours = Column(Float, nullable=False, default=0.0)
     demurrage_rate_usd_per_day = Column(Float, nullable=False, default=0.0)
@@ -32,6 +34,23 @@ class Voyage(Base):
     client_name = Column(String(100), nullable=True)
     bl_date = Column(DateTime, nullable=True)
     cp_date = Column(DateTime, nullable=True)
+
+    @property
+    def bl_dated(self):
+        return self.bl_date
+
+    @bl_dated.setter
+    def bl_dated(self, value):
+        self.bl_date = value
+
+    @property
+    def cp_dated(self):
+        return self.cp_date
+
+    @cp_dated.setter
+    def cp_dated(self, value):
+        self.cp_date = value
+
 
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())

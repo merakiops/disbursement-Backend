@@ -27,7 +27,9 @@ class DemurrageService:
             voyage_data = payload.voyage
             db_voyage = Voyage(
                 vessel=voyage_data.vessel,
+                voyage_no=voyage_data.voyage_no,
                 charterparty_terms=voyage_data.charterparty_terms,
+
                 allowed_laytime_hours=voyage_data.allowed_laytime_hours,
                 demurrage_rate_usd_per_day=voyage_data.demurrage_rate_usd_per_day,
                 address_commission_percent=voyage_data.address_commission_percent,

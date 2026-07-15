@@ -56,7 +56,9 @@ class VoyageResponseSchema(BaseModel):
 
     id: int
     vessel: str
+    voyage_no: Optional[str] = None
     charterparty_terms: Optional[str] = None
+
     allowed_laytime_hours: float
     demurrage_rate_usd_per_day: float
     address_commission_percent: float
@@ -75,6 +77,9 @@ class VoyageResponseSchema(BaseModel):
     updated_at: datetime
     bl_date: Optional[datetime] = None
     cp_date: Optional[datetime] = None
+    bl_dated: Optional[datetime] = None
+    cp_dated: Optional[datetime] = None
+
 
 class DemurrageCaseResponseSchema(BaseModel):
     model_config = ConfigDict(from_attributes=True)

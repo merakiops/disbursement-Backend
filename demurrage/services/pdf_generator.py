@@ -84,8 +84,9 @@ def generate_demurrage_pdf(voyage: Voyage) -> io.BytesIO:
     # Build Voyage Particulars list matching test_report.py keys
     voyage_particulars = [
         ("Vessel Name", voyage.vessel or ""),
-        ("Voyage No", "3"),
+        ("Voyage No", voyage.voyage_no or "Voy 2"),
         ("Charterparty", voyage.charterparty_terms or ""),
+
         ("CP Date", cp_date_str),
         ("BL Date", bl_date_str),
         ("Laycan", voyage.laycan or ""),
@@ -209,8 +210,11 @@ def generate_demurrage_pdf(voyage: Voyage) -> io.BytesIO:
         px = W - PANEL_W + 0.40 * cm
         canvas.setFont('Helvetica-Bold', 10)
         canvas.setFillColor(C_GOLD)
-        vessel_display = f"Vessel: {VESSEL_CAPS}  |  Voy: 3"
+        vessel_display = f"Vessel: {VESSEL_CAPS}"
+        if voyage.voyage_no:
+            vessel_display += f"  |  Voy: {voyage.voyage_no}"
         canvas.drawString(px, H - 1.60 * cm, vessel_display)
+
         canvas.setStrokeColor(C_GDIM)
         canvas.setLineWidth(0.5)
         canvas.line(px, H - 2.15 * cm, W - 0.5 * cm, H - 2.15 * cm)
