@@ -97,3 +97,65 @@ def get_db():
         yield db
     finally:
         db.close()
+
+# Global ORM query event listener for multi-tenancy client isolation
+from sqlalchemy import event
+from sqlalchemy.orm import with_loader_criteria
+
+@event.listens_for(Session, "do_orm_execute")
+def _do_orm_execute(orm_execute_state):
+    if orm_execute_state.is_select:
+        from app.core.context import current_user_company_ids, current_user_company_names
+        
+        company_ids = current_user_company_ids.get()
+        company_names = current_user_company_names.get()
+        
+        if company_ids is not None:
+            from app.models.txn_disbursement import TxnDisbursement
+            from app.models.vw_fda_processing_details import VwFdaProcessingDetails
+            from app.models.vw_disbursement_tracker import DisbursementTracker
+            from app.models.vw_disbursement_tracker_dtls import DisbursementTrackerDetails
+            from app.models.vw_fda_report import FdaReport
+            from app.models.vw_pda_report import PdaReport
+            from app.models.vessels import CompVslAsso
+            
+            statement = orm_execute_state.statement
+            
+            # Apply filters for models with client_id
+            statement = statement.options(
+                with_loader_criteria(
+                    TxnDisbursement,
+                    lambda cls: cls.client_id.in_(company_ids)
+                ),
+                with_loader_criteria(
+                    VwFdaProcessingDetails,
+                    lambda cls: cls.client_id.in_(company_ids)
+                ),
+                with_loader_criteria(
+                    CompVslAsso,
+                    lambda cls: cls.company_id.in_(company_ids)
+                )
+            )
+            
+            # Apply filters for models with client_name
+            if company_names:
+                statement = statement.options(
+                    with_loader_criteria(
+                        DisbursementTracker,
+                        lambda cls: cls.client_name.in_(company_names)
+                    ),
+                    with_loader_criteria(
+                        DisbursementTrackerDetails,
+                        lambda cls: cls.client_name.in_(company_names)
+                    ),
+                    with_loader_criteria(
+                        FdaReport,
+                        lambda cls: cls.client_name.in_(company_names)
+                    ),
+                    with_loader_criteria(
+                        PdaReport,
+                        lambda cls: cls.client_name.in_(company_names)
+                    )
+                )
+                
+            orm_execute_state.statement = statement

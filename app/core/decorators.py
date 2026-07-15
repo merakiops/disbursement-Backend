@@ -92,6 +92,75 @@ def jwt_required(f):
         request.state.user = decoded
         request.state.token_verified = True
         
+        # Tenant Isolation Context Setup
+        from app.core.context import current_user_role_id, current_user_company_ids, current_user_company_names
+        from app.models.company import MaCompany
+        
+        username = decoded.get("username")
+        role_id = decoded.get("roleId")
+        company_id = decoded.get("company")
+        
+        user_client_map = {
+            "meraki": "ALL",
+            "meraki-operations": "ALL",
+            "meraki_superadmin": "ALL",
+            "meraki_admin": "ALL",
+            "eiger": "Eiger",
+            "client": "Eiger",
+            "elite": "ELITE TANKSHIP DMCC",
+            "bunge": "BUNGE",
+            "bunge_peiq": "BUNGE",
+            "bunge_sumi": "BUNGE",
+            "bunge_admin": "BUNGE",
+            "bunge_yudh": "BUNGE",
+            "alcor": "ALCOR CHARTERING DMCC",
+            "emzoil": "EMZ OIL",
+            "ethiopian": "Ethiopian Shipping & Logistics",
+        }
+        
+        target_client = user_client_map.get(username)
+        if target_client:
+            is_all_access = (target_client == "ALL")
+        else:
+            is_all_access = (role_id == 1)
+        
+        current_user_role_id.set(role_id)
+        
+        if is_all_access:
+            current_user_company_ids.set(None)
+            current_user_company_names.set(None)
+        else:
+            company_ids = []
+            company_names = []
+            group_name = target_client
+            
+            if not group_name and company_id:
+                comp = db.query(MaCompany.company_name).filter(MaCompany.company_id == company_id).first()
+                if comp:
+                    group_name = comp[0]
+            
+            if group_name:
+                group_clean = group_name.lower().replace(" ", "").replace("_", "").replace("-", "")
+                all_companies = db.query(MaCompany.company_id, MaCompany.company_name).filter(
+                    MaCompany.status == 'Y'
+                ).all()
+                
+                for cid, cname in all_companies:
+                    if cname:
+                        cname_clean = cname.lower().replace(" ", "").replace("_", "").replace("-", "")
+                        if group_clean in cname_clean or cname_clean in group_clean:
+                            company_ids.append(cid)
+                            company_names.append(cname)
+            
+            if not company_ids and company_id:
+                company_ids = [company_id]
+                comp = db.query(MaCompany.company_name).filter(MaCompany.company_id == company_id).first()
+                if comp:
+                    company_names = [comp[0]]
+            
+            current_user_company_ids.set(company_ids)
+            current_user_company_names.set(company_names)
+
         if inspect.iscoroutinefunction(f):
             return await f(request=request, db=db, *args, **kwargs)
         else:
