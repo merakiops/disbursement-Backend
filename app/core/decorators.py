@@ -270,37 +270,38 @@ async def refresh_token_middleware(request: Request, call_next):
                     db = next(get_db())
                     user = userservice.get_user_by_username(username, db=db)
 
-                    additional_claims = {
-                        "user_id": userid,
-                        "username": username,
-                        "company": company,
-                        "roleId": roleId,
-                        "useremail": useremail,
-                        "role_name": role_name
-                    }
+                    if user:
+                        additional_claims = {
+                            "user_id": userid,
+                            "username": username,
+                            "company": company,
+                            "roleId": roleId,
+                            "useremail": useremail,
+                            "role_name": role_name
+                        }
 
-                    new_access_token = generate_token(
-                        userid=user.userid,
-                        username=username,
-                        additional_claims=additional_claims,
-                        db=db
-                    )
+                        new_access_token = generate_token(
+                            userid=user.userid,
+                            username=username,
+                            additional_claims=additional_claims,
+                            db=db
+                        )
 
-                    new_exp_time = datetime.now(ist) + timedelta(minutes=int(Config.JWT_ACCESS_TOKEN_EXPIRES))
-                    
-                    UserRepo.update_token_by_userid(userid, new_access_token, access_token, new_exp_time, db)
-                    store_token_in_cache(user.userid, new_access_token, new_exp_time.timestamp())
+                        new_exp_time = datetime.now(ist) + timedelta(minutes=int(Config.JWT_ACCESS_TOKEN_EXPIRES))
+                        
+                        UserRepo.update_token_by_userid(userid, new_access_token, access_token, new_exp_time, db)
+                        store_token_in_cache(user.userid, new_access_token, new_exp_time.timestamp())
 
-                    response.set_cookie(
-                        key="Token",
-                        value=new_access_token,
-                        httponly=True,
-                        secure=request.url.scheme == "https",
-                        samesite="lax",
-                        expires=(datetime.now(timezone.utc) + timedelta(minutes=int(Config.JWT_ACCESS_TOKEN_EXPIRES))),
-                        max_age=int(Config.JWT_ACCESS_TOKEN_EXPIRES) * 60
-                    )
-                    request_count[username] = 0
+                        response.set_cookie(
+                            key="Token",
+                            value=new_access_token,
+                            httponly=True,
+                            secure=request.url.scheme == "https",
+                            samesite="lax",
+                            expires=(datetime.now(timezone.utc) + timedelta(minutes=int(Config.JWT_ACCESS_TOKEN_EXPIRES))),
+                            max_age=int(Config.JWT_ACCESS_TOKEN_EXPIRES) * 60
+                        )
+                        request_count[username] = 0
 
                 finally:
                     refresh_in_progress[username] = False

@@ -81,8 +81,16 @@ async def getCompanyList(request: Request,body: MasterDataRequestDTO,  db: Sessi
         result["port_agent"] = port_agent
 
     if "all" in requested_fields or "companies" in requested_fields:
+        owning_company_id = 1
+        if user and user.company:
+            owning_company_id = user.company.app_owning_company_id
+        elif company_id:
+            from app.models.company import MaCompany
+            comp = db.query(MaCompany.app_owning_company_id).filter(MaCompany.company_id == company_id).first()
+            if comp:
+                owning_company_id = comp[0]
 
-        companylist = companyservice.get_all_companies_with_details(user.company.app_owning_company_id,db)        
+        companylist = companyservice.get_all_companies_with_details(owning_company_id,db)        
         companies_dto = [CompanyDTO.model_validate(c) for c in companylist]
         result["companies"] = companies_dto
     
