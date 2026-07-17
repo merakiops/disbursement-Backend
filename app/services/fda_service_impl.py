@@ -10,6 +10,7 @@ from app.models.txn_disbursement import TxnDisbursement
 from app.services.communication_history_service_impl import TxnCommunicationHistoryServiceImpl
 from fastapi import HTTPException
 import copy
+from app.utils.model_cloner import ModelCopy
 
 load_dotenv()
 
@@ -96,7 +97,7 @@ class FDAServiceImpl(FDAService):
     def update_fda_details(self,dto: TxnFdaEditDto, user: str,  db: Session):
         disbursement = FDARepository.get_disbursement_by_disbursment_seq(dto.disbursement_seq, db)
         
-        old_disbursement = copy.deepcopy(disbursement) if disbursement else {}
+        old_disbursement = ModelCopy(disbursement) if disbursement else {}
         # Update PDA details
         result = FDARepository.update_fda_details(dto,user,db)
 
@@ -128,7 +129,7 @@ class FDAServiceImpl(FDAService):
     def update_fda_disbursement_paClientform_submit(self,request_body: DisbursementClientFormRequestDTO,user:str, db: Session):
         # Get old data before update
         disbursement = FDARepository.get_disbursement_by_disbursment_seq(request_body.disbursement_seq, db)
-        old_disbursement = copy.deepcopy(disbursement) if disbursement else {}
+        old_disbursement = ModelCopy(disbursement) if disbursement else {}
         
         # Update the disbursement
         result = FDARepository.update_fda_disbursement_paClientform_submit(request_body, db)

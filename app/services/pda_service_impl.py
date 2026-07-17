@@ -29,6 +29,7 @@ from app.models.txn_disbursement import TxnDisbursement
 from app.models.company import MaCompany
 from app.models.txn_communication_history import TxnCommunicationHistory
 from app.repo.communication_history_repo import CommunicationHistroyRepository
+from app.utils.model_cloner import ModelCopy
 MERAKI_DISBURSEMENT_EMAIL_ADDRESS = os.getenv("MERAKI_DISBURSEMENT_EMAIL_ADDRESS")
 load_dotenv()
 
@@ -124,7 +125,7 @@ class PDAServiceImpl(PDAService):
     def update_pda_disbursement_paform_submit(self,request_body:DisbursementPAFormRequestDTO, db:Session):
         disbursement = PDARepository.get_disbursement_by_disbursment_seq(request_body.disbursement_seq, db)
         
-        old_disbursement = copy.deepcopy(disbursement) if disbursement else {}
+        old_disbursement = ModelCopy(disbursement) if disbursement else {}
         # Update PDA details
         result = PDARepository.update_pda_disbursement_paform_submit(request_body,db)
 
@@ -188,7 +189,7 @@ class PDAServiceImpl(PDAService):
         # Get old data for comparison
         disbursement = PDARepository.get_disbursement_by_disbursment_seq(pda_dto.disbursement_seq, db)
         
-        old_disbursement = copy.deepcopy(disbursement) if disbursement else {}
+        old_disbursement = ModelCopy(disbursement) if disbursement else {}
         # Update PDA details
         PDARepository.update_pda_details(pda_dto,user,db)
 
@@ -236,7 +237,7 @@ class PDAServiceImpl(PDAService):
         
         # Get old data before update
         disbursement = PDARepository.get_disbursement_by_disbursment_seq(request_body.disbursement_seq, db)
-        old_disbursement = copy.deepcopy(disbursement) if disbursement else {}
+        old_disbursement = ModelCopy(disbursement) if disbursement else {}
         
         # Update the disbursement
         result = PDARepository.update_pda_disbursement_paClientform_submit(request_body, db)
