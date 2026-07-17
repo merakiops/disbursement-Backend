@@ -976,8 +976,18 @@ class PDARepository:
                         detail=f"Vessel with pda_vsl_id {disbursement_dtl.pda_vsl_id} not found."
                     )
 
-                pda_vsl.vsl_dtls =  pda_dto.portagent_pda_data.get("vessel", {})
-                pda_vsl.ma_vsl_id = pda_dto.portagent_pda_data.get("vessel", {}).get("vsl_id")
+                vessel_dict = {}
+                if pda_dto.portagent_pda_data and isinstance(pda_dto.portagent_pda_data, dict):
+                    vessel_dict = pda_dto.portagent_pda_data.get("vessel", {})
+                
+                if not vessel_dict and pda_dto.vessel:
+                    vessel_dict = pda_dto.vessel.model_dump() if hasattr(pda_dto.vessel, "model_dump") else pda_dto.vessel
+                
+                if not vessel_dict and pda_dto.meraki_pda_data and isinstance(pda_dto.meraki_pda_data, dict):
+                    vessel_dict = pda_dto.meraki_pda_data.get("vessel", {})
+
+                pda_vsl.vsl_dtls = vessel_dict
+                pda_vsl.ma_vsl_id = vessel_dict.get("vsl_id") if isinstance(vessel_dict, dict) else None
                 db.commit()
         
         except Exception:

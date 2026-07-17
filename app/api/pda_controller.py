@@ -485,7 +485,7 @@ async def edit_pda_details(request: Request,background_tasks: BackgroundTasks, p
                     } 
                     template_name = "pda_re_request.html"
                 else :
-                    vessel_name = pda_dto.vessel.name
+                    vessel_name = pda_dto.vessel.name if pda_dto.vessel else ""
                     voy_no = pda_dto.voyage 
                     port_name=port_dtl.name
                     subject_parts = [
