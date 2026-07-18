@@ -1459,7 +1459,7 @@ class PDARepository:
             
     def get_email_sign_by_user(user, db: Session):
         data = db.query(User.email_signature).filter(User.username==user).first()
-        return data[0]
+        return data[0] if data else None
 
     def resend_pda_link(disbursement_seq,db):
         link_entry = db.query(PAFormLink).filter(PAFormLink.disbursement_seq == disbursement_seq).first()
