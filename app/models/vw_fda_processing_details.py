@@ -26,4 +26,8 @@ class VwFdaProcessingDetails(Base):
     pda_amount = Column(Float)
     manual_pda_amount =Column(String)
     manual_fda_amount =Column(String)
+    loss_prevention_pda = Column(Float)
+    loss_prevention_fda = Column(Float)
+    total_loss_prevented = Column(Float)
+    loss_prevented_reason = Column(String)
     

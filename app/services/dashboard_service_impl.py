@@ -135,7 +135,11 @@ class DashboardServiceImpl(DashboardService):
                 "pdaAmount": float(r.pda_amount) if r.pda_amount is not None else 0.0,
                 "fdaAmount": float(r.fda_amount) if r.fda_amount is not None else 0.0,
                 "manual_pda_amount": getattr(r, 'manual_pda_amount', None),
-                "manual_fda_amount": getattr(r, 'manual_fda_amount', None)
+                "manual_fda_amount": getattr(r, 'manual_fda_amount', None),
+                "loss_prevention_pda": float(r.loss_prevention_pda) if getattr(r, 'loss_prevention_pda', None) is not None else None,
+                "loss_prevention_fda": float(r.loss_prevention_fda) if getattr(r, 'loss_prevention_fda', None) is not None else None,
+                "total_loss_prevented": float(r.total_loss_prevented) if getattr(r, 'total_loss_prevented', None) is not None else None,
+                "loss_prevented_reason": getattr(r, 'loss_prevented_reason', None),
             }
             if not is_client:
                 row_data["vessel"] = getattr(r, 'vessel_name', None) or ""

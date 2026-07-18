@@ -68,6 +68,10 @@ class FdaProcessingDetailDTO(BaseModel):
     fdaAmount: float
     manual_fda_amount:Optional[str] = None
     manual_pda_amount:Optional[str] = None
+    loss_prevention_pda: Optional[float] = None
+    loss_prevention_fda: Optional[float] = None
+    total_loss_prevented: Optional[float] = None
+    loss_prevented_reason: Optional[str] = None
 
 
 class FDAStatsDTO(BaseModel):
