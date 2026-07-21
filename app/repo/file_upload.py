@@ -28,13 +28,13 @@ class FileUploadRepository:
                 region_name=AWS_REGION,
                 aws_access_key_id=key,
                 aws_secret_access_key=secret,
-                config=Config(s3={'addressing_style': 'virtual'})
+                config=Config(signature_version='s3v4', s3={'addressing_style': 'virtual'})
             )
         else: # Use IAM Role Permissions
             return boto3.client(
                 "s3",
                 region_name=AWS_REGION,
-                config=Config(s3={'addressing_style': 'virtual'})
+                config=Config(signature_version='s3v4', s3={'addressing_style': 'virtual'})
             )
 
 
