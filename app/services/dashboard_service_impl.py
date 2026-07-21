@@ -126,8 +126,8 @@ class DashboardServiceImpl(DashboardService):
                 "sno": idx,
                 "disbursement_seq": getattr(r, 'disbursement_seq', None),
                 "date": etd_str,
-                "country": getattr(r, 'country_name', None) or "",
-                "port": getattr(r, 'port_name', None) or "",
+                "country": (getattr(r, 'country_name', None) or "").upper(),
+                "port": (getattr(r, 'port_name', None) or "").upper(),
                 "loa": str(r.loa) if r.loa is not None else None,
                 "grt": str(r.grt) if r.grt is not None else None,
                 "rgrt": str(r.rgrt) if r.rgrt is not None else None,
@@ -142,7 +142,7 @@ class DashboardServiceImpl(DashboardService):
                 "loss_prevented_reason": getattr(r, 'loss_prevented_reason', None),
             }
             if not is_client:
-                row_data["vessel"] = getattr(r, 'vessel_name', None) or ""
+                row_data["vessel"] = (getattr(r, 'vessel_name', None) or "").upper()
             table_data.append(row_data)
             
 
