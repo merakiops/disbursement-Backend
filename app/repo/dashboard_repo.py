@@ -71,7 +71,10 @@ class DashboardRepository:
         offset = (data_request.page - 1) * data_request.pageSize
         params = {}
 
-        where_clauses = ["(pda.disbursement_seq IS NOT NULL OR fda.disbursement_seq IS NOT NULL)"]
+        where_clauses = [
+            "(pda.disbursement_seq IS NOT NULL OR fda.disbursement_seq IS NOT NULL)",
+            "(td.state IS NULL OR td.state <> 'D')"
+        ]
 
         if data_request.clientId:
             try:
@@ -143,11 +146,9 @@ class DashboardRepository:
             FROM {SCHEMA_NAME}.txn_disbursement td
             LEFT JOIN {SCHEMA_NAME}.txn_pda pda 
                 ON td.disbursement_seq = pda.disbursement_seq 
-               AND pda.status = 7 
                AND (pda.state IS NULL OR pda.state <> 'D')
             LEFT JOIN {SCHEMA_NAME}.txn_fda fda 
                 ON td.disbursement_seq = fda.disbursement_seq 
-               AND fda.status = 7 
                AND (fda.state IS NULL OR fda.state <> 'D')
             LEFT JOIN {SCHEMA_NAME}.txn_pda_vessel_details vsl 
                 ON td.pda_vsl_id = vsl.pda_vsl_id
