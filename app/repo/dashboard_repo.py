@@ -74,8 +74,28 @@ class DashboardRepository:
         where_clauses = ["(pda.disbursement_seq IS NOT NULL OR fda.disbursement_seq IS NOT NULL)"]
 
         if data_request.clientId:
+            try:
+                client_ids = [int(x) for x in data_request.clientId]
+            except (ValueError, TypeError):
+                client_ids = list(data_request.clientId)
             where_clauses.append("td.client_id = ANY(:client_ids)")
-            params["client_ids"] = list(data_request.clientId)
+            params["client_ids"] = client_ids
+
+        if getattr(data_request, 'monthRange', None):
+            if data_request.monthRange.from_date:
+                where_clauses.append("COALESCE(fda.fda_etd, pda.pda_etd)::date >= :from_date::date")
+                params["from_date"] = data_request.monthRange.from_date
+            if data_request.monthRange.to_date:
+                where_clauses.append("COALESCE(fda.fda_etd, pda.pda_etd)::date <= :to_date::date")
+                params["to_date"] = data_request.monthRange.to_date
+
+        if getattr(data_request, 'yearRange', None):
+            if data_request.yearRange.from_year:
+                where_clauses.append("EXTRACT(YEAR FROM COALESCE(fda.fda_etd, pda.pda_etd)) >= :from_year")
+                params["from_year"] = int(data_request.yearRange.from_year)
+            if data_request.yearRange.to_year:
+                where_clauses.append("EXTRACT(YEAR FROM COALESCE(fda.fda_etd, pda.pda_etd)) <= :to_year")
+                params["to_year"] = int(data_request.yearRange.to_year)
 
         if data_request.tableFilter:
             tf = data_request.tableFilter

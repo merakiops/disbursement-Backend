@@ -28,7 +28,9 @@ class TableFilterDTO(BaseModel):
     rgrt: Optional[RangeFilterDTO] = None
 
 class DashboardDataRequest(BaseModel):
-    page: int
-    pageSize: int
-    clientId: Optional[List[str]]= None
+    page: int = 1
+    pageSize: int = 10
+    clientId: Optional[List[str]] = None
+    monthRange: Optional[FilterdateDTO] = None
+    yearRange: Optional[FilteryearDTO] = None
     tableFilter: Optional[TableFilterDTO] = None

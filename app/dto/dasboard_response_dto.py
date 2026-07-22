@@ -60,10 +60,10 @@ class FdaProcessingDetailDTO(BaseModel):
     vessel: Optional[str] = None
     country: str
     port: str
-    loa: float
-    grt: float
-    rgrt: float
-    nrt: float
+    loa: Optional[float] = None
+    grt: Optional[float] = None
+    rgrt: Optional[float] = None
+    nrt: Optional[float] = None
     pdaAmount: float
     fdaAmount: float
     manual_fda_amount:Optional[str] = None
