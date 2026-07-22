@@ -192,7 +192,10 @@ class DashboardRepository:
                 ) AS nrt,
                 td.loss_prevention_pda,
                 td.loss_prevention_fda,
-                td.total_loss_prevented,
+                CASE 
+                    WHEN td.loss_prevention_pda IS NULL AND td.loss_prevention_fda IS NULL THEN td.total_loss_prevented
+                    ELSE (COALESCE(td.loss_prevention_pda, 0) + COALESCE(td.loss_prevention_fda, 0))
+                END AS total_loss_prevented,
                 td.loss_prevented_reason,
                 CASE
                     WHEN fda.disbursement_seq IS NULL THEN NULL::double precision
