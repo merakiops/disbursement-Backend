@@ -62,70 +62,148 @@ class DashboardRepository:
     @staticmethod
     def get_fda_processing_details(data_request, db: Session):
         """
-        Get FDA processing details with pagination using SQLAlchemy ORM.
+        Get FDA processing details with pagination directly querying tables.
+        Fetches records if pda.status = 7 OR fda.status = 7.
         """
         if data_request.page < 1 or data_request.pageSize < 1:
             raise ValueError("Page number and page size must be greater than 0")
 
         offset = (data_request.page - 1) * data_request.pageSize
-        base_query = db.query(VwFdaProcessingDetails)
-        filters = []
+        params = {}
+
+        where_clauses = ["(pda.disbursement_seq IS NOT NULL OR fda.disbursement_seq IS NOT NULL)"]
 
         if data_request.clientId:
-            filters.append(
-                VwFdaProcessingDetails.client_id.in_(data_request.clientId)
-            )
+            where_clauses.append("td.client_id = ANY(:client_ids)")
+            params["client_ids"] = list(data_request.clientId)
 
         if data_request.tableFilter:
             tf = data_request.tableFilter
             if tf.vessel:
-                filters.append(
-                    VwFdaProcessingDetails.vessel_name.in_(tf.vessel)
-                )
+                where_clauses.append("COALESCE(vsl.fda_vsl_dtls ->> 'name', vsl.vsl_dtls ->> 'name') = ANY(:vessel_names)")
+                params["vessel_names"] = list(tf.vessel)
             if tf.country:
-                filters.append(
-                    VwFdaProcessingDetails.country_name.in_(tf.country)
-                )
+                where_clauses.append("country.name = ANY(:country_names)")
+                params["country_names"] = list(tf.country)
             if tf.port:
-                filters.append(
-                    VwFdaProcessingDetails.port_name.in_(tf.port)
-                )
+                where_clauses.append("port.name = ANY(:port_names)")
+                params["port_names"] = list(tf.port)
             if tf.loa:
                 if tf.loa.min_value is not None:
-                    filters.append(VwFdaProcessingDetails.loa >= tf.loa.min_value)
+                    where_clauses.append("COALESCE((NULLIF((vsl.fda_vsl_dtls ->> 'loa'), ''))::numeric, (NULLIF((vsl.vsl_dtls ->> 'loa'), ''))::numeric) >= :loa_min")
+                    params["loa_min"] = tf.loa.min_value
                 if tf.loa.max_value is not None:
-                    filters.append(VwFdaProcessingDetails.loa <= tf.loa.max_value)
+                    where_clauses.append("COALESCE((NULLIF((vsl.fda_vsl_dtls ->> 'loa'), ''))::numeric, (NULLIF((vsl.vsl_dtls ->> 'loa'), ''))::numeric) <= :loa_max")
+                    params["loa_max"] = tf.loa.max_value
             if tf.nrt:
                 if tf.nrt.min_value is not None:
-                    filters.append(VwFdaProcessingDetails.nrt >= tf.nrt.min_value)
+                    where_clauses.append("COALESCE((NULLIF((vsl.fda_vsl_dtls ->> 'nrt'), ''))::numeric, (NULLIF((vsl.vsl_dtls ->> 'nrt'), ''))::numeric) >= :nrt_min")
+                    params["nrt_min"] = tf.nrt.min_value
                 if tf.nrt.max_value is not None:
-                    filters.append(VwFdaProcessingDetails.nrt <= tf.nrt.max_value)
+                    where_clauses.append("COALESCE((NULLIF((vsl.fda_vsl_dtls ->> 'nrt'), ''))::numeric, (NULLIF((vsl.vsl_dtls ->> 'nrt'), ''))::numeric) <= :nrt_max")
+                    params["nrt_max"] = tf.nrt.max_value
             if tf.grt:
                 if tf.grt.min_value is not None:
-                    filters.append(VwFdaProcessingDetails.grt >= tf.grt.min_value)
+                    where_clauses.append("COALESCE((NULLIF((vsl.fda_vsl_dtls ->> 'grt'), ''))::numeric, (NULLIF((vsl.vsl_dtls ->> 'grt'), ''))::numeric) >= :grt_min")
+                    params["grt_min"] = tf.grt.min_value
                 if tf.grt.max_value is not None:
-                    filters.append(VwFdaProcessingDetails.grt <= tf.grt.max_value)
+                    where_clauses.append("COALESCE((NULLIF((vsl.fda_vsl_dtls ->> 'grt'), ''))::numeric, (NULLIF((vsl.vsl_dtls ->> 'grt'), ''))::numeric) <= :grt_max")
+                    params["grt_max"] = tf.grt.max_value
             if tf.rgrt:
                 if tf.rgrt.min_value is not None:
-                    filters.append(VwFdaProcessingDetails.rgrt >= tf.rgrt.min_value)
+                    where_clauses.append("COALESCE((NULLIF((vsl.fda_vsl_dtls ->> 'rgrt'), ''))::numeric, (NULLIF((vsl.vsl_dtls ->> 'rgrt'), ''))::numeric) >= :rgrt_min")
+                    params["rgrt_min"] = tf.rgrt.min_value
                 if tf.rgrt.max_value is not None:
-                    filters.append(VwFdaProcessingDetails.rgrt <= tf.rgrt.max_value)
+                    where_clauses.append("COALESCE((NULLIF((vsl.fda_vsl_dtls ->> 'rgrt'), ''))::numeric, (NULLIF((vsl.vsl_dtls ->> 'rgrt'), ''))::numeric) <= :rgrt_max")
+                    params["rgrt_max"] = tf.rgrt.max_value
 
-        if filters:
-            base_query = base_query.filter(*filters)
+        where_str = " AND ".join(where_clauses)
 
-        base_query = base_query.order_by(
-            VwFdaProcessingDetails.etd.desc()
-        )
+        base_sql = f"""
+            FROM {SCHEMA_NAME}.txn_disbursement td
+            LEFT JOIN {SCHEMA_NAME}.txn_pda pda 
+                ON td.disbursement_seq = pda.disbursement_seq 
+               AND pda.status = 7 
+               AND (pda.state IS NULL OR pda.state <> 'D')
+            LEFT JOIN {SCHEMA_NAME}.txn_fda fda 
+                ON td.disbursement_seq = fda.disbursement_seq 
+               AND fda.status = 7 
+               AND (fda.state IS NULL OR fda.state <> 'D')
+            LEFT JOIN {SCHEMA_NAME}.txn_pda_vessel_details vsl 
+                ON td.pda_vsl_id = vsl.pda_vsl_id
+            LEFT JOIN {SCHEMA_NAME}.ma_country country 
+                ON td.country_id = country.country_id
+            LEFT JOIN {SCHEMA_NAME}.ma_port port 
+                ON td.port_id = port.port_id
+            WHERE {where_str}
+        """
 
-        total_count = base_query.distinct().count()
- 
-        records = (
-            base_query
-            .offset(offset)
-            .limit(data_request.pageSize)
-            .all()
-        )
+        count_query = text(f"SELECT COUNT(DISTINCT td.disbursement_seq) {base_sql}")
+        total_count = db.execute(count_query, params).scalar() or 0
+
+        data_query = text(f"""
+            SELECT 
+                td.disbursement_seq,
+                td.client_id,
+                COALESCE(fda.fda_etd, pda.pda_etd) AS etd,
+                COALESCE(
+                    vsl.fda_vsl_dtls ->> 'name',
+                    vsl.vsl_dtls ->> 'name'
+                ) AS vessel_name,
+                td.country_id,
+                country.name AS country_name,
+                td.port_id,
+                port.name AS port_name,
+                COALESCE(
+                    (NULLIF((vsl.fda_vsl_dtls ->> 'loa'), ''))::numeric,
+                    (NULLIF((vsl.vsl_dtls ->> 'loa'), ''))::numeric
+                ) AS loa,
+                COALESCE(
+                    (NULLIF((vsl.fda_vsl_dtls ->> 'grt'), ''))::numeric,
+                    (NULLIF((vsl.vsl_dtls ->> 'grt'), ''))::numeric
+                ) AS grt,
+                COALESCE(
+                    (NULLIF((vsl.fda_vsl_dtls ->> 'rgrt'), ''))::numeric,
+                    (NULLIF((vsl.vsl_dtls ->> 'rgrt'), ''))::numeric
+                ) AS rgrt,
+                COALESCE(
+                    (NULLIF((vsl.fda_vsl_dtls ->> 'nrt'), ''))::numeric,
+                    (NULLIF((vsl.vsl_dtls ->> 'nrt'), ''))::numeric
+                ) AS nrt,
+                td.loss_prevention_pda,
+                td.loss_prevention_fda,
+                td.total_loss_prevented,
+                td.loss_prevented_reason,
+                CASE
+                    WHEN fda.disbursement_seq IS NULL THEN NULL::double precision
+                    WHEN (fda.state = 'D') THEN NULL::double precision
+                    WHEN (upper(fda.fda_currency_from) = 'USD') THEN (((fda.portagent_fda_data -> 'services') ->> 'grand_total'))::double precision
+                    WHEN (upper(fda.fda_currency_to) = 'USD') THEN (round(((((fda.portagent_fda_data -> 'services') ->> 'grand_total'))::numeric * fda.fda_roe::numeric), 2))::double precision
+                    WHEN (upper(fda.pmt_curr_to) = 'USD') THEN fda.portagent_fda_amount
+                    ELSE NULL::double precision
+                END AS fda_amount,
+                CASE
+                    WHEN pda.disbursement_seq IS NULL THEN NULL::double precision
+                    WHEN (upper(pda.pda_currency_from) = 'USD') THEN (((pda.portagent_pda_data -> 'services') ->> 'grand_total'))::double precision
+                    WHEN (upper(pda.pda_currency_to) = 'USD') THEN (round(((((pda.portagent_pda_data -> 'services') ->> 'grand_total'))::numeric * pda.pda_roe::numeric), 2))::double precision
+                    WHEN (upper(pda.pmt_curr_to) = 'USD') THEN pda.portagent_pda_amount
+                    ELSE NULL::double precision
+                END AS pda_amount,
+                CASE
+                    WHEN fda.disbursement_seq IS NULL THEN NULL::text
+                    WHEN (fda.state = 'D') THEN ''
+                    ELSE fda.manual_fda_amount
+                END AS manual_fda_amount,
+                pda.manual_pda_amount::text AS manual_pda_amount
+            {base_sql}
+            ORDER BY etd DESC NULLS LAST
+            OFFSET :offset LIMIT :limit
+        """)
+
+        params["offset"] = offset
+        params["limit"] = data_request.pageSize
+
+        records = db.execute(data_query, params).mappings().all()
 
         return records, total_count
 
