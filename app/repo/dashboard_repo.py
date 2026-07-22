@@ -71,10 +71,7 @@ class DashboardRepository:
         offset = (data_request.page - 1) * data_request.pageSize
         params = {}
 
-        where_clauses = [
-            "(pda.disbursement_seq IS NOT NULL OR fda.disbursement_seq IS NOT NULL)",
-            "(td.state IS NULL OR td.state <> 'D')"
-        ]
+        where_clauses = ["(pda.disbursement_seq IS NOT NULL OR fda.disbursement_seq IS NOT NULL)"]
 
         if data_request.clientId:
             try:
