@@ -118,36 +118,68 @@ class DashboardServiceImpl(DashboardService):
         )
         is_client = user_role == 3
         
+        def get_val(item, key, default=None):
+            if isinstance(item, dict):
+                return item.get(key, default)
+            return getattr(item, key, default)
+
         table_data = []
         for idx, r in enumerate(records, start=1):
-            etd = getattr(r, 'etd', None)
-            etd_str = etd.date().isoformat() if etd else ""
+            etd = get_val(r, 'etd')
+            if hasattr(etd, 'date'):
+                etd_str = etd.date().isoformat()
+            elif isinstance(etd, str):
+                etd_str = etd
+            else:
+                etd_str = ""
+
+            country_name = get_val(r, 'country_name') or ""
+            port_name = get_val(r, 'port_name') or ""
+            vessel_name = get_val(r, 'vessel_name') or ""
+
+            loa_val = get_val(r, 'loa')
+            grt_val = get_val(r, 'grt')
+            rgrt_val = get_val(r, 'rgrt')
+            nrt_val = get_val(r, 'nrt')
+            pda_val = get_val(r, 'pda_amount')
+            fda_val = get_val(r, 'fda_amount')
+            lp_pda = get_val(r, 'loss_prevention_pda')
+            lp_fda = get_val(r, 'loss_prevention_fda')
+            tot_lp = get_val(r, 'total_loss_prevented')
+
             row_data = {
                 "sno": idx,
-                "disbursement_seq": getattr(r, 'disbursement_seq', None),
+                "disbursement_seq": get_val(r, 'disbursement_seq'),
                 "date": etd_str,
-                "country": (getattr(r, 'country_name', None) or "").upper(),
-                "port": (getattr(r, 'port_name', None) or "").upper(),
-                "loa": float(r.loa) if r.loa is not None else None,
-                "grt": float(r.grt) if r.grt is not None else None,
-                "rgrt": float(r.rgrt) if r.rgrt is not None else None,
-                "nrt": float(r.nrt) if r.nrt is not None else None,
-                "pdaAmount": float(r.pda_amount) if r.pda_amount is not None else 0.0,
-                "fdaAmount": float(r.fda_amount) if r.fda_amount is not None else 0.0,
-                "manual_pda_amount": getattr(r, 'manual_pda_amount', None),
-                "manual_fda_amount": getattr(r, 'manual_fda_amount', None),
-                "loss_prevention_pda": float(r.loss_prevention_pda) if getattr(r, 'loss_prevention_pda', None) is not None else None,
-                "loss_prevention_fda": float(r.loss_prevention_fda) if getattr(r, 'loss_prevention_fda', None) is not None else None,
-                "total_loss_prevented": round(
-                    (float(r.loss_prevention_pda) if getattr(r, 'loss_prevention_pda', None) is not None else 0.0) +
-                    (float(r.loss_prevention_fda) if getattr(r, 'loss_prevention_fda', None) is not None else 0.0), 2
-                ) if (getattr(r, 'loss_prevention_pda', None) is not None or getattr(r, 'loss_prevention_fda', None) is not None) else (
-                    float(r.total_loss_prevented) if getattr(r, 'total_loss_prevented', None) is not None else None
-                ),
-                "loss_prevented_reason": getattr(r, 'loss_prevented_reason', None),
+                "country": country_name.upper(),
+                "port": port_name.upper(),
+                "loa": float(loa_val) if loa_val is not None else None,
+                "grt": float(grt_val) if grt_val is not None else None,
+                "rgrt": float(rgrt_val) if rgrt_val is not None else None,
+                "nrt": float(nrt_val) if nrt_val is not None else None,
+                "pdaAmount": float(pda_val) if pda_val is not None else 0.0,
+                "fdaAmount": float(fda_val) if fda_val is not None else 0.0,
+                "manual_pda_amount": get_val(r, 'manual_pda_amount'),
+                "manual_fda_amount": get_val(r, 'manual_fda_amount'),
+                "loss_prevention_pda": float(lp_pda) if lp_pda is not None else None,
+                "loss_prevention_fda": float(lp_fda) if lp_fda is not None else None,
+                "total_loss_prevented": round((float(lp_pda or 0) + float(lp_fda or 0)), 2) if (lp_pda is not None or lp_fda is not None) else (float(tot_lp) if tot_lp is not None else None),
+                "loss_prevented_reason": get_val(r, 'loss_prevented_reason'),
+                "voyage_no": get_val(r, 'voyage_no'),
+                "vessel_type": get_val(r, 'vessel_type'),
+                "port_func": get_val(r, 'port_func'),
+                "arrival_local": get_val(r, 'arrival_local'),
+                "departure_local": get_val(r, 'departure_local'),
+                "port_days": float(get_val(r, 'port_days')) if get_val(r, 'port_days') is not None else None,
+                "agent": get_val(r, 'agent'),
+                "cargo_grade": get_val(r, 'cargo_grade'),
+                "counterparty_short_name": get_val(r, 'counterparty_short_name'),
+                "imo_no": get_val(r, 'imo_no'),
+                "advance_amt": float(get_val(r, 'advance_amt')) if get_val(r, 'advance_amt') is not None else None,
+                "final_amt": float(get_val(r, 'final_amt')) if get_val(r, 'final_amt') is not None else None,
             }
             if not is_client:
-                row_data["vessel"] = (getattr(r, 'vessel_name', None) or "").upper()
+                row_data["vessel"] = vessel_name.upper()
             table_data.append(row_data)
             
 

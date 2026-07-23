@@ -4,6 +4,34 @@ from app.db import Base
 SCHEMA_NAME = "excel_data_dev"
 
 
+class ExcelVessel(Base):
+    __tablename__ = "vessels"
+    __table_args__ = {"schema": SCHEMA_NAME}
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    vessel_name = Column(String, nullable=True)
+    created_at = Column(DateTime, nullable=True)
+
+
+class ExcelCountry(Base):
+    __tablename__ = "countries"
+    __table_args__ = {"schema": SCHEMA_NAME}
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    country_name = Column(String, nullable=True)
+    created_at = Column(DateTime, nullable=True)
+
+
+class ExcelPort(Base):
+    __tablename__ = "ports"
+    __table_args__ = {"schema": SCHEMA_NAME}
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    port_name = Column(String, nullable=True)
+    country_id = Column(Integer, nullable=True)
+    created_at = Column(DateTime, nullable=True)
+
+
 class ExcelDisbursementsIndividualItemsCost(Base):
     __tablename__ = "disbursements_individual_items_cost"
     __table_args__ = {"schema": SCHEMA_NAME}

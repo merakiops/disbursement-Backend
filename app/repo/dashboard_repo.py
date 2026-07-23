@@ -4,6 +4,9 @@ from app.models.vw_fda_processing_details import VwFdaProcessingDetails
 from app.models.company import MaCompany
 from app.models.txn_disbursement import TxnDisbursement
 from app.models.excel_disbursements import (
+    ExcelVessel,
+    ExcelCountry,
+    ExcelPort,
     ExcelDisbursementsIndividualItemsCost,
     ExcelDisbursementsPaidAmountsAnalysis,
     ExcelDisbursementsTotalPortCost
@@ -12,12 +15,14 @@ from typing import List, Optional
 import os
 
 SCHEMA_NAME = os.getenv("DB_SCHEMA")
+
+
 class DashboardRepository:
     
     @staticmethod
     def get_dashboard_summary(client_ids: List[int], from_date, to_date, db: Session):
         """
-        Get dashboard summary using the database function.
+        Get dashboard summary using the database function and combining excel_data_dev schema metrics.
         """
         query = text(f"""
             SELECT *
@@ -38,11 +43,21 @@ class DashboardRepository:
         # Aggregate metrics from excel_data_dev tables safely using savepoint
         try:
             with db.begin_nested():
-                excel_vessels_count = db.query(func.count(func.distinct(ExcelDisbursementsTotalPortCost.vessel_type))).scalar() or 0
+                excel_vessels_count = db.query(func.count(func.distinct(ExcelVessel.vessel_name))).scalar() or 0
+                excel_countries_count = db.query(func.count(func.distinct(ExcelCountry.country_name))).scalar() or 0
+                excel_ports_count = db.query(func.count(func.distinct(ExcelPort.port_name))).scalar() or 0
+                excel_records_count = db.query(func.count(ExcelDisbursementsTotalPortCost.id)).scalar() or 0
                 excel_total_cost = db.query(func.sum(ExcelDisbursementsTotalPortCost.final_amt)).scalar() or 0.0
 
                 if excel_vessels_count and "vessels" in summary_dict:
                     summary_dict["vessels"] = (summary_dict.get("vessels") or 0) + excel_vessels_count
+                if excel_countries_count and "countries" in summary_dict:
+                    summary_dict["countries"] = (summary_dict.get("countries") or 0) + excel_countries_count
+                if excel_ports_count and "ports" in summary_dict:
+                    summary_dict["ports"] = (summary_dict.get("ports") or 0) + excel_ports_count
+                if excel_records_count and "total_fda" in summary_dict:
+                    summary_dict["total_fda"] = (summary_dict.get("total_fda") or 0) + excel_records_count
+                    summary_dict["completed_fda"] = (summary_dict.get("completed_fda") or 0) + excel_records_count
                 if excel_total_cost and "fda_total_amount" in summary_dict:
                     summary_dict["fda_total_amount"] = float(summary_dict.get("fda_total_amount") or 0.0) + float(excel_total_cost)
         except Exception:
@@ -82,8 +97,7 @@ class DashboardRepository:
     @staticmethod
     def get_fda_processing_details(data_request, db: Session):
         """
-        Get FDA processing details with pagination directly querying tables.
-        Fetches records if pda.status = 7 OR fda.status = 7.
+        Get FDA processing details with pagination directly querying tables + excel_data_dev.
         """
         if data_request.page < 1 or data_request.pageSize < 1:
             raise ValueError("Page number and page size must be greater than 0")
@@ -177,7 +191,7 @@ class DashboardRepository:
         """
 
         count_query = text(f"SELECT COUNT(DISTINCT td.disbursement_seq) {base_sql}")
-        total_count = db.execute(count_query, params).scalar() or 0
+        standard_count = db.execute(count_query, params).scalar() or 0
 
         data_query = text(f"""
             SELECT 
@@ -244,16 +258,108 @@ class DashboardRepository:
         params["offset"] = offset
         params["limit"] = data_request.pageSize
 
-        records = db.execute(data_query, params).mappings().all()
+        standard_records = list(db.execute(data_query, params).mappings().all())
 
-        return records, total_count
+        # Also query excel_data_dev records safely
+        excel_records = []
+        excel_count = 0
+        try:
+            with db.begin_nested():
+                q = db.query(
+                    ExcelDisbursementsTotalPortCost.id.label("disbursement_seq"),
+                    ExcelVessel.vessel_name,
+                    ExcelCountry.country_name,
+                    ExcelPort.port_name,
+                    ExcelDisbursementsTotalPortCost.arrival_local.label("etd"),
+                    ExcelDisbursementsTotalPortCost.advance_amt.label("pda_amount"),
+                    ExcelDisbursementsTotalPortCost.final_amt.label("fda_amount"),
+                    ExcelDisbursementsTotalPortCost.grt,
+                    ExcelDisbursementsTotalPortCost.dwt,
+                    ExcelDisbursementsTotalPortCost.vendor_short_name.label("agent"),
+                    ExcelDisbursementsTotalPortCost.cargo_grades.label("cargo_grade"),
+                    ExcelDisbursementsTotalPortCost.counterparty_short_name,
+                    ExcelDisbursementsTotalPortCost.voyage_no,
+                    ExcelDisbursementsTotalPortCost.vessel_type,
+                    ExcelDisbursementsTotalPortCost.port_func,
+                    ExcelDisbursementsTotalPortCost.departure_local,
+                    ExcelDisbursementsTotalPortCost.port_days,
+                    ExcelDisbursementsTotalPortCost.imo_no
+                ).outerjoin(ExcelVessel, ExcelDisbursementsTotalPortCost.vessel_id == ExcelVessel.id)\
+                 .outerjoin(ExcelCountry, ExcelDisbursementsTotalPortCost.country_id == ExcelCountry.id)\
+                 .outerjoin(ExcelPort, ExcelDisbursementsTotalPortCost.port_id == ExcelPort.id)
+
+                if data_request.tableFilter:
+                    tf = data_request.tableFilter
+                    if tf.vessel:
+                        q = q.filter(ExcelVessel.vessel_name.in_(tf.vessel))
+                    if tf.country:
+                        q = q.filter(ExcelCountry.country_name.in_(tf.country))
+                    if tf.port:
+                        q = q.filter(ExcelPort.port_name.in_(tf.port))
+                    if tf.vessel_type:
+                        q = q.filter(ExcelDisbursementsTotalPortCost.vessel_type.in_(tf.vessel_type))
+                    if tf.agent:
+                        q = q.filter(ExcelDisbursementsTotalPortCost.vendor_short_name.in_(tf.agent))
+                    if tf.cargo_grade:
+                        q = q.filter(ExcelDisbursementsTotalPortCost.cargo_grades.in_(tf.cargo_grade))
+                    if tf.counterparty_short_name:
+                        q = q.filter(ExcelDisbursementsTotalPortCost.counterparty_short_name.in_(tf.counterparty_short_name))
+
+                excel_count = q.count()
+                
+                # Fetch page records if standard records don't fulfill full page size
+                needed = data_request.pageSize - len(standard_records)
+                if needed > 0:
+                    excel_fetched = q.order_by(desc(ExcelDisbursementsTotalPortCost.arrival_local)).offset(offset).limit(needed).all()
+                    for r in excel_fetched:
+                        excel_records.append({
+                            "disbursement_seq": r.disbursement_seq,
+                            "client_id": None,
+                            "etd": r.etd,
+                            "vessel_name": r.vessel_name or r.imo_no or f"Vessel-{r.disbursement_seq}",
+                            "country_id": None,
+                            "country_name": r.country_name or "N/A",
+                            "port_id": None,
+                            "port_name": r.port_name or "N/A",
+                            "loa": None,
+                            "grt": float(r.grt) if r.grt is not None else None,
+                            "rgrt": None,
+                            "nrt": None,
+                            "loss_prevention_pda": None,
+                            "loss_prevention_fda": None,
+                            "total_loss_prevented": None,
+                            "loss_prevented_reason": None,
+                            "fda_amount": float(r.fda_amount) if r.fda_amount is not None else 0.0,
+                            "pda_amount": float(r.pda_amount) if r.pda_amount is not None else 0.0,
+                            "manual_fda_amount": None,
+                            "manual_pda_amount": None,
+                            "voyage_no": str(r.voyage_no) if r.voyage_no else None,
+                            "vessel_type": r.vessel_type,
+                            "port_func": r.port_func,
+                            "arrival_local": r.etd.isoformat() if r.etd else None,
+                            "departure_local": r.departure_local.isoformat() if r.departure_local else None,
+                            "port_days": float(r.port_days) if r.port_days is not None else None,
+                            "agent": r.agent,
+                            "cargo_grade": r.cargo_grade,
+                            "counterparty_short_name": r.counterparty_short_name,
+                            "imo_no": r.imo_no,
+                            "advance_amt": float(r.pda_amount) if r.pda_amount is not None else None,
+                            "final_amt": float(r.fda_amount) if r.fda_amount is not None else None
+                        })
+        except Exception:
+            db.rollback()
+
+        total_combined_count = standard_count + excel_count
+        all_records = standard_records + excel_records
+
+        return all_records, total_combined_count
 
     
     @staticmethod
     def get_dashboard_filter_data(client_id: Optional[int], db: Session):
         """
         Get unique filter data for dashboard filters.
-        Returns distinct values for clients (id + name), vessel_name, country_name, port_name, vessel_type, agent, cargo_grade, counterparty_short_name.
+        Combines standard values with excel_data_dev schema tables.
         """
         # Query for distinct client IDs from disbursement table
         client_ids_result = db.query(TxnDisbursement.client_id).distinct().order_by(
@@ -261,45 +367,20 @@ class DashboardRepository:
         ).all()
         client_ids = [c[0] for c in client_ids_result if c[0]]
         
-        # Query for distinct vessel names
-        if client_id:
-            vessel_names_result = db.query(VwFdaProcessingDetails.vessel_name).filter(
-                VwFdaProcessingDetails.client_id == client_id
-            ).distinct().order_by(
-                VwFdaProcessingDetails.vessel_name
-            ).all()
-        else:
-            vessel_names_result = db.query(VwFdaProcessingDetails.vessel_name).distinct().order_by(
-                VwFdaProcessingDetails.vessel_name
-            ).all()
-        vessel_names = [v[0] for v in vessel_names_result if v[0]]
-    
+        # Distinct vessel names from standard view + excel lookup
+        vsl_1 = [v[0] for v in db.query(VwFdaProcessingDetails.vessel_name).distinct().all() if v[0]]
+        vsl_2 = [v[0] for v in db.query(ExcelVessel.vessel_name).distinct().all() if v[0]]
+        vessel_names = sorted(list(set(vsl_1 + vsl_2)))
         
-        # Query for distinct country names
-        if client_id:
-            country_names_result = db.query(VwFdaProcessingDetails.country_name).filter(
-                VwFdaProcessingDetails.client_id == client_id
-            ).distinct().order_by(
-                VwFdaProcessingDetails.country_name
-            ).all()
-        else:
-            country_names_result = db.query(VwFdaProcessingDetails.country_name).distinct().order_by(
-                VwFdaProcessingDetails.country_name
-            ).all()
-        country_names = [c[0] for c in country_names_result if c[0]]
+        # Distinct country names from standard view + excel lookup
+        c_1 = [c[0] for c in db.query(VwFdaProcessingDetails.country_name).distinct().all() if c[0]]
+        c_2 = [c[0] for c in db.query(ExcelCountry.country_name).distinct().all() if c[0]]
+        country_names = sorted(list(set(c_1 + c_2)))
         
-        # Query for distinct port names
-        if client_id:
-            port_names_result = db.query(VwFdaProcessingDetails.port_name).filter(
-                VwFdaProcessingDetails.client_id == client_id
-            ).distinct().order_by(
-                VwFdaProcessingDetails.port_name
-            ).all()
-        else:
-            port_names_result = db.query(VwFdaProcessingDetails.port_name).distinct().order_by(
-                VwFdaProcessingDetails.port_name
-            ).all()
-        port_names = [p[0] for p in port_names_result if p[0]]
+        # Distinct port names from standard view + excel lookup
+        p_1 = [p[0] for p in db.query(VwFdaProcessingDetails.port_name).distinct().all() if p[0]]
+        p_2 = [p[0] for p in db.query(ExcelPort.port_name).distinct().all() if p[0]]
+        port_names = sorted(list(set(p_1 + p_2)))
 
         # Query distinct filter values from excel_data_dev schema tables safely using savepoints
         distinct_vessel_types = []
@@ -372,4 +453,3 @@ class DashboardRepository:
         }
         
         return filter_data
-
