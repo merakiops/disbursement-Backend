@@ -35,17 +35,18 @@ class DashboardRepository:
         
         summary_dict = dict(result) if result else {}
 
-        # Aggregate metrics from excel_data_dev tables safely
+        # Aggregate metrics from excel_data_dev tables safely using savepoint
         try:
-            excel_vessels_count = db.query(func.count(func.distinct(ExcelDisbursementsTotalPortCost.vessel_type))).scalar() or 0
-            excel_total_cost = db.query(func.sum(ExcelDisbursementsTotalPortCost.final_amt)).scalar() or 0.0
+            with db.begin_nested():
+                excel_vessels_count = db.query(func.count(func.distinct(ExcelDisbursementsTotalPortCost.vessel_type))).scalar() or 0
+                excel_total_cost = db.query(func.sum(ExcelDisbursementsTotalPortCost.final_amt)).scalar() or 0.0
 
-            if excel_vessels_count and "vessels" in summary_dict:
-                summary_dict["vessels"] = (summary_dict.get("vessels") or 0) + excel_vessels_count
-            if excel_total_cost and "fda_total_amount" in summary_dict:
-                summary_dict["fda_total_amount"] = float(summary_dict.get("fda_total_amount") or 0.0) + float(excel_total_cost)
+                if excel_vessels_count and "vessels" in summary_dict:
+                    summary_dict["vessels"] = (summary_dict.get("vessels") or 0) + excel_vessels_count
+                if excel_total_cost and "fda_total_amount" in summary_dict:
+                    summary_dict["fda_total_amount"] = float(summary_dict.get("fda_total_amount") or 0.0) + float(excel_total_cost)
         except Exception:
-            pass
+            db.rollback()
 
         return summary_dict
     
@@ -300,25 +301,28 @@ class DashboardRepository:
             ).all()
         port_names = [p[0] for p in port_names_result if p[0]]
 
-        # Query distinct filter values from excel_data_dev schema tables safely
+        # Query distinct filter values from excel_data_dev schema tables safely using savepoints
+        distinct_vessel_types = []
+        distinct_agents = []
+        distinct_cargo_grades = []
+        distinct_counterparties = []
+
         try:
-            v_types_1 = [r[0] for r in db.query(ExcelDisbursementsIndividualItemsCost.vessel_type).distinct().all() if r[0]]
-            v_types_2 = [r[0] for r in db.query(ExcelDisbursementsPaidAmountsAnalysis.vessel_type).distinct().all() if r[0]]
-            v_types_3 = [r[0] for r in db.query(ExcelDisbursementsTotalPortCost.vessel_type).distinct().all() if r[0]]
-            distinct_vessel_types = sorted(list(set(v_types_1 + v_types_2 + v_types_3)))
+            with db.begin_nested():
+                v_types_1 = [r[0] for r in db.query(ExcelDisbursementsIndividualItemsCost.vessel_type).distinct().all() if r[0]]
+                v_types_2 = [r[0] for r in db.query(ExcelDisbursementsPaidAmountsAnalysis.vessel_type).distinct().all() if r[0]]
+                v_types_3 = [r[0] for r in db.query(ExcelDisbursementsTotalPortCost.vessel_type).distinct().all() if r[0]]
+                distinct_vessel_types = sorted(list(set(v_types_1 + v_types_2 + v_types_3)))
 
-            agents_1 = [r[0] for r in db.query(ExcelDisbursementsIndividualItemsCost.agent).distinct().all() if r[0]]
-            agents_2 = [r[0] for r in db.query(ExcelDisbursementsPaidAmountsAnalysis.agent).distinct().all() if r[0]]
-            agents_3 = [r[0] for r in db.query(ExcelDisbursementsTotalPortCost.vender_short_name).distinct().all() if r[0]]
-            distinct_agents = sorted(list(set(agents_1 + agents_2 + agents_3)))
+                agents_1 = [r[0] for r in db.query(ExcelDisbursementsIndividualItemsCost.agent).distinct().all() if r[0]]
+                agents_2 = [r[0] for r in db.query(ExcelDisbursementsPaidAmountsAnalysis.agent).distinct().all() if r[0]]
+                agents_3 = [r[0] for r in db.query(ExcelDisbursementsTotalPortCost.vendor_short_name).distinct().all() if r[0]]
+                distinct_agents = sorted(list(set(agents_1 + agents_2 + agents_3)))
 
-            distinct_cargo_grades = sorted([r[0] for r in db.query(ExcelDisbursementsTotalPortCost.cargo_grade).distinct().all() if r[0]])
-            distinct_counterparties = sorted([r[0] for r in db.query(ExcelDisbursementsTotalPortCost.counterparty_short_name).distinct().all() if r[0]])
+                distinct_cargo_grades = sorted([r[0] for r in db.query(ExcelDisbursementsTotalPortCost.cargo_grades).distinct().all() if r[0]])
+                distinct_counterparties = sorted([r[0] for r in db.query(ExcelDisbursementsTotalPortCost.counterparty_short_name).distinct().all() if r[0]])
         except Exception:
-            distinct_vessel_types = []
-            distinct_agents = []
-            distinct_cargo_grades = []
-            distinct_counterparties = []
+            db.rollback()
         
         # Query for LOA min/max values
         loa_stats = db.query(
