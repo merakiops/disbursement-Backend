@@ -84,6 +84,10 @@ class FdaProcessingDetailDTO(BaseModel):
     imo_no: Optional[str] = None
     advance_amt: Optional[float] = None
     final_amt: Optional[float] = None
+    advance_amount_remitted: Optional[float] = None
+    outstanding_balance: Optional[float] = None
+    remark: Optional[str] = None
+    data_source: Optional[str] = "standard"
 
 
 class FDAStatsDTO(BaseModel):

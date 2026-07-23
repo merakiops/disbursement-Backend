@@ -38,3 +38,11 @@ class DashboardDataRequest(BaseModel):
     monthRange: Optional[FilterdateDTO] = None
     yearRange: Optional[FilteryearDTO] = None
     tableFilter: Optional[TableFilterDTO] = None
+    dataSource: Optional[str] = "all"  # "all", "excel", or "standard"
+
+class UpdateDashboardRowDTO(BaseModel):
+    disbursement_seq: int
+    data_source: Optional[str] = "standard"  # "standard" or "excel"
+    advance_amount_remitted: Optional[float] = None
+    outstanding_balance: Optional[float] = None
+    remark: Optional[str] = None

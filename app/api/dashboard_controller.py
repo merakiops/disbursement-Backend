@@ -1,18 +1,18 @@
 from fastapi import APIRouter, Depends, status, HTTPException, Request, Query
+from fastapi.responses import Response
 from sqlalchemy.orm import Session
 from app.db import get_db
 from app.core.decorators import jwt_required
-from app.dto.dashboard_dto import DashboardRequestDTO, DashboardDataRequest
+from app.dto.dashboard_dto import DashboardRequestDTO, DashboardDataRequest, UpdateDashboardRowDTO
 from app.dto.dasboard_response_dto import (
-    DashboardResponseDTO, FdaProcessingDetailsResponseDTO, FilterDataDTO,FilterDataRequestDTO
+    DashboardResponseDTO, FdaProcessingDetailsResponseDTO, FilterDataDTO, FilterDataRequestDTO
 )
 from app.services.dashboard_service_impl import DashboardServiceImpl
-from typing import Optional
-from pydantic import BaseModel
+import csv
+import io
 
 DashboardController = APIRouter()
 dashboard_service = DashboardServiceImpl()
-
 
 
 @DashboardController.post("/api/v1/dashboard", response_model=DashboardResponseDTO)
@@ -36,7 +36,7 @@ async def call_dashboard_summary(request: Request, payload: DashboardRequestDTO,
 @jwt_required
 async def get_fda_processing_details(request: Request, data_request: DashboardDataRequest, db: Session = Depends(get_db)):
     """
-    Get FDA processing details with pagination.
+    Get FDA processing details with pagination or full dataset if pageSize <= 0.
     """
     try:
         user_role = request.state.user.get('roleId', '')
@@ -44,7 +44,68 @@ async def get_fda_processing_details(request: Request, data_request: DashboardDa
         result = dashboard_service.get_fda_processing_details(data_request, user_role, db)
         return result
     except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
+
+@DashboardController.post("/api/v1/dashboard-table/export")
+@jwt_required
+async def export_fda_processing_details(request: Request, data_request: DashboardDataRequest, db: Session = Depends(get_db)):
+    """
+    Export all matching FDA processing details into a downloadable Excel/CSV file.
+    """
+    try:
+        user_role = request.state.user.get('roleId', '')
+        # Force pageSize = -1 to fetch ALL matching records
+        data_request.pageSize = -1
+        result = dashboard_service.get_fda_processing_details(data_request, user_role, db)
+        
+        output = io.StringIO()
+        writer = csv.writer(output)
+        
+        # Write CSV Header
+        headers = [
+            "S.No", "Disbursement Seq", "Date", "Vessel", "Country", "Port",
+            "LOA", "GRT", "RGRT", "NRT", "PDA Amount", "FDA Amount",
+            "Voyage No", "Vessel Type", "Port Function", "Arrival Local", "Departure Local",
+            "Port Days", "Agent", "Cargo Grade", "Counterparty", "IMO No"
+        ]
+        writer.writerow(headers)
+        
+        for row in result.fdaCostTracker.tableData:
+            writer.writerow([
+                row.sno,
+                row.disbursement_seq,
+                row.date,
+                row.vessel or "",
+                row.country or "",
+                row.port or "",
+                row.loa or "",
+                row.grt or "",
+                row.rgrt or "",
+                row.nrt or "",
+                row.pdaAmount,
+                row.fdaAmount,
+                row.voyage_no or "",
+                row.vessel_type or "",
+                row.port_func or "",
+                row.arrival_local or "",
+                row.departure_local or "",
+                row.port_days or "",
+                row.agent or "",
+                row.cargo_grade or "",
+                row.counterparty_short_name or "",
+                row.imo_no or ""
+            ])
+            
+        csv_data = output.getvalue()
+        return Response(
+            content=csv_data,
+            media_type="text/csv",
+            headers={
+                "Content-Disposition": "attachment; filename=dashboard_export.csv"
+            }
+        )
+    except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 
@@ -56,7 +117,22 @@ async def get_dashboard_filter_data(request: Request, filter_request: FilterData
     Returns distinct values for client_id, client_name, vessel_name, country_name, port_name.
     """
     try:
-        result = dashboard_service.get_dashboard_filter_data(filter_request.client_id, db)
+        result = dashboard_service.get_dashboard_filter_data(filter_request.client_id, filter_request.data_source, db)
         return result
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
+@DashboardController.post("/api/v1/dashboard-table/update-row")
+@jwt_required
+async def update_dashboard_row(request: Request, payload: UpdateDashboardRowDTO, db: Session = Depends(get_db)):
+    """
+    Update advance_amount_remitted, outstanding_balance, and remark for a specific dashboard row.
+    """
+    try:
+        dashboard_service.update_dashboard_row(payload, db)
+        return {"status": "success", "message": "Dashboard row updated successfully"}
+    except ValueError as ve:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(ve))
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))

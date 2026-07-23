@@ -99,10 +99,11 @@ class DashboardRepository:
         """
         Get FDA processing details with pagination directly querying tables + excel_data_dev.
         """
-        if data_request.page < 1 or data_request.pageSize < 1:
+        is_all_records = data_request.pageSize <= 0 or data_request.pageSize == -1
+        if not is_all_records and (data_request.page < 1 or data_request.pageSize < 1):
             raise ValueError("Page number and page size must be greater than 0")
 
-        offset = (data_request.page - 1) * data_request.pageSize
+        offset = 0 if is_all_records else (data_request.page - 1) * data_request.pageSize
         params = {}
 
         where_clauses = ["(pda.disbursement_seq IS NOT NULL OR fda.disbursement_seq IS NOT NULL)"]
@@ -249,16 +250,21 @@ class DashboardRepository:
                     WHEN (fda.state = 'D') THEN ''
                     ELSE fda.manual_fda_amount
                 END AS manual_fda_amount,
-                pda.manual_pda_amount::text AS manual_pda_amount
+                pda.manual_pda_amount::text AS manual_pda_amount,
+                td.advance_amount_remitted,
+                td.outstanding_balance,
+                td.remark
             {base_sql}
             ORDER BY etd DESC NULLS LAST
-            OFFSET :offset LIMIT :limit
+            {"OFFSET :offset LIMIT :limit" if not is_all_records else ""}
         """)
 
-        params["offset"] = offset
-        params["limit"] = data_request.pageSize
+        if not is_all_records:
+            params["offset"] = offset
+            params["limit"] = data_request.pageSize
 
-        standard_records = list(db.execute(data_query, params).mappings().all())
+        raw_std = list(db.execute(data_query, params).mappings().all())
+        standard_records = [dict(r, data_source="standard") for r in raw_std]
 
         # Also query excel_data_dev records safely
         excel_records = []
@@ -283,7 +289,10 @@ class DashboardRepository:
                     ExcelDisbursementsTotalPortCost.port_func,
                     ExcelDisbursementsTotalPortCost.departure_local,
                     ExcelDisbursementsTotalPortCost.port_days,
-                    ExcelDisbursementsTotalPortCost.imo_no
+                    ExcelDisbursementsTotalPortCost.imo_no,
+                    ExcelDisbursementsTotalPortCost.advance_amount_remitted,
+                    ExcelDisbursementsTotalPortCost.outstanding_balance,
+                    ExcelDisbursementsTotalPortCost.remark
                 ).outerjoin(ExcelVessel, ExcelDisbursementsTotalPortCost.vessel_id == ExcelVessel.id)\
                  .outerjoin(ExcelCountry, ExcelDisbursementsTotalPortCost.country_id == ExcelCountry.id)\
                  .outerjoin(ExcelPort, ExcelDisbursementsTotalPortCost.port_id == ExcelPort.id)
@@ -307,45 +316,65 @@ class DashboardRepository:
 
                 excel_count = q.count()
                 
-                # Fetch page records if standard records don't fulfill full page size
-                needed = data_request.pageSize - len(standard_records)
-                if needed > 0:
-                    excel_fetched = q.order_by(desc(ExcelDisbursementsTotalPortCost.arrival_local)).offset(offset).limit(needed).all()
+                def map_excel_row(r):
+                    return {
+                        "disbursement_seq": r.disbursement_seq,
+                        "client_id": None,
+                        "etd": r.etd,
+                        "vessel_name": r.vessel_name or r.imo_no or f"Vessel-{r.disbursement_seq}",
+                        "country_id": None,
+                        "country_name": r.country_name or "N/A",
+                        "port_id": None,
+                        "port_name": r.port_name or "N/A",
+                        "loa": None,
+                        "grt": float(r.grt) if r.grt is not None else None,
+                        "rgrt": None,
+                        "nrt": None,
+                        "loss_prevention_pda": None,
+                        "loss_prevention_fda": None,
+                        "total_loss_prevented": None,
+                        "loss_prevented_reason": None,
+                        "fda_amount": float(r.fda_amount) if r.fda_amount is not None else 0.0,
+                        "pda_amount": float(r.pda_amount) if r.pda_amount is not None else 0.0,
+                        "manual_fda_amount": None,
+                        "manual_pda_amount": None,
+                        "voyage_no": str(r.voyage_no) if r.voyage_no else None,
+                        "vessel_type": r.vessel_type,
+                        "port_func": r.port_func,
+                        "arrival_local": r.etd.isoformat() if r.etd else None,
+                        "departure_local": r.departure_local.isoformat() if r.departure_local else None,
+                        "port_days": float(r.port_days) if r.port_days is not None else None,
+                        "agent": r.agent,
+                        "cargo_grade": r.cargo_grade,
+                        "counterparty_short_name": r.counterparty_short_name,
+                        "imo_no": r.imo_no,
+                        "advance_amt": float(r.pda_amount) if r.pda_amount is not None else None,
+                        "final_amt": float(r.fda_amount) if r.fda_amount is not None else None,
+                        "advance_amount_remitted": float(r.advance_amount_remitted) if r.advance_amount_remitted is not None else None,
+                        "outstanding_balance": float(r.outstanding_balance) if r.outstanding_balance is not None else None,
+                        "remark": r.remark,
+                        "data_source": "excel"
+                    }
+
+                if ds == "excel":
+                    excel_query_obj = q.order_by(desc(ExcelDisbursementsTotalPortCost.arrival_local))
+                    if not is_all_records:
+                        excel_query_obj = excel_query_obj.offset(offset).limit(data_request.pageSize)
+                    excel_fetched = excel_query_obj.all()
+
                     for r in excel_fetched:
-                        excel_records.append({
-                            "disbursement_seq": r.disbursement_seq,
-                            "client_id": None,
-                            "etd": r.etd,
-                            "vessel_name": r.vessel_name or r.imo_no or f"Vessel-{r.disbursement_seq}",
-                            "country_id": None,
-                            "country_name": r.country_name or "N/A",
-                            "port_id": None,
-                            "port_name": r.port_name or "N/A",
-                            "loa": None,
-                            "grt": float(r.grt) if r.grt is not None else None,
-                            "rgrt": None,
-                            "nrt": None,
-                            "loss_prevention_pda": None,
-                            "loss_prevention_fda": None,
-                            "total_loss_prevented": None,
-                            "loss_prevented_reason": None,
-                            "fda_amount": float(r.fda_amount) if r.fda_amount is not None else 0.0,
-                            "pda_amount": float(r.pda_amount) if r.pda_amount is not None else 0.0,
-                            "manual_fda_amount": None,
-                            "manual_pda_amount": None,
-                            "voyage_no": str(r.voyage_no) if r.voyage_no else None,
-                            "vessel_type": r.vessel_type,
-                            "port_func": r.port_func,
-                            "arrival_local": r.etd.isoformat() if r.etd else None,
-                            "departure_local": r.departure_local.isoformat() if r.departure_local else None,
-                            "port_days": float(r.port_days) if r.port_days is not None else None,
-                            "agent": r.agent,
-                            "cargo_grade": r.cargo_grade,
-                            "counterparty_short_name": r.counterparty_short_name,
-                            "imo_no": r.imo_no,
-                            "advance_amt": float(r.pda_amount) if r.pda_amount is not None else None,
-                            "final_amt": float(r.fda_amount) if r.fda_amount is not None else None
-                        })
+                        excel_records.append(map_excel_row(r))
+                    return excel_records, excel_count
+
+                # Otherwise (for 'all'), fetch page records
+                if is_all_records:
+                    excel_fetched = q.order_by(desc(ExcelDisbursementsTotalPortCost.arrival_local)).all()
+                else:
+                    needed = data_request.pageSize - len(standard_records)
+                    excel_fetched = q.order_by(desc(ExcelDisbursementsTotalPortCost.arrival_local)).offset(offset).limit(needed).all() if needed > 0 else []
+
+                for r in excel_fetched:
+                    excel_records.append(map_excel_row(r))
         except Exception:
             db.rollback()
 
@@ -353,6 +382,39 @@ class DashboardRepository:
         all_records = standard_records + excel_records
 
         return all_records, total_combined_count
+
+    @staticmethod
+    def update_dashboard_row(payload, db: Session):
+        """
+        Update advance_amount_remitted, outstanding_balance, and remark for a row in standard or excel schema.
+        """
+        ds = (payload.data_source or "standard").lower()
+        if ds == "excel":
+            row = db.query(ExcelDisbursementsTotalPortCost).filter(ExcelDisbursementsTotalPortCost.id == payload.disbursement_seq).first()
+            if not row:
+                raise ValueError(f"Excel disbursement record with ID {payload.disbursement_seq} not found")
+            if payload.advance_amount_remitted is not None:
+                row.advance_amount_remitted = payload.advance_amount_remitted
+            if payload.outstanding_balance is not None:
+                row.outstanding_balance = payload.outstanding_balance
+            if payload.remark is not None:
+                row.remark = payload.remark
+            db.commit()
+            db.refresh(row)
+            return row
+        else:
+            row = db.query(TxnDisbursement).filter(TxnDisbursement.disbursement_seq == payload.disbursement_seq).first()
+            if not row:
+                raise ValueError(f"Standard disbursement record with seq {payload.disbursement_seq} not found")
+            if payload.advance_amount_remitted is not None:
+                row.advance_amount_remitted = payload.advance_amount_remitted
+            if payload.outstanding_balance is not None:
+                row.outstanding_balance = payload.outstanding_balance
+            if payload.remark is not None:
+                row.remark = payload.remark
+            db.commit()
+            db.refresh(row)
+            return row
 
     
     @staticmethod

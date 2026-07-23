@@ -105,3 +105,6 @@ class ExcelDisbursementsTotalPortCost(Base):
     vessel_id = Column(Integer, nullable=True)
     country_id = Column(Integer, nullable=True)
     port_id = Column(Integer, nullable=True)
+    advance_amount_remitted = Column(Float, nullable=True)
+    outstanding_balance = Column(Float, nullable=True)
+    remark = Column(String, nullable=True)

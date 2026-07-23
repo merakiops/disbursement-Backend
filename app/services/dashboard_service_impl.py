@@ -90,9 +90,14 @@ class DashboardServiceImpl(DashboardService):
             data_request, db=db
         )
         
+        def get_val(item, key, default=None):
+            if isinstance(item, dict):
+                return item.get(key, default)
+            return getattr(item, key, default)
+
         # Calculate stats from filtered records
         if records:
-            fda_amounts = [float(r.fda_amount) for r in records if r.fda_amount not in (None, 0)]
+            fda_amounts = [float(get_val(r, 'fda_amount')) for r in records if get_val(r, 'fda_amount') not in (None, 0)]
             if fda_amounts:
                 fda_amounts_sorted = sorted(fda_amounts)
                 min_amount = min(fda_amounts)
@@ -177,6 +182,10 @@ class DashboardServiceImpl(DashboardService):
                 "imo_no": get_val(r, 'imo_no'),
                 "advance_amt": float(get_val(r, 'advance_amt')) if get_val(r, 'advance_amt') is not None else None,
                 "final_amt": float(get_val(r, 'final_amt')) if get_val(r, 'final_amt') is not None else None,
+                "advance_amount_remitted": float(get_val(r, 'advance_amount_remitted')) if get_val(r, 'advance_amount_remitted') is not None else None,
+                "outstanding_balance": float(get_val(r, 'outstanding_balance')) if get_val(r, 'outstanding_balance') is not None else None,
+                "remark": get_val(r, 'remark'),
+                "data_source": get_val(r, 'data_source', 'standard'),
             }
             if not is_client:
                 row_data["vessel"] = vessel_name.upper()
@@ -192,6 +201,12 @@ class DashboardServiceImpl(DashboardService):
         return FdaProcessingDetailsResponseDTO(
             fdaCostTracker=fda_cost_tracker
         )
+
+    def update_dashboard_row(self, payload, db: Session):
+        """
+        Update advance_amount_remitted, outstanding_balance, and remark for a specific dashboard row.
+        """
+        return DashboardRepository.update_dashboard_row(payload, db)
 
     def get_dashboard_filter_data(self, client_id: Optional[int], db: Session) -> FilterDataDTO:
         """
