@@ -177,5 +177,9 @@ class DashboardServiceImpl(DashboardService):
             loa=RangeDataDTO(**filter_data_dict["loa"]) if filter_data_dict.get("loa") else None,
             nrt=RangeDataDTO(**filter_data_dict["nrt"]) if filter_data_dict.get("nrt") else None,
             grt=RangeDataDTO(**filter_data_dict["grt"]) if filter_data_dict.get("grt") else None,
-            rgrt=RangeDataDTO(**filter_data_dict["rgrt"]) if filter_data_dict.get("rgrt") else None
+            rgrt=RangeDataDTO(**filter_data_dict["rgrt"]) if filter_data_dict.get("rgrt") else None,
+            vessel_type=filter_data_dict.get("vessel_type", []),
+            agent=filter_data_dict.get("agent", []),
+            cargo_grade=filter_data_dict.get("cargo_grade", []),
+            counterparty_short_name=filter_data_dict.get("counterparty_short_name", [])
         )

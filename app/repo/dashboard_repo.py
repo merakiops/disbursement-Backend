@@ -3,6 +3,11 @@ from sqlalchemy import func, desc, text
 from app.models.vw_fda_processing_details import VwFdaProcessingDetails
 from app.models.company import MaCompany
 from app.models.txn_disbursement import TxnDisbursement
+from app.models.excel_disbursements import (
+    ExcelDisbursementsIndividualItemsCost,
+    ExcelDisbursementsPaidAmountsAnalysis,
+    ExcelDisbursementsTotalPortCost
+)
 from typing import List, Optional
 import os
 
@@ -28,7 +33,21 @@ class DashboardRepository:
             }
         ).mappings().first()
         
-        return result
+        summary_dict = dict(result) if result else {}
+
+        # Aggregate metrics from excel_data_dev tables safely
+        try:
+            excel_vessels_count = db.query(func.count(func.distinct(ExcelDisbursementsTotalPortCost.vessel_type))).scalar() or 0
+            excel_total_cost = db.query(func.sum(ExcelDisbursementsTotalPortCost.final_amt)).scalar() or 0.0
+
+            if excel_vessels_count and "vessels" in summary_dict:
+                summary_dict["vessels"] = (summary_dict.get("vessels") or 0) + excel_vessels_count
+            if excel_total_cost and "fda_total_amount" in summary_dict:
+                summary_dict["fda_total_amount"] = float(summary_dict.get("fda_total_amount") or 0.0) + float(excel_total_cost)
+        except Exception:
+            pass
+
+        return summary_dict
     
     @staticmethod
     def get_client_ids_by_names(client_names: List[str], db: Session):
@@ -228,13 +247,12 @@ class DashboardRepository:
 
         return records, total_count
 
-
     
     @staticmethod
     def get_dashboard_filter_data(client_id: Optional[int], db: Session):
         """
         Get unique filter data for dashboard filters.
-        Returns distinct values for clients (id + name), vessel_name, country_name, port_name.
+        Returns distinct values for clients (id + name), vessel_name, country_name, port_name, vessel_type, agent, cargo_grade, counterparty_short_name.
         """
         # Query for distinct client IDs from disbursement table
         client_ids_result = db.query(TxnDisbursement.client_id).distinct().order_by(
@@ -281,6 +299,26 @@ class DashboardRepository:
                 VwFdaProcessingDetails.port_name
             ).all()
         port_names = [p[0] for p in port_names_result if p[0]]
+
+        # Query distinct filter values from excel_data_dev schema tables safely
+        try:
+            v_types_1 = [r[0] for r in db.query(ExcelDisbursementsIndividualItemsCost.vessel_type).distinct().all() if r[0]]
+            v_types_2 = [r[0] for r in db.query(ExcelDisbursementsPaidAmountsAnalysis.vessel_type).distinct().all() if r[0]]
+            v_types_3 = [r[0] for r in db.query(ExcelDisbursementsTotalPortCost.vessel_type).distinct().all() if r[0]]
+            distinct_vessel_types = sorted(list(set(v_types_1 + v_types_2 + v_types_3)))
+
+            agents_1 = [r[0] for r in db.query(ExcelDisbursementsIndividualItemsCost.agent).distinct().all() if r[0]]
+            agents_2 = [r[0] for r in db.query(ExcelDisbursementsPaidAmountsAnalysis.agent).distinct().all() if r[0]]
+            agents_3 = [r[0] for r in db.query(ExcelDisbursementsTotalPortCost.vender_short_name).distinct().all() if r[0]]
+            distinct_agents = sorted(list(set(agents_1 + agents_2 + agents_3)))
+
+            distinct_cargo_grades = sorted([r[0] for r in db.query(ExcelDisbursementsTotalPortCost.cargo_grade).distinct().all() if r[0]])
+            distinct_counterparties = sorted([r[0] for r in db.query(ExcelDisbursementsTotalPortCost.counterparty_short_name).distinct().all() if r[0]])
+        except Exception:
+            distinct_vessel_types = []
+            distinct_agents = []
+            distinct_cargo_grades = []
+            distinct_counterparties = []
         
         # Query for LOA min/max values
         loa_stats = db.query(
@@ -319,10 +357,15 @@ class DashboardRepository:
             "vessel_name": vessel_names,
             "country_name": country_names,
             "port_name": port_names,
-            "loa": {"min_value": float(loa_stats.min_loa), "max_value": float(loa_stats.max_loa)} if loa_stats.min_loa is not None else None,
-            "nrt": {"min_value": float(nrt_stats.min_nrt), "max_value": float(nrt_stats.max_nrt)} if nrt_stats.min_nrt is not None else None,
-            "grt": {"min_value": float(grt_stats.min_grt), "max_value": float(grt_stats.max_grt)} if grt_stats.min_grt is not None else None,
-            "rgrt": {"min_value": float(rgrt_stats.min_rgrt), "max_value": float(rgrt_stats.max_rgrt)} if rgrt_stats.min_rgrt is not None else None
+            "loa": {"min_value": float(loa_stats.min_loa), "max_value": float(loa_stats.max_loa)} if loa_stats and loa_stats.min_loa is not None else None,
+            "nrt": {"min_value": float(nrt_stats.min_nrt), "max_value": float(nrt_stats.max_nrt)} if nrt_stats and nrt_stats.min_nrt is not None else None,
+            "grt": {"min_value": float(grt_stats.min_grt), "max_value": float(grt_stats.max_grt)} if grt_stats and grt_stats.min_grt is not None else None,
+            "rgrt": {"min_value": float(rgrt_stats.min_rgrt), "max_value": float(rgrt_stats.max_rgrt)} if rgrt_stats and rgrt_stats.min_rgrt is not None else None,
+            "vessel_type": distinct_vessel_types,
+            "agent": distinct_agents,
+            "cargo_grade": distinct_cargo_grades,
+            "counterparty_short_name": distinct_counterparties
         }
         
         return filter_data
+

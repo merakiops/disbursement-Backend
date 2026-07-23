@@ -58,20 +58,32 @@ class FdaProcessingDetailDTO(BaseModel):
     disbursement_seq: int
     date: str
     vessel: Optional[str] = None
-    country: str
-    port: str
+    country: Optional[str] = None
+    port: Optional[str] = None
     loa: Optional[float] = None
     grt: Optional[float] = None
     rgrt: Optional[float] = None
     nrt: Optional[float] = None
     pdaAmount: float
     fdaAmount: float
-    manual_fda_amount:Optional[str] = None
-    manual_pda_amount:Optional[str] = None
+    manual_fda_amount: Optional[str] = None
+    manual_pda_amount: Optional[str] = None
     loss_prevention_pda: Optional[float] = None
     loss_prevention_fda: Optional[float] = None
     total_loss_prevented: Optional[float] = None
     loss_prevented_reason: Optional[str] = None
+    voyage_no: Optional[str] = None
+    vessel_type: Optional[str] = None
+    port_func: Optional[str] = None
+    arrival_local: Optional[str] = None
+    departure_local: Optional[str] = None
+    port_days: Optional[float] = None
+    agent: Optional[str] = None
+    cargo_grade: Optional[str] = None
+    counterparty_short_name: Optional[str] = None
+    imo_no: Optional[str] = None
+    advance_amt: Optional[float] = None
+    final_amt: Optional[float] = None
 
 
 class FDAStatsDTO(BaseModel):
@@ -110,6 +122,10 @@ class FilterDataDTO(BaseModel):
     nrt: Optional[RangeDataDTO] = None
     grt: Optional[RangeDataDTO] = None
     rgrt: Optional[RangeDataDTO] = None
+    vessel_type: List[str] = []
+    agent: List[str] = []
+    cargo_grade: List[str] = []
+    counterparty_short_name: List[str] = []
 
     model_config = {
         "from_attributes": True

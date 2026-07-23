@@ -26,6 +26,10 @@ class TableFilterDTO(BaseModel):
     nrt: Optional[RangeFilterDTO] = None
     grt: Optional[RangeFilterDTO] = None
     rgrt: Optional[RangeFilterDTO] = None
+    vessel_type: Optional[List[str]] = []
+    agent: Optional[List[str]] = []
+    cargo_grade: Optional[List[str]] = []
+    counterparty_short_name: Optional[List[str]] = []
 
 class DashboardDataRequest(BaseModel):
     page: int = 1
