@@ -117,7 +117,8 @@ async def get_dashboard_filter_data(request: Request, filter_request: FilterData
     Returns distinct values for client_id, client_name, vessel_name, country_name, port_name.
     """
     try:
-        result = dashboard_service.get_dashboard_filter_data(filter_request.client_id, filter_request.data_source, db)
+        data_src = getattr(filter_request, 'data_source', 'all')
+        result = dashboard_service.get_dashboard_filter_data(filter_request.client_id, data_src, db)
         return result
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))

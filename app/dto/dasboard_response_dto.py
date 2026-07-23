@@ -113,6 +113,7 @@ class ClientFilterDTO(BaseModel):
 
 class FilterDataRequestDTO(BaseModel):
     client_id: Optional[int] = None
+    data_source: Optional[str] = "all"
 class RangeDataDTO(BaseModel):
     min_value: float
     max_value: float

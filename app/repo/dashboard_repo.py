@@ -418,7 +418,7 @@ class DashboardRepository:
 
     
     @staticmethod
-    def get_dashboard_filter_data(client_id: Optional[int], db: Session):
+    def get_dashboard_filter_data(client_id: Optional[int], data_source: Optional[str] = "all", db: Session = None):
         """
         Get unique filter data for dashboard filters.
         Combines standard values with excel_data_dev schema tables.
