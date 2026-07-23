@@ -387,17 +387,20 @@ class DashboardRepository:
     def update_dashboard_row(payload, db: Session):
         """
         Update advance_amount_remitted, outstanding_balance, and remark for a row in standard or excel schema.
+        Supports setting values to numbers/strings or setting them to null/None.
         """
         ds = (payload.data_source or "standard").lower()
+        update_fields = payload.model_dump(exclude_unset=True) if hasattr(payload, 'model_dump') else payload.dict(exclude_unset=True)
+
         if ds == "excel":
             row = db.query(ExcelDisbursementsTotalPortCost).filter(ExcelDisbursementsTotalPortCost.id == payload.disbursement_seq).first()
             if not row:
                 raise ValueError(f"Excel disbursement record with ID {payload.disbursement_seq} not found")
-            if payload.advance_amount_remitted is not None:
+            if "advance_amount_remitted" in update_fields:
                 row.advance_amount_remitted = payload.advance_amount_remitted
-            if payload.outstanding_balance is not None:
+            if "outstanding_balance" in update_fields:
                 row.outstanding_balance = payload.outstanding_balance
-            if payload.remark is not None:
+            if "remark" in update_fields:
                 row.remark = payload.remark
             db.commit()
             db.refresh(row)
@@ -406,11 +409,11 @@ class DashboardRepository:
             row = db.query(TxnDisbursement).filter(TxnDisbursement.disbursement_seq == payload.disbursement_seq).first()
             if not row:
                 raise ValueError(f"Standard disbursement record with seq {payload.disbursement_seq} not found")
-            if payload.advance_amount_remitted is not None:
+            if "advance_amount_remitted" in update_fields:
                 row.advance_amount_remitted = payload.advance_amount_remitted
-            if payload.outstanding_balance is not None:
+            if "outstanding_balance" in update_fields:
                 row.outstanding_balance = payload.outstanding_balance
-            if payload.remark is not None:
+            if "remark" in update_fields:
                 row.remark = payload.remark
             db.commit()
             db.refresh(row)
