@@ -2,7 +2,10 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.orm import Session
 from jinja2 import Environment, FileSystemLoader
-from weasyprint import HTML, CSS
+try:
+    from weasyprint import HTML, CSS
+except Exception:
+    HTML = CSS = None
 from datetime import date, datetime
 import os
 import json

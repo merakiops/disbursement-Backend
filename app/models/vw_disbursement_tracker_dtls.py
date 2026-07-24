@@ -73,3 +73,8 @@ class DisbursementTrackerDetails(Base):
 
     manual_pda_amount=Column(String)
     manual_fda_amount=Column(String)
+
+    advance_amount_remitted = Column(Float, nullable=True)
+    outstanding_balance = Column(Float, nullable=True)
+    remark = Column(String, nullable=True)
+

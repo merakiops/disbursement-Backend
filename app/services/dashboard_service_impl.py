@@ -25,6 +25,7 @@ class DashboardServiceImpl(DashboardService):
             payload.clientId,
             from_date,
             to_date,
+            getattr(payload, 'dataSource', 'all'),
             db
         )
         

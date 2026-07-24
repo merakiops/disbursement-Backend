@@ -29,7 +29,7 @@ import logging
 from fastapi.encoders import jsonable_encoder
 from app.services.bank_details_service_impl import BankServiceImpl
 from app.dto.pda_dto import DisbursementPAFormRequestDTO,ReturnToPdaRequestDTO, ResendLink,RecordState
-from app.dto.vw_disbursement_tracker_dto import DisbursementTrackerRequestDTO,DisbursementTrackerResponseDTO,DisbursementTrackerDTO
+from app.dto.vw_disbursement_tracker_dto import DisbursementTrackerRequestDTO,DisbursementTrackerResponseDTO,DisbursementTrackerDTO,UpdateDisbursementTrackerCellDTO
 from app.services.vw_disbursement_tracker_service_impl import DisbursementListServiceImpl
 from app.dto.vw_disbursement_tracker_dtls_dto import DisbursementTrackerDetailsDTO,DisbursementdetailsTrackerResponseDTO,DisbursementTrackerDetailsDTOToExport
 from app.services.vw_disbursement_tracker_service_impl import DisbursementListServiceImpl
@@ -371,6 +371,24 @@ async def update_disbursement_details(request: Request, disbursement_data: Disbu
     message="Disbursement updated successfully"
    
     return DisbursementdetailsTrackerResponseDTO(message=message,data=None)
+
+@disbursementController.post("/api/v1/disbursement_tracker_cell_update", tags=["Disbursement"])
+@disbursementController.post("/api/v1/disbursement_tracker/update_cell", tags=["Disbursement"])
+@jwt_required
+@role_required(ALLOWED_ROLES_ADMIN_USER)
+async def update_disbursement_tracker_cell(request: Request, payload: UpdateDisbursementTrackerCellDTO, db: Session = Depends(get_db)):
+    """
+    Update advance_amount_remitted, outstanding_balance, and remark for a specific disbursement tracker row.
+    Called when any cell is edited from frontend side.
+    """
+    try:
+        disbursement_service.update_disbursement_tracker_cell(payload, db)
+        return {"status": "success", "message": "Disbursement tracker cell updated successfully"}
+    except ValueError as ve:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(ve))
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
 
 @disbursementController.post("/api/v1/export_disbursement_detail", tags=["Disbursement"], response_model=List[DisbursementTrackerDetailsDTOToExport])
 @jwt_required

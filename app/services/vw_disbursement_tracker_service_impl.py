@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
 from app.services.vw_disbursement_tracker_service import DisbursementListService
 from app.repo.vw_disbursement_tracker_repo import DisbursementRepository
-from app.dto.vw_disbursement_tracker_dto import DisbursementTrackerRequestDTO
+from app.dto.vw_disbursement_tracker_dto import DisbursementTrackerRequestDTO, UpdateDisbursementTrackerCellDTO
 from app.repo.vw_disbursement_tracker_repo import DisbursementRepository
 from app.dto.vw_disbursement_tracker_dtls_dto import DisbursementTrackerDetailsDTO
 
@@ -16,6 +16,10 @@ class DisbursementListServiceImpl(DisbursementListService):
     
     def disbursement_details_edit(self,user: str, dto: DisbursementTrackerDetailsDTO,db: Session):
         return DisbursementRepository.UpdateDisbursementDetails(user,dto,db)
+    
+    def update_disbursement_tracker_cell(self, payload: UpdateDisbursementTrackerCellDTO, db: Session):
+        return DisbursementRepository.update_disbursement_tracker_cell(payload, db)
+
     
     def get_disbursement_approval_request_client_list(self,username,disbursement_data:DisbursementTrackerRequestDTO,db:Session):
         return DisbursementRepository.get_disbursement_approval_request_client_list(username,disbursement_data, db)

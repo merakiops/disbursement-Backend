@@ -20,10 +20,53 @@ SCHEMA_NAME = os.getenv("DB_SCHEMA")
 class DashboardRepository:
     
     @staticmethod
-    def get_dashboard_summary(client_ids: List[int], from_date, to_date, db: Session):
+    def get_dashboard_summary(client_ids: List[int], from_date, to_date, data_source: Optional[str] = "all", db: Session = None):
         """
-        Get dashboard summary using the database function and combining excel_data_dev schema metrics.
+        Get dashboard summary based on client_ids and data_source.
+        Client ID 75 represents EIGER Shipping SA (mapped to excel_data_dev schema).
         """
+        is_eiger = False
+        if client_ids:
+            try:
+                is_eiger = 75 in [int(x) for x in client_ids if str(x).isdigit()]
+            except (ValueError, TypeError):
+                is_eiger = False
+
+        ds = (data_source or "all").lower()
+
+        if is_eiger or ds == "excel":
+            try:
+                with db.begin_nested():
+                    v_cnt = db.query(func.count(func.distinct(ExcelVessel.vessel_name))).scalar() or 0
+                    c_cnt = db.query(func.count(func.distinct(ExcelCountry.country_name))).scalar() or 0
+                    p_cnt = db.query(func.count(func.distinct(ExcelPort.port_name))).scalar() or 0
+                    tot_fda = db.query(func.count(ExcelDisbursementsTotalPortCost.id)).scalar() or 0
+                    tot_amt = db.query(func.sum(ExcelDisbursementsTotalPortCost.final_amt)).scalar() or 0.0
+                    return {
+                        "countries": c_cnt,
+                        "ports": p_cnt,
+                        "vessels": v_cnt,
+                        "total_pda": 0,
+                        "completed_pda": 0,
+                        "under_process_pda": 0,
+                        "total_fda": tot_fda,
+                        "completed_fda": tot_fda,
+                        "under_process_fda": 0,
+                        "yet_to_process": 0,
+                        "pdasavings": 0.0,
+                        "fdasavings": 0.0,
+                        "overallsavingsamount": 0.0,
+                        "fda_total_amount": float(tot_amt),
+                        "percentage_savings": 0.0,
+                        "percentage_savings_fda": 0.0,
+                        "percentage_savings_pda": 0.0,
+                        "pda_total_amount": 0.0,
+                        "pda_completed_no_fda": 0
+                    }
+            except Exception:
+                db.rollback()
+                return {}
+
         query = text(f"""
             SELECT *
             FROM {SCHEMA_NAME}.fn_dashboard_summary(:client_ids, :from_date, :to_date)
@@ -40,7 +83,10 @@ class DashboardRepository:
         
         summary_dict = dict(result) if result else {}
 
-        # Aggregate metrics from excel_data_dev tables safely using savepoint
+        if ds == "standard" or (client_ids and not is_eiger):
+            return summary_dict
+
+        # If data_source is 'all' and no client specified, aggregate metrics from excel_data_dev tables safely
         try:
             with db.begin_nested():
                 excel_vessels_count = db.query(func.count(func.distinct(ExcelVessel.vessel_name))).scalar() or 0
@@ -102,6 +148,22 @@ class DashboardRepository:
         is_all_records = data_request.pageSize <= 0 or data_request.pageSize == -1
         if not is_all_records and (data_request.page < 1 or data_request.pageSize < 1):
             raise ValueError("Page number and page size must be greater than 0")
+
+        has_eiger = False
+        has_other = False
+        if data_request.clientId:
+            for cid in data_request.clientId:
+                if str(cid) == "75":
+                    has_eiger = True
+                else:
+                    has_other = True
+
+        if has_eiger and not has_other:
+            ds = "excel"
+        elif has_other and not has_eiger:
+            ds = "standard"
+        else:
+            ds = (getattr(data_request, 'dataSource', None) or getattr(data_request, 'data_source', None) or "all").lower()
 
         offset = 0 if is_all_records else (data_request.page - 1) * data_request.pageSize
         params = {}
@@ -494,13 +556,42 @@ class DashboardRepository:
             func.max(VwFdaProcessingDetails.rgrt).label('max_rgrt')
         ).filter(VwFdaProcessingDetails.rgrt.isnot(None)).first()
         
-        # Get client details (id and name) from the MaCompany table
+        # Get client details (id and name) from the MaCompany table (company_type_id = 2 is Client)
         clients_result = db.query(MaCompany.company_id, MaCompany.company_name).filter(
-            MaCompany.company_id.in_(client_ids),
+            MaCompany.company_type_id == 2,
             MaCompany.status == 'Y'
         ).order_by(MaCompany.company_name).all()
         
         clients_list = [{"id": c[0], "name": c[1]} for c in clients_result] if clients_result else []
+
+        if client_id == 75 or (data_source and data_source.lower() == "excel"):
+            try:
+                with db.begin_nested():
+                    vessel_names = sorted([v[0] for v in db.query(ExcelVessel.vessel_name).distinct().all() if v[0]])
+                    country_names = sorted([c[0] for c in db.query(ExcelCountry.country_name).distinct().all() if c[0]])
+                    port_names = sorted([p[0] for p in db.query(ExcelPort.port_name).distinct().all() if p[0]])
+                    
+                    grt_stats = db.query(
+                        func.min(ExcelDisbursementsTotalPortCost.grt).label('min_grt'),
+                        func.max(ExcelDisbursementsTotalPortCost.grt).label('max_grt')
+                    ).filter(ExcelDisbursementsTotalPortCost.grt.isnot(None)).first()
+
+                    return {
+                        "clients": clients_list,
+                        "vessel_name": vessel_names,
+                        "country_name": country_names,
+                        "port_name": port_names,
+                        "loa": None,
+                        "nrt": None,
+                        "grt": {"min_value": float(grt_stats.min_grt), "max_value": float(grt_stats.max_grt)} if grt_stats and grt_stats.min_grt is not None else None,
+                        "rgrt": None,
+                        "vessel_type": distinct_vessel_types,
+                        "agent": distinct_agents,
+                        "cargo_grade": distinct_cargo_grades,
+                        "counterparty_short_name": distinct_counterparties
+                    }
+            except Exception:
+                db.rollback()
         
         filter_data = {
             "clients": clients_list,

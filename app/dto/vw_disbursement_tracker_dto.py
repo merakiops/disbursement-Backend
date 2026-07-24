@@ -44,11 +44,21 @@ class DisbursementTrackerDTO(BaseModel):
     manual_fda_amount:Optional[str]=None
     manual_pda_amount:Optional[str]=None
     loss_prevented_reason:Optional[str]=None
+    advance_amount_remitted:Optional[float]=None
+    outstanding_balance:Optional[float]=None
+    remark:Optional[str]=None
 
 
     model_config = {
         "from_attributes": True
     }
+
+class UpdateDisbursementTrackerCellDTO(BaseModel):
+    disbursement_seq: int
+    advance_amount_remitted: Optional[float] = None
+    outstanding_balance: Optional[float] = None
+    remark: Optional[str] = None
+
 
 class FromToObj(BaseModel):
     from_date: Optional[date] = None

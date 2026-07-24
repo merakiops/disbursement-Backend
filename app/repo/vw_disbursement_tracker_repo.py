@@ -2,7 +2,7 @@ from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import or_, and_,select,desc
 from sqlalchemy.sql import func
 from datetime import datetime, time, date
-from app.dto.vw_disbursement_tracker_dto import DisbursementTrackerRequestDTO
+from app.dto.vw_disbursement_tracker_dto import DisbursementTrackerRequestDTO, UpdateDisbursementTrackerCellDTO
 from app.models.vw_disbursement_tracker import DisbursementTracker
 from app.dto.vw_disbursement_tracker_dtls_dto import DisbursementTrackerDetailsDTO
 from app.models.vw_disbursement_tracker_dtls import DisbursementTrackerDetails
@@ -421,7 +421,7 @@ class DisbursementRepository:
             'sm_estimated_amount', 'sm_detailed_entry',
             'sm_ws_chart_ac', 'towage_agency_agrement', 'owners_item_rejected',
             'loss_prevention_pda', 'loss_prevention_fda', 'total_loss_prevented',
-            'loss_prevented_reason'
+            'loss_prevented_reason', 'advance_amount_remitted', 'outstanding_balance', 'remark'
         ]
         for field in disbursement_fields:
             value = getattr(disbursement_data, field, None)
@@ -443,6 +443,30 @@ class DisbursementRepository:
         db.refresh(disbursement)
 
         return disbursement
+
+    @staticmethod
+    def update_disbursement_tracker_cell(payload: UpdateDisbursementTrackerCellDTO, db: Session):
+        """
+        Update advance_amount_remitted, outstanding_balance, and remark for a specific disbursement tracker row.
+        Supports setting values or setting them to null.
+        """
+        row = db.query(TxnDisbursement).filter(TxnDisbursement.disbursement_seq == payload.disbursement_seq).first()
+        if not row:
+            raise ValueError(f"Disbursement record with seq {payload.disbursement_seq} not found")
+
+        update_fields = payload.model_dump(exclude_unset=True) if hasattr(payload, 'model_dump') else payload.dict(exclude_unset=True)
+
+        if "advance_amount_remitted" in update_fields:
+            row.advance_amount_remitted = payload.advance_amount_remitted
+        if "outstanding_balance" in update_fields:
+            row.outstanding_balance = payload.outstanding_balance
+        if "remark" in update_fields:
+            row.remark = payload.remark
+
+        db.commit()
+        db.refresh(row)
+        return row
+
 
 
     @staticmethod

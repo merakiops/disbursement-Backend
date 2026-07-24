@@ -69,6 +69,10 @@ class DisbursementTrackerDetailsDTO(BaseModel):
     manual_pda_amount:Optional[str] =None
     manual_fda_amount:Optional[str]=None
 
+    advance_amount_remitted: Optional[float] = None
+    outstanding_balance: Optional[float] = None
+    remark: Optional[str] = None
+
     model_config = {
         "from_attributes": True
     }
@@ -173,7 +177,12 @@ class DisbursementTrackerDetailsDTOToExport(BaseModel):
     due_flag : Optional[str]
     due_color: Optional[str]
 
+    advance_amount_remitted: Optional[float] = None
+    outstanding_balance: Optional[float] = None
+    remark: Optional[str] = None
+
 
     model_config = {
         "from_attributes": True
     }
+

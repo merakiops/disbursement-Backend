@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from sqlalchemy.orm import Session
-from app.dto.vw_disbursement_tracker_dto import DisbursementTrackerRequestDTO
+from app.dto.vw_disbursement_tracker_dto import DisbursementTrackerRequestDTO, UpdateDisbursementTrackerCellDTO
 from app.dto.vw_disbursement_tracker_dtls_dto import DisbursementTrackerDetailsDTO
 
 
@@ -18,6 +18,10 @@ class DisbursementListService(ABC):
     def disbursement_details_edit(self, user: str, dto: DisbursementTrackerDetailsDTO,db: Session):
         pass
     
+    @abstractmethod
+    def update_disbursement_tracker_cell(self, payload: UpdateDisbursementTrackerCellDTO, db: Session):
+        pass
+
     @abstractmethod
     def get_disbursement_client_list(self,username:str,dto:DisbursementTrackerRequestDTO,db:Session):
         pass
