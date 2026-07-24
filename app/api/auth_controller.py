@@ -226,10 +226,13 @@ def get_current_user_details(request: Request, db: Session = Depends(get_db)):
         
         return {
             "valid": "success",
-            "name": user.get("sub") or user.get("name"),
+            "name": user.get("sub") or user.get("name") or user.get("username"),
             "username": user.get("username"),
             "role_name": user.get("role_name"),
-            "role_id": user.get("roleId")
+            "role_id": user.get("roleId"),
+            "company_id": user.get("company"),
+            "client_id": user.get("company"),
+            "user_id": user.get("user_id")
         }
     except AttributeError:
         raise HTTPException(
