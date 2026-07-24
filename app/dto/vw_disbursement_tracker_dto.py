@@ -55,6 +55,7 @@ class DisbursementTrackerDTO(BaseModel):
 
 class UpdateDisbursementTrackerCellDTO(BaseModel):
     disbursement_seq: int
+    data_source: Optional[str] = "standard"
     advance_amount_remitted: Optional[float] = None
     outstanding_balance: Optional[float] = None
     remark: Optional[str] = None

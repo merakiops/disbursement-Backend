@@ -180,15 +180,13 @@ class PortAgentRepository:
                     detail=f"Port Agent '{port_data.company_name}' already exists."
                 )
 
-            user = db.query(User).filter(User.username == username).first()
-            if not user:
-                raise HTTPException(status_code=404, detail="User not found.")
+            user = db.query(User).filter(func.lower(User.username) == username.lower()).first()
+            app_owning_company_id = 1
+            if user and user.companyid:
+                user_company = db.query(MaCompany).filter(MaCompany.company_id == user.companyid).first()
+                if user_company:
+                    app_owning_company_id = user_company.app_owning_company_id or user_company.company_id or 1
 
-            user_company = db.query(MaCompany).filter(MaCompany.company_id == user.companyid).first()
-            if not user_company:
-                raise HTTPException(status_code=404, detail="User's company not found.")
-
-            app_owning_company_id = user_company.app_owning_company_id
 
             company_type = db.query(MaCompanyType).filter(
                 MaCompanyType.company_type_name == "Port Agent"

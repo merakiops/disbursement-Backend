@@ -447,12 +447,19 @@ class DisbursementRepository:
     @staticmethod
     def update_disbursement_tracker_cell(payload: UpdateDisbursementTrackerCellDTO, db: Session):
         """
-        Update advance_amount_remitted, outstanding_balance, and remark for a specific disbursement tracker row.
+        Update advance_amount_remitted, outstanding_balance, and remark for a specific disbursement tracker row (standard or excel schema).
         Supports setting values or setting them to null.
         """
-        row = db.query(TxnDisbursement).filter(TxnDisbursement.disbursement_seq == payload.disbursement_seq).first()
-        if not row:
-            raise ValueError(f"Disbursement record with seq {payload.disbursement_seq} not found")
+        ds = (getattr(payload, 'data_source', None) or "standard").lower()
+        if ds == "excel":
+            from app.models.excel_disbursements import ExcelDisbursementsTotalPortCost
+            row = db.query(ExcelDisbursementsTotalPortCost).filter(ExcelDisbursementsTotalPortCost.id == payload.disbursement_seq).first()
+            if not row:
+                raise ValueError(f"Excel disbursement record with ID {payload.disbursement_seq} not found")
+        else:
+            row = db.query(TxnDisbursement).filter(TxnDisbursement.disbursement_seq == payload.disbursement_seq).first()
+            if not row:
+                raise ValueError(f"Disbursement record with seq {payload.disbursement_seq} not found")
 
         update_fields = payload.model_dump(exclude_unset=True) if hasattr(payload, 'model_dump') else payload.dict(exclude_unset=True)
 

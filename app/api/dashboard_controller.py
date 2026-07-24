@@ -3,7 +3,7 @@ from fastapi.responses import Response
 from sqlalchemy.orm import Session
 from app.db import get_db
 from app.core.decorators import jwt_required
-from app.dto.dashboard_dto import DashboardRequestDTO, DashboardDataRequest, UpdateDashboardRowDTO
+from app.dto.dashboard_dto import DashboardRequestDTO, DashboardDataRequest
 from app.dto.dasboard_response_dto import (
     DashboardResponseDTO, FdaProcessingDetailsResponseDTO, FilterDataDTO, FilterDataRequestDTO
 )
@@ -123,17 +123,3 @@ async def get_dashboard_filter_data(request: Request, filter_request: FilterData
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
-
-@DashboardController.post("/api/v1/dashboard-table/update-row")
-@jwt_required
-async def update_dashboard_row(request: Request, payload: UpdateDashboardRowDTO, db: Session = Depends(get_db)):
-    """
-    Update advance_amount_remitted, outstanding_balance, and remark for a specific dashboard row.
-    """
-    try:
-        dashboard_service.update_dashboard_row(payload, db)
-        return {"status": "success", "message": "Dashboard row updated successfully"}
-    except ValueError as ve:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(ve))
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
