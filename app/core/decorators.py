@@ -78,6 +78,31 @@ def jwt_required(f):
             elif "username" in decoded and "user" not in decoded:
                 decoded["user"] = decoded["username"]
                 
+            raw_username = decoded.get("username")
+            username_db_map = {
+                "meraki": "admin",
+                "meraki-operations": "admin",
+                "meraki_superadmin": "admin",
+                "meraki_admin": "admin",
+                "elite": "Elite Tankship",
+                "emzoil": "EMZOIL FZCO",
+                "eiger": "ExternalUser",
+                "client": "ExternalUser",
+            }
+            lookup_username = username_db_map.get(raw_username.lower() if raw_username else "", raw_username)
+
+            if lookup_username:
+                from app.models.user import User
+                from sqlalchemy import func
+                db_user = db.query(User).filter(func.lower(User.username) == lookup_username.lower()).first()
+                if db_user:
+                    decoded["user_id"] = db_user.userid
+                    decoded["company"] = db_user.companyid
+                    decoded["roleId"] = db_user.roleid
+                    decoded["role_name"] = db_user.roles.role_name if db_user.roles else ("Admin" if db_user.roleid == 1 else ("User" if db_user.roleid == 2 else "Client"))
+                    decoded["username"] = db_user.username
+                    decoded["useremail"] = db_user.email or ""
+            print("decoded ====== >", decoded)
             if "company" not in decoded:
                 decoded["company"] = 13  # Default fallback company ID
             if "user_id" not in decoded:
@@ -88,7 +113,7 @@ def jwt_required(f):
                 decoded["roleId"] = 1
             if "role_name" not in decoded:
                 decoded["role_name"] = "Admin"
-
+            print("decoded ====== >", decoded)
         request.state.user = decoded
         request.state.token_verified = True
         
