@@ -59,6 +59,11 @@ ALLOWED_ROLES_PORT_AGENT = [
 ALLOWED_ROLES_CLIENT = [
     {"id": 3, "name": "Client"}
 ]
+ALLOWED_ROLES_ALL = [
+    {"id": 1, "name": "Admin"},
+    {"id": 2, "name": "User"},
+    {"id": 3, "name": "Client"}
+]
 pda_service = PDAServiceImpl()
 company_service = CompanyServiceImpl()
 bank_service = BankServiceImpl()
@@ -337,7 +342,7 @@ async def disbursement_details(request: Request, background_tasks: BackgroundTas
 
 @disbursementController.post("/api/v1/disbursement_tracker",tags=["Disbursement"],response_model=DisbursementTrackerResponseDTO,status_code=status.HTTP_200_OK)
 @jwt_required
-@role_required(ALLOWED_ROLES_ADMIN_USER)
+@role_required(ALLOWED_ROLES_ALL)
 async def get_disbursement_list(request: Request,request_dto: DisbursementTrackerRequestDTO,db: Session = Depends(get_db)):
     """
     Get paginated and optionally filtered list of disbursement via POST request.
