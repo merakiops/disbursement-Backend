@@ -63,16 +63,24 @@ class DashboardServiceImpl(DashboardService):
             fda=fda_progress
         )
         
-        savings = SavingsDTO(
-            savingsPercentage=float(result.get("percentage_savings") or 0.0),
-            overallSavingsAmount=float(result.get("overallsavingsamount") or 0.0),
-            pdaSavings=float(result.get("pdasavings") or 0.0),
-            fdaSavings=float(result.get("fdasavings") or 0.0),
-            percentage_savings_fda=float(result.get("percentage_savings_fda") or 0.0),
-            percentage_savings_pda=float(result.get("percentage_savings_pda") or 0.0),
-            pda_total_amount=float(result.get("pda_total_amount") or 0.0),
-            fda_total_amount=float(result.get("fda_total_amount") or 0.0),
+        pda_savings = round(float(result.get("pdasavings") or 0.0), 2)
+        fda_savings = round(float(result.get("fdasavings") or 0.0), 2)
+        pda_total = round(float(result.get("pda_total_amount") or 0.0), 2)
+        fda_total = round(float(result.get("fda_total_amount") or 0.0), 2)
+        overall_savings = round(float(result.get("overallsavingsamount") or 0.0), 2)
 
+        pct_pda = round((pda_savings * 100.0 / pda_total), 2) if pda_total > 0 else 0.0
+        pct_fda = round((fda_savings * 100.0 / fda_total), 2) if fda_total > 0 else 0.0
+
+        savings = SavingsDTO(
+            savingsPercentage=round(float(result.get("percentage_savings") or 0.0), 2),
+            overallSavingsAmount=overall_savings,
+            pdaSavings=pda_savings,
+            fdaSavings=fda_savings,
+            percentage_savings_fda=pct_fda,
+            percentage_savings_pda=pct_pda,
+            pda_total_amount=pda_total,
+            fda_total_amount=fda_total,
         )
         
         overall_summary = OverallSummaryDTO(

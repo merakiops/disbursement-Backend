@@ -106,6 +106,13 @@ class DashboardRepository:
                     summary_dict["completed_fda"] = (summary_dict.get("completed_fda") or 0) + excel_records_count
                 if excel_total_cost and "fda_total_amount" in summary_dict:
                     summary_dict["fda_total_amount"] = float(summary_dict.get("fda_total_amount") or 0.0) + float(excel_total_cost)
+
+                pda_sav = float(summary_dict.get("pdasavings") or 0.0)
+                fda_sav = float(summary_dict.get("fdasavings") or 0.0)
+                pda_tot = float(summary_dict.get("pda_total_amount") or 0.0)
+                fda_tot = float(summary_dict.get("fda_total_amount") or 0.0)
+                summary_dict["percentage_savings_pda"] = round((pda_sav * 100.0 / pda_tot), 2) if pda_tot > 0 else 0.0
+                summary_dict["percentage_savings_fda"] = round((fda_sav * 100.0 / fda_tot), 2) if fda_tot > 0 else 0.0
         except Exception:
             db.rollback()
 
