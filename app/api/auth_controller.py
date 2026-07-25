@@ -226,7 +226,7 @@ def get_current_user_details(request: Request, db: Session = Depends(get_db)):
         
         return {
             "valid": "success",
-            "name": user.get("sub") or user.get("name") or user.get("username"),
+            "name":user.get("name"),
             "username": user.get("username"),
             "role_name": user.get("role_name"),
             "role_id": user.get("roleId"),
