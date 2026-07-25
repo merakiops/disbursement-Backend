@@ -175,6 +175,7 @@ class DashboardServiceImpl(DashboardService):
                 "sno": idx,
                 "disbursement_seq": get_val(r, 'disbursement_seq'),
                 "date": etd_str,
+                "vessel": vessel_name.upper() if vessel_name else "",
                 "country": country_name.upper(),
                 "port": port_name.upper(),
                 "loa": float(loa_val) if loa_val is not None else None,
@@ -206,8 +207,6 @@ class DashboardServiceImpl(DashboardService):
                 "remark": get_val(r, 'remark'),
                 "data_source": get_val(r, 'data_source', 'standard'),
             }
-            if not is_client:
-                row_data["vessel"] = vessel_name.upper()
             table_data.append(row_data)
             
 

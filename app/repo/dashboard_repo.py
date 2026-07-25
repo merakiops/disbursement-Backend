@@ -263,6 +263,8 @@ class DashboardRepository:
                AND (fda.state IS NULL OR fda.state <> 'D')
             LEFT JOIN {SCHEMA_NAME}.txn_pda_vessel_details vsl 
                 ON td.pda_vsl_id = vsl.pda_vsl_id
+            LEFT JOIN {SCHEMA_NAME}.ma_vessels vessel 
+                ON vsl.ma_vsl_id = vessel.vsl_id
             LEFT JOIN {SCHEMA_NAME}.ma_country country 
                 ON td.country_id = country.country_id
             LEFT JOIN {SCHEMA_NAME}.ma_port port 
@@ -280,8 +282,14 @@ class DashboardRepository:
                 COALESCE(fda.fda_etd, pda.pda_etd) AS etd,
                 COALESCE(
                     vsl.fda_vsl_dtls ->> 'name',
-                    vsl.vsl_dtls ->> 'name'
+                    vsl.vsl_dtls ->> 'name',
+                    vessel.name
                 ) AS vessel_name,
+                COALESCE(
+                    vsl.fda_vsl_dtls ->> 'imo_number',
+                    vsl.vsl_dtls ->> 'imo_number',
+                    vessel.imo_number
+                ) AS imo_no,
                 td.country_id,
                 country.name AS country_name,
                 td.port_id,
