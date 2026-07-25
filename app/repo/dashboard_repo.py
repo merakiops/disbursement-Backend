@@ -428,6 +428,9 @@ class DashboardRepository:
                         excel_records.append(map_excel_row(r))
                     return excel_records, excel_count
 
+                if ds == "standard":
+                    return standard_records, standard_count
+
                 # Otherwise (for 'all'), fetch page records
                 if is_all_records:
                     excel_fetched = q.order_by(desc(ExcelDisbursementsTotalPortCost.arrival_local)).all()
