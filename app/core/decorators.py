@@ -102,6 +102,7 @@ def jwt_required(f):
                     decoded["role_name"] = db_user.roles.role_name if db_user.roles else ("Admin" if db_user.roleid == 1 else ("User" if db_user.roleid == 2 else "Client"))
                     decoded["username"] = db_user.username
                     decoded["useremail"] = db_user.email or ""
+                    decoded["name"] = db_user.name
             print("decoded ====== >", decoded)
             if "company" not in decoded:
                 decoded["company"] = 13  # Default fallback company ID
