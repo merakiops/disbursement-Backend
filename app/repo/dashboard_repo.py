@@ -111,8 +111,18 @@ class DashboardRepository:
                 fda_sav = float(summary_dict.get("fdasavings") or 0.0)
                 pda_tot = float(summary_dict.get("pda_total_amount") or 0.0)
                 fda_tot = float(summary_dict.get("fda_total_amount") or 0.0)
-                summary_dict["percentage_savings_pda"] = round((pda_sav * 100.0 / pda_tot), 2) if pda_tot > 0 else 0.0
-                summary_dict["percentage_savings_fda"] = round((fda_sav * 100.0 / fda_tot), 2) if fda_tot > 0 else 0.0
+
+                def calc_pct(savings, total):
+                    if not total or total <= 0:
+                        return 0.0
+                    pct = (savings * 100.0) / total
+                    val = round(pct, 2)
+                    if val == 0.0 and pct > 0:
+                        return round(pct, 4)
+                    return val
+
+                summary_dict["percentage_savings_pda"] = calc_pct(pda_sav, pda_tot)
+                summary_dict["percentage_savings_fda"] = calc_pct(fda_sav, fda_tot)
         except Exception:
             db.rollback()
 
