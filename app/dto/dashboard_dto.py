@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import Optional, List
+from typing import Optional, List, Union
 
 class FilterdateDTO(BaseModel):
     from_date : Optional[str] = None
@@ -10,7 +10,7 @@ class FilteryearDTO(BaseModel):
     to_year : Optional[str] = None
 
 class DashboardRequestDTO(BaseModel):
-    clientId: Optional[List[int]] = None
+    clientId: Optional[List[Union[int, str]]] = None
     monthRange: Optional[FilterdateDTO] = None
     yearRange : Optional[FilteryearDTO] = None
 
@@ -34,7 +34,7 @@ class TableFilterDTO(BaseModel):
 class DashboardDataRequest(BaseModel):
     page: int = 1
     pageSize: int = 10
-    clientId: Optional[List[str]] = None
+    clientId: Optional[List[Union[int, str]]] = None
     monthRange: Optional[FilterdateDTO] = None
     yearRange: Optional[FilteryearDTO] = None
     tableFilter: Optional[TableFilterDTO] = None
