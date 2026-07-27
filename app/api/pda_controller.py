@@ -379,7 +379,7 @@ async def update_disbursement_details(request: Request, disbursement_data: Disbu
 
 @disbursementController.post("/api/v1/dashboard-table/update-row", tags=["Disbursement"])
 @jwt_required
-@role_required(ALLOWED_ROLES_ADMIN_USER)
+@role_required(ALLOWED_ROLES_ALL)
 async def update_disbursement_tracker_cell(request: Request, payload: UpdateDisbursementTrackerCellDTO, db: Session = Depends(get_db)):
     """
     Update advance_amount_remitted, outstanding_balance, and remark for a specific disbursement tracker row.
