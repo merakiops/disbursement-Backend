@@ -323,14 +323,14 @@ class DashboardRepository:
                     WHEN (upper(fda.fda_currency_from) = 'USD') THEN (((fda.portagent_fda_data -> 'services') ->> 'grand_total'))::double precision
                     WHEN (upper(fda.fda_currency_to) = 'USD') THEN (round(((((fda.portagent_fda_data -> 'services') ->> 'grand_total'))::numeric * fda.fda_roe::numeric), 2))::double precision
                     WHEN (upper(fda.pmt_curr_to) = 'USD') THEN fda.portagent_fda_amount
-                    ELSE NULL::double precision
+                    ELSE COALESCE(fda.portagent_fda_amount, fda.fda_amount)
                 END AS fda_amount,
                 CASE
                     WHEN pda.disbursement_seq IS NULL THEN NULL::double precision
                     WHEN (upper(pda.pda_currency_from) = 'USD') THEN (((pda.portagent_pda_data -> 'services') ->> 'grand_total'))::double precision
                     WHEN (upper(pda.pda_currency_to) = 'USD') THEN (round(((((pda.portagent_pda_data -> 'services') ->> 'grand_total'))::numeric * pda.pda_roe::numeric), 2))::double precision
                     WHEN (upper(pda.pmt_curr_to) = 'USD') THEN pda.portagent_pda_amount
-                    ELSE NULL::double precision
+                    ELSE pda.portagent_pda_amount
                 END AS pda_amount,
                 CASE
                     WHEN fda.disbursement_seq IS NULL THEN NULL::text
