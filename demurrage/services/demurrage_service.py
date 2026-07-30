@@ -27,6 +27,7 @@ class DemurrageService:
             voyage_data = payload.voyage
             db_voyage = Voyage(
                 vessel=voyage_data.vessel,
+                vessel_imo=voyage_data.vessel_imo,
                 voyage_no=voyage_data.voyage_no,
                 charterparty_terms=voyage_data.charterparty_terms,
 

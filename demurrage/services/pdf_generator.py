@@ -35,7 +35,7 @@ def generate_demurrage_pdf(voyage: Voyage) -> io.BytesIO:
     C_DOT     = colors.HexColor('#1E3A58')
 
     HEADER_H = 4.5 * cm
-    PANEL_W  = 6.8 * cm
+    PANEL_W  = 8.2 * cm
 
     # ── Dynamic Context & Data mapping ─────────────────────────────────
     COMPANY       = ""
@@ -207,22 +207,25 @@ def generate_demurrage_pdf(voyage: Voyage) -> io.BytesIO:
         canvas.rect(1.8 * cm, H - 2.25 * cm, title_width, 2, fill=1, stroke=0)
 
         # Right panel text
-        px = W - PANEL_W + 0.40 * cm
-        canvas.setFont('Helvetica-Bold', 10)
+        px = W - PANEL_W + 0.35 * cm
+        canvas.setFont('Helvetica-Bold', 9)
         canvas.setFillColor(C_GOLD)
         vessel_display = f"Vessel: {VESSEL_CAPS}"
+        if getattr(voyage, 'vessel_imo', None):
+            vessel_display += f" (IMO: {voyage.vessel_imo})"
+        canvas.drawString(px, H - 1.30 * cm, vessel_display)
+
         if voyage.voyage_no:
-            vessel_display += f"  |  Voy: {voyage.voyage_no}"
-        canvas.drawString(px, H - 1.60 * cm, vessel_display)
+            canvas.drawString(px, H - 1.90 * cm, f"Voy No: {voyage.voyage_no}")
 
         canvas.setStrokeColor(C_GDIM)
         canvas.setLineWidth(0.5)
-        canvas.line(px, H - 2.15 * cm, W - 0.5 * cm, H - 2.15 * cm)
+        canvas.line(px, H - 2.50 * cm, W - 0.4 * cm, H - 2.50 * cm)
 
         if CLIENT:
-            canvas.setFont('Helvetica-Bold', 10)
+            canvas.setFont('Helvetica-Bold', 9)
             canvas.setFillColor(C_WHITE)
-            canvas.drawString(px, H - 2.60 * cm, f"Client: {CLIENT}")
+            canvas.drawString(px, H - 3.10 * cm, f"Client: {CLIENT}")
 
         # Left sidebar
         canvas.setFillColor(C_NAVY)

@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field, model_validator
 
 class VoyageCreateSchema(BaseModel):
     vessel: str = Field(..., min_length=1, description="Vessel is mandatory")
+    vessel_imo: Optional[str] = Field(default=None, description="Vessel IMO Number")
     voyage_no: Optional[str] = None
     charterparty_terms: Optional[str] = Field(default="", description="Charterparty Terms")
 
@@ -88,3 +89,22 @@ class DemurrageCaseCreateSchema(BaseModel):
     load_deductions: List[DeductionEventCreateSchema] = Field(default_factory=list)
     discharge_port: PortOperationCreateSchema
     discharge_deductions: List[DeductionEventCreateSchema] = Field(default_factory=list)
+
+    @model_validator(mode='before')
+    @classmethod
+    def filter_empty_deductions(cls, data):
+        if isinstance(data, dict):
+            for field in ['load_deductions', 'discharge_deductions']:
+                if field in data and isinstance(data[field], list):
+                    cleaned = []
+                    for item in data[field]:
+                        if isinstance(item, dict):
+                            # Skip dummy/empty objects where event_name and start_time/end_time are empty
+                            ev = item.get('event_name') or ''
+                            st = item.get('start_time') or ''
+                            et = item.get('end_time') or ''
+                            if not ev.strip() and not st.strip() and not et.strip():
+                                continue
+                        cleaned.append(item)
+                    data[field] = cleaned
+        return data

@@ -13,6 +13,7 @@ from fastapi import HTTPException
 from typing import Union,List, Optional, Dict
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from email.mime.application import MIMEApplication
 from jinja2 import Template
 import logging
 # Load environment variables
@@ -197,3 +198,52 @@ class SendMail:
         except Exception as e:
             print(f"Email sending failed: {e}")  # Print error for debugging
             raise HTTPException(status_code=500, detail=f"Failed to send email")
+
+    @staticmethod
+    def send_email_with_pdf(
+        to_email: Union[str, list],
+        subject: str,
+        html_body: str,
+        pdf_bytes: Optional[bytes] = None,
+        pdf_filename: str = "FDA_Report.pdf",
+        cc_email: Optional[Union[str, list]] = None
+    ):
+        """
+        Sends an HTML email with optional PDF attachment.
+        """
+        try:
+            if isinstance(to_email, str):
+                to_email = [e.strip() for e in to_email.split(",") if e.strip()]
+            if isinstance(cc_email, str):
+                cc_email = [e.strip() for e in cc_email.split(",") if e.strip()]
+            elif cc_email is None:
+                cc_email = []
+
+            recipients = to_email + cc_email
+
+            msg = MIMEMultipart()
+            msg["From"] = EMAIL_ADDRESS
+            msg["To"] = ", ".join(to_email)
+            if cc_email:
+                msg["Cc"] = ", ".join(cc_email)
+            msg["Subject"] = subject
+
+            # Attach HTML Body
+            msg.attach(MIMEText(html_body, "html"))
+
+            # Attach PDF if provided
+            if pdf_bytes:
+                part = MIMEApplication(pdf_bytes, Name=pdf_filename)
+                part['Content-Disposition'] = f'attachment; filename="{pdf_filename}"'
+                msg.attach(part)
+
+            # Send email via SMTP
+            with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
+                server.starttls()
+                server.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
+                server.sendmail(EMAIL_ADDRESS, recipients, msg.as_string())
+
+            print(f"FDA Email sent with PDF attachment to {', '.join(to_email)}")
+        except Exception as e:
+            logging.error("Failed to send email with PDF", exc_info=True)
+            raise HTTPException(status_code=500, detail=f"Failed to send email: {str(e)}")

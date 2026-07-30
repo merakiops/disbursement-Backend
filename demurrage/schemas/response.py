@@ -56,6 +56,7 @@ class VoyageResponseSchema(BaseModel):
 
     id: int
     vessel: str
+    vessel_imo: Optional[str] = None
     voyage_no: Optional[str] = None
     charterparty_terms: Optional[str] = None
 

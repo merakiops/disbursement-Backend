@@ -15,6 +15,7 @@ class Voyage(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True, index=True)
     voyage_no = Column(String(100), nullable=True)
+    vessel_imo = Column(String(100), nullable=True)
     vessel = Column(String(100), nullable=False)
 
     charterparty_terms = Column(String(255), nullable=True)  # Made nullable to allow empty/None inputs
