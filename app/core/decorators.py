@@ -134,7 +134,6 @@ def jwt_required(f):
             "meraki_superadmin": "ALL",
             "meraki_admin": "ALL",
             "eiger": "Eiger",
-            "client": "Eiger",
             "elite": "ELITE TANKSHIP DMCC",
             "bunge": "BUNGE",
             "bunge_peiq": "BUNGE",

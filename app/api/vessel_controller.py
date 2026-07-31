@@ -91,20 +91,19 @@ async def get_vessels_by_assignment_status_for_company(request: Request, request
         )
 
 
-    result = {}
     result = vessel_service.get_vessels_by_assignment_status_for_company(company_id, db)
-    if "active_vessels_list" in requested_fields:
-        return{
-            "active_vessels_list": [VesselCreateUpdateDTO.model_validate(v) for v in result.get("assigned_vessels", [])],            
-        }
-    elif "assigned_unassigned" in requested_fields:
+    assigned_dtos = [VesselCreateUpdateDTO.model_validate(v) for v in result.get("assigned_vessels", [])]
+    unassigned_dtos = [VesselCreateUpdateDTO.model_validate(v) for v in result.get("unassigned_vessels", [])]
+
+    if "active_vessels_list" in requested_fields and "assigned_unassigned" not in requested_fields:
         return {
-            "assigned_vessels": [VesselCreateUpdateDTO.model_validate(v) for v in result.get("assigned_vessels", [])],
-            "unassigned_vessels": [VesselCreateUpdateDTO.model_validate(v) for v in result.get("unassigned_vessels", [])]
+            "active_vessels_list": assigned_dtos
         }
     
-    return{
-            "unassigned_vessels": [VesselCreateUpdateDTO.model_validate(v) for v in result.get("unassigned_vessels", [])]
+    return {
+        "active_vessels_list": assigned_dtos,
+        "assigned_vessels": assigned_dtos,
+        "unassigned_vessels": unassigned_dtos
     }
 
 @vesselController.post("/api/v1/vessel-info-by-imo",response_model=GetVesselByImoNumberResponseDTO, tags=["vessel details"])

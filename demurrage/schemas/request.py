@@ -36,6 +36,10 @@ class VoyageCreateSchema(BaseModel):
                 if k in data:
                     data['voyage_no'] = data[k]
                     break
+            
+            for date_field in ['bl_date', 'cp_date', 'bl_dated', 'cp_dated']:
+                if date_field in data and (data[date_field] == "" or data[date_field] is None):
+                    data[date_field] = None
         return data
 
     @model_validator(mode='after')
