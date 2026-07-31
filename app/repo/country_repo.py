@@ -176,4 +176,15 @@ class CountryRepository:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Error fetching countries from the database."
             )
+
+    @staticmethod
+    def get_country_by_port_id(port_id: int, db: Session) -> MaCountry:
+        from app.models.ports import MaPort
+        port = db.query(MaPort).filter(MaPort.port_id == port_id).first()
+        if not port or not port.country:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Country not found for Port ID {port_id}"
+            )
+        return port.country
             

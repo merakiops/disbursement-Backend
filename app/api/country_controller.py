@@ -67,6 +67,15 @@ async def get_country_list(request: Request,request_dto:CountryListRequestDTO,db
     return response
 
 
+@countryController.get("/api/v1/country/by-port/{port_id}", response_model=CountryResponseDTO, tags=["country management"])
+def get_country_by_port(port_id: int, db: Session = Depends(get_db)):
+    """
+    Get country details based on a given port_id.
+    """
+    country = country_service.get_country_by_port_id(port_id, db)
+    return CountryResponseDTO.model_validate(country)
+
+
 # @countryController.post("/api/v1/countrylist", status_code=status.HTTP_200_OK, response_model=CountryListResponseDTO)
 # @jwt_required
 # async def get_country_list(

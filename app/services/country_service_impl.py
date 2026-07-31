@@ -29,3 +29,6 @@ class CountryServiceImpl(CountryService):
 
     def get_all_countries_in_rule(self, db):
         return CountryRepository.get_all_countries_in_rule(db)
+
+    def get_country_by_port_id(self, port_id: int, db: Session) -> MaCountry:
+        return CountryRepository.get_country_by_port_id(port_id, db)
