@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, ForeignKey, DateTime
+from sqlalchemy import Column, Integer, String, Float, ForeignKey, DateTime, JSON
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from demurrage.db import Base, DEMURRAGE_DB_SCHEMA
@@ -35,6 +35,7 @@ class Voyage(Base):
     client_name = Column(String(100), nullable=True)
     bl_date = Column(DateTime, nullable=True)
     cp_date = Column(DateTime, nullable=True)
+    report_s3_url = Column(String(500), nullable=True)
 
     @property
     def bl_dated(self):
@@ -77,6 +78,7 @@ class PortOperation(Base):
     time_used = Column(Float, nullable=False)
     gross_used_laytime = Column(Float, nullable=False)
     comments_clause = Column(String(255), nullable=True)
+    deductions_json = Column(JSON, nullable=True)
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
 

@@ -5,8 +5,8 @@ from sqlalchemy.orm import Session
 import tempfile
 import os
 from demurrage.db import get_db
-from demurrage.schemas.request import DemurrageCaseCreateSchema
-from demurrage.schemas.response import DemurrageCaseResponseSchema
+from demurrage.schemas.request import DemurrageCaseCreateSchema, StepSaveRequestSchema
+from demurrage.schemas.response import DemurrageCaseResponseSchema, DemurrageCaseListResponseSchema
 from demurrage.services.demurrage_service import DemurrageService
 from demurrage.services.pdf_generator import generate_demurrage_pdf
 from demurrage.services.timesheet_service import extract_timesheet_from_pdf
@@ -15,6 +15,37 @@ router = APIRouter(
     prefix="/api/v1/demurrage",
     tags=["Demurrage Calculator"]
 )
+
+@router.get(
+    "/list",
+    response_model=DemurrageCaseListResponseSchema,
+    summary="Get paginated list of all demurrage cases"
+)
+def get_all_demurrage_cases(
+    page: int = 1,
+    page_size: int = 10,
+    query: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    """
+    Retrieves a paginated list of all saved demurrage cases.
+    """
+    return DemurrageService.get_all_demurrage_cases(db, page=page, page_size=page_size, query=query)
+
+
+@router.post(
+    "/step-save",
+    response_model=DemurrageCaseResponseSchema,
+    summary="Save or update a demurrage case step by step"
+)
+def save_step_demurrage_case(
+    payload: StepSaveRequestSchema,
+    db: Session = Depends(get_db)
+):
+    """
+    Saves or updates a Demurrage case step by step (VOYAGE, LOAD_PORT, DISCHARGE_PORT, CALCULATE).
+    """
+    return DemurrageService.save_step_demurrage_case(db, payload)
 
 @router.post(
     "",

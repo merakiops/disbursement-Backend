@@ -87,7 +87,8 @@ def jwt_required(f):
                 "elite": "Elite Tankship",
                 "emzoil": "EMZOIL FZCO",
                 "eiger": "ExternalUser",
-                "client": "ExternalUser",
+                # "client": "ExternalUser",
+                "client": "client",
             }
             lookup_username = username_db_map.get(raw_username.lower() if raw_username else "", raw_username)
 
@@ -95,6 +96,7 @@ def jwt_required(f):
                 from app.models.user import User
                 from sqlalchemy import func
                 db_user = db.query(User).filter(func.lower(User.username) == lookup_username.lower()).first()
+                print("db_user======>",db_user)
                 if db_user:
                     decoded["user_id"] = db_user.userid
                     decoded["company"] = db_user.companyid

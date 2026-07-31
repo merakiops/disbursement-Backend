@@ -30,6 +30,7 @@ class PortOperationResponseSchema(BaseModel):
     time_used: float
     gross_used_laytime: float
     comments_clause: Optional[str] = None
+    deductions_json: Optional[list] = None
     created_at: datetime
     updated_at: datetime
     deductions: List[DeductionResponseSchema] = []
@@ -74,6 +75,7 @@ class VoyageResponseSchema(BaseModel):
     timebar_clause: Optional[str] = None
     additional_laytime: Optional[str] = None
     client_name: Optional[str] = None
+    report_s3_url: Optional[str] = None
     created_at: datetime
     updated_at: datetime
     bl_date: Optional[datetime] = None
@@ -86,8 +88,18 @@ class DemurrageCaseResponseSchema(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     voyage: VoyageResponseSchema
-    load_port: PortOperationResponseSchema
+    load_port: Optional[PortOperationResponseSchema] = None
     load_deductions: List[DeductionResponseSchema] = []
-    discharge_port: PortOperationResponseSchema
+    discharge_port: Optional[PortOperationResponseSchema] = None
     discharge_deductions: List[DeductionResponseSchema] = []
-    summary: DemurrageSummaryResponseSchema
+    summary: Optional[DemurrageSummaryResponseSchema] = None
+    report_s3_url: Optional[str] = None
+
+
+class DemurrageCaseListResponseSchema(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    total_count: int
+    page: int
+    page_size: int
+    data: List[DemurrageCaseResponseSchema]

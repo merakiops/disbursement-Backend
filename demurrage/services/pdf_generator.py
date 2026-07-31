@@ -91,7 +91,7 @@ def generate_demurrage_pdf(voyage: Voyage) -> io.BytesIO:
         ("BL Date", bl_date_str),
         ("Laycan", voyage.laycan or ""),
         ("Laycan Narrowed", laycan_narrowed_str),
-        ("Allowed Laytime (hours)", f"{voyage.allowed_laytime_hours:.2f} hrs | SHINC"),
+        ("Allowed Laytime (hours)", f"{voyage.allowed_laytime_hours:.2f} hrs"),
         ("Additional Laytime", f"{voyage.additional_laytime or '0.00'} hrs"),
         ("Demurrage Rate", f"USD {voyage.demurrage_rate_usd_per_day:,.2f} PDPR"),
         ("Address Commission", f"{voyage.address_commission_percent}%"),

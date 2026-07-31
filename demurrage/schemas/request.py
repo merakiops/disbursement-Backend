@@ -108,3 +108,31 @@ class DemurrageCaseCreateSchema(BaseModel):
                         cleaned.append(item)
                     data[field] = cleaned
         return data
+
+
+class StepSaveRequestSchema(BaseModel):
+    voyage_id: Optional[int] = None
+    step: str = Field(..., description="Step name: VOYAGE, LOAD_PORT, DISCHARGE_PORT, or CALCULATE")
+    voyage: Optional[VoyageCreateSchema] = None
+    load_port: Optional[PortOperationCreateSchema] = None
+    load_deductions: Optional[List[DeductionEventCreateSchema]] = Field(default=None)
+    discharge_port: Optional[PortOperationCreateSchema] = None
+    discharge_deductions: Optional[List[DeductionEventCreateSchema]] = Field(default=None)
+
+    @model_validator(mode='before')
+    @classmethod
+    def filter_empty_deductions(cls, data):
+        if isinstance(data, dict):
+            for field in ['load_deductions', 'discharge_deductions']:
+                if field in data and isinstance(data[field], list):
+                    cleaned = []
+                    for item in data[field]:
+                        if isinstance(item, dict):
+                            ev = item.get('event_name') or ''
+                            st = item.get('start_time') or ''
+                            et = item.get('end_time') or ''
+                            if not ev.strip() and not st.strip() and not et.strip():
+                                continue
+                        cleaned.append(item)
+                    data[field] = cleaned
+        return data

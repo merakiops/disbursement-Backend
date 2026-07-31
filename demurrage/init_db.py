@@ -39,6 +39,24 @@ def init_db():
                 logger.info("Database migration: Added vessel_imo column to voyages table successfully.")
         except Exception as e:
             logger.debug(f"Adding vessel_imo column skipped (it probably already exists): {e}")
+
+        try:
+            with engine.connect() as conn:
+                schema_prefix = f"{DEMURRAGE_DB_SCHEMA}." if DEMURRAGE_DB_SCHEMA else ""
+                conn.execute(text(f"ALTER TABLE {schema_prefix}voyages ADD COLUMN report_s3_url VARCHAR(500);"))
+                conn.commit()
+                logger.info("Database migration: Added report_s3_url column to voyages table successfully.")
+        except Exception as e:
+            logger.debug(f"Adding report_s3_url column skipped (it probably already exists): {e}")
+
+        try:
+            with engine.connect() as conn:
+                schema_prefix = f"{DEMURRAGE_DB_SCHEMA}." if DEMURRAGE_DB_SCHEMA else ""
+                conn.execute(text(f"ALTER TABLE {schema_prefix}port_operations ADD COLUMN deductions_json JSON;"))
+                conn.commit()
+                logger.info("Database migration: Added deductions_json column to port_operations table successfully.")
+        except Exception as e:
+            logger.debug(f"Adding deductions_json column skipped (it probably already exists): {e}")
     except Exception as e:
         logger.error(f"Failed to initialize demurrage database: {e}")
         raise e
