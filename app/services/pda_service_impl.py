@@ -43,7 +43,7 @@ class PDAServiceImpl(PDAService):
         self.pda_repo = PDARepository()
         self.comm_history_service = TxnCommunicationHistoryServiceImpl()
         self.host = os.getenv("HOST")
-        self.meraki_email = os.getenv("MERAKI_DISBURSEMENT_EMAIL_ADDRESS")
+        self.meraki_email = os.getenv("MERAKI_DISBURSEMENT_EMAIL_ADDRESS") if (os.getenv("MERAKI_DISBURSEMENT_EMAIL_ADDRESS") and "configured" not in os.getenv("MERAKI_DISBURSEMENT_EMAIL_ADDRESS")) else (os.getenv("SMTP_USER") or os.getenv("EMAIL_ADDRESS"))
 
     async def initiate_disbursement(self,user: str, request_data: TxnDisbursementInitiateDTo, background_tasks: BackgroundTasks,db: Session) -> TxnDisbursementDto:
         """

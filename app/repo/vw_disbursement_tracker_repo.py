@@ -5,8 +5,11 @@ from datetime import datetime, time, date
 from app.dto.vw_disbursement_tracker_dto import DisbursementTrackerRequestDTO, UpdateDisbursementTrackerCellDTO
 from app.models.vw_disbursement_tracker import DisbursementTracker
 from app.dto.vw_disbursement_tracker_dtls_dto import DisbursementTrackerDetailsDTO
+import json
 from app.models.vw_disbursement_tracker_dtls import DisbursementTrackerDetails
 from app.models.txn_disbursement import TxnDisbursement
+from app.models.txn_pda import PDAModel
+from app.models.vw_pda_report import PdaReport
 from app.models import MaCountry,MaPort,MaVessel
 from app.models.purpose import MaPurpose
 from app.models.cargo import MaCargo
@@ -361,9 +364,108 @@ class DisbursementRepository:
             
     
     @staticmethod
-    def get_disbursement_details(disbursement_seq:int, db: Session):
-        
-        base_query = db.query(DisbursementTrackerDetails).filter(disbursement_seq==DisbursementTrackerDetails.disbursement_seq).first()
+    def get_disbursement_details(disbursement_seq: int, db: Session):
+        base_query = db.query(DisbursementTrackerDetails).filter(disbursement_seq == DisbursementTrackerDetails.disbursement_seq).first()
+        if base_query:
+            pda_expenses = []
+
+            pda = db.query(PDAModel).filter(PDAModel.disbursement_seq == disbursement_seq).first()
+            disbursement = db.query(TxnDisbursement).filter(TxnDisbursement.disbursement_seq == disbursement_seq).first()
+            pda_report = db.query(PdaReport).filter(PdaReport.disbursement_seq == disbursement_seq).first()
+
+            roe = base_query.roe_agent or (pda.pda_roe if pda else None) or (pda.conversion_rate if pda else None) or (pda_report.pda_roe if pda_report else None)
+            try:
+                roe = float(roe) if roe is not None else None
+            except (ValueError, TypeError):
+                roe = None
+
+            sys_items = []
+            agent_items = []
+
+            if pda_report:
+                sys_charge = pda_report.system_service_charge
+                agent_charge = pda_report.service_charge
+
+                if isinstance(sys_charge, str):
+                    try: sys_charge = json.loads(sys_charge)
+                    except Exception: sys_charge = {}
+                if isinstance(agent_charge, str):
+                    try: agent_charge = json.loads(agent_charge)
+                    except Exception: agent_charge = {}
+
+                sys_items = sys_charge.get("items", []) if isinstance(sys_charge, dict) else []
+                agent_items = agent_charge.get("items", []) if isinstance(agent_charge, dict) else []
+
+            if not sys_items and pda and isinstance(pda.meraki_pda_data, dict):
+                sys_items = pda.meraki_pda_data.get("services", {}).get("items", [])
+                if not sys_items and "port_tariff_rule" in pda.meraki_pda_data:
+                    sys_items = pda.meraki_pda_data.get("port_tariff_rule", {}).get("items", [])
+
+            if not agent_items and pda and isinstance(pda.portagent_pda_data, dict):
+                agent_items = pda.portagent_pda_data.get("services", {}).get("items", [])
+                if not agent_items and "port_tariff_rule" in pda.portagent_pda_data:
+                    agent_items = pda.portagent_pda_data.get("port_tariff_rule", {}).get("items", [])
+
+            if not sys_items and disbursement and isinstance(disbursement.port_tariff_rule, dict):
+                sys_items = disbursement.port_tariff_rule.get("items", [])
+
+            if not agent_items and disbursement and isinstance(disbursement.port_tariff_rule, dict):
+                agent_items = disbursement.port_tariff_rule.get("items", [])
+
+            primary_items = agent_items if agent_items else sys_items
+
+            sys_item_map = {}
+            for s_item in sys_items:
+                if isinstance(s_item, dict):
+                    key = (s_item.get("service") or s_item.get("name") or "").strip().lower()
+                    if key:
+                        sys_item_map[key] = s_item
+
+            def parse_amount(val):
+                if val is None or val == "":
+                    return 0.0
+                try: return float(val)
+                except (ValueError, TypeError): return 0.0
+
+            raw_agent_sum = sum(parse_amount(item.get("total") or item.get("sub_total")) for item in primary_items if isinstance(item, dict))
+            target_amount = base_query.portagent_pda_amount or base_query.actual_pda_amount
+
+            should_apply_roe = False
+            if roe and roe > 0 and target_amount and raw_agent_sum > 0:
+                unconverted_diff = abs(raw_agent_sum - target_amount)
+                converted_diff = abs((raw_agent_sum * roe) - target_amount)
+                if converted_diff < unconverted_diff:
+                    should_apply_roe = True
+
+            for idx, item in enumerate(primary_items, start=1):
+                if not isinstance(item, dict):
+                    continue
+                s_no = item.get("SNO", idx)
+                desc = item.get("service") or item.get("name") or f"Service {s_no}"
+                key = desc.strip().lower()
+
+                a_amount = parse_amount(item.get("total") or item.get("sub_total"))
+
+                s_item = sys_item_map.get(key)
+                if not s_item and idx - 1 < len(sys_items):
+                    s_item = sys_items[idx - 1]
+
+                m_amount = 0.0
+                if isinstance(s_item, dict):
+                    m_amount = parse_amount(s_item.get("total") or s_item.get("sub_total"))
+
+                if should_apply_roe and roe:
+                    m_amount = m_amount * roe
+                    a_amount = a_amount * roe
+
+                pda_expenses.append({
+                    "S. No": s_no,
+                    "Description": desc,
+                    "Meraki Amount": round(m_amount, 2),
+                    "Agent Amount": round(a_amount, 2)
+                })
+
+            setattr(base_query, "pda_expenses", pda_expenses)
 
         return base_query
     

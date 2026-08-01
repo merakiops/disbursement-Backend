@@ -20,16 +20,23 @@ import logging
 load_dotenv()
 
 
-# Load environment variables
-SMTP_SERVER = os.getenv("SMTP_SERVER")
-SMTP_PORT = int(os.getenv("SMTP_PORT"))
+def _get_clean_env(key: str) -> Optional[str]:
+    val = os.getenv(key)
+    if not val:
+        return None
+    val = val.strip().strip('"').strip("'")
+    if "configured" in val or "app-password" in val:
+        return None
+    return val
 
+SMTP_SERVER = _get_clean_env("SMTP_HOST") or _get_clean_env("SMTP_SERVER") or "smtp.gmail.com"
+SMTP_PORT = int(_get_clean_env("SMTP_PORT") or 587)
 
+EMAIL_ADDRESS = _get_clean_env("SMTP_USER") or _get_clean_env("EMAIL_ADDRESS")
+_raw_pass = _get_clean_env("SMTP_PASS") or _get_clean_env("EMAIL_PASSWORD")
+EMAIL_PASSWORD = _raw_pass.replace(" ", "") if _raw_pass else None
 
-
-# Fetch database Email Credentials  from AWS Secret Manager or environment variables
-EMAIL_ADDRESS = os.getenv("EMAIL_ADDRESS")
-EMAIL_PASSWORD =os.getenv("EMAIL_PASSWORD")
+print(f"DEBUG SendMail Config -> SMTP_SERVER={SMTP_SERVER}, SMTP_PORT={SMTP_PORT}, EMAIL_ADDRESS={EMAIL_ADDRESS}, PASS_LEN={len(EMAIL_PASSWORD) if EMAIL_PASSWORD else 0}")
 
 # Define email templates directory
 # TEMPLATE_DIR = "email_templates"

@@ -1,10 +1,21 @@
-from pydantic import BaseModel
-from typing import Optional,List
+from pydantic import BaseModel, Field
+from typing import Optional, List, Dict, Any
 from datetime import datetime
+
+class PortExpenseItemDTO(BaseModel):
+    s_no: Optional[int] = None
+    description: Optional[str] = None
+    meraki_amount: Optional[float] = Field(default=None, serialization_alias="Meraki Amount", alias="Meraki Amount")
+    agent_amount: Optional[float] = Field(default=None, serialization_alias="Agent Amount", alias="Agent Amount")
+
+    model_config = {
+        "populate_by_name": True
+    }
 
 class DisbursementTrackerDetailsDTO(BaseModel):
     disbursement_seq: Optional[int]
     disbursement_id: Optional[str]
+    pda_expenses: Optional[List[Dict[str, Any]]] = None
 
     pic: Optional[str]
     client_name: Optional[str]

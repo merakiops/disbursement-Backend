@@ -400,7 +400,7 @@ class CargoInitateDTO(BaseModel):
 
 class TxnDisbursementInitiateDTo(BaseModel):
     comp_id:Optional[int]=None
-    client_id : int
+    client_id : Optional[int]=None
     portagent_id :int
     country_id :Optional[int]=None
     port_id :Optional[int]=None

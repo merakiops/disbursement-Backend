@@ -74,7 +74,7 @@ MERAKI_DISBURSEMENT_EMAIL_ADDRESS = os.getenv("MERAKI_DISBURSEMENT_EMAIL_ADDRESS
 
 @disbursementController.post("/api/v1/initiate_disbursement", tags=["Disbursement"],response_model=TxnDisbursementDto)
 @jwt_required
-@role_required(ALLOWED_ROLES_ADMIN_USER)
+@role_required(ALLOWED_ROLES_ALL)
 async def initiate_disbursement(request: Request, background_tasks: BackgroundTasks,request_data: TxnDisbursementInitiateDTo, db: Session = Depends(get_db)):
     
     try:
