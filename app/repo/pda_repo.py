@@ -73,6 +73,11 @@ class PDARepository:
     def initiate_disbursement(db: Session, user: str, dto: TxnDisbursementInitiateDTo) -> TxnDisbursementDto:
         PDARepository._check_duplicate_disbursement(dto, db, "PDA")
         
+        if not dto.client_id:
+            db_user = db.query(User).filter(or_(User.username == user, User.email == user)).first()
+            if db_user and db_user.companyid:
+                dto.client_id = db_user.companyid
+
         try:
                 # Generate disbursement ID and fetch status
                 disbursement_id = PDARepository._get_next_disbursement_id(db)

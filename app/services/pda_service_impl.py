@@ -42,7 +42,14 @@ class PDAServiceImpl(PDAService):
     def __init__(self):
         self.pda_repo = PDARepository()
         self.comm_history_service = TxnCommunicationHistoryServiceImpl()
-        self.host = os.getenv("HOST")
+        raw_host = os.getenv("HOST")
+        if not raw_host or "application url" in raw_host:
+            raw_host = "https://disbursementdev.merakishippingservices.com/"
+        if not raw_host.startswith("http://") and not raw_host.startswith("https://"):
+            raw_host = f"https://{raw_host}"
+        if not raw_host.endswith("/"):
+            raw_host += "/"
+        self.host = raw_host
         self.meraki_email = os.getenv("MERAKI_DISBURSEMENT_EMAIL_ADDRESS") if (os.getenv("MERAKI_DISBURSEMENT_EMAIL_ADDRESS") and "configured" not in os.getenv("MERAKI_DISBURSEMENT_EMAIL_ADDRESS")) else (os.getenv("SMTP_USER") or os.getenv("EMAIL_ADDRESS"))
 
     async def initiate_disbursement(self,user: str, request_data: TxnDisbursementInitiateDTo, background_tasks: BackgroundTasks,db: Session) -> TxnDisbursementDto:
@@ -365,7 +372,15 @@ class PDAServiceImpl(PDAService):
                     port_name = port_dtl.name
             
             # Get company names
-            client_name = company_service.get_company_name_by_id(db, disbursement.client_id)
+            client_name = company_service.get_company_name_by_id(db, disbursement.client_id) if disbursement.client_id else None
+            if not client_name:
+                created_by = getattr(disbursement, "created_by", None)
+                if created_by == "meraki":
+                    client_name = "Meraki Operations"
+                elif created_by:
+                    client_name = str(created_by).capitalize()
+                else:
+                    client_name = "Client"
             
             # Build subject
             subject_parts = [

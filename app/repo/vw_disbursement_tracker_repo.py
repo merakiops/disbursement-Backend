@@ -467,6 +467,23 @@ class DisbursementRepository:
 
             setattr(base_query, "pda_expenses", pda_expenses)
 
+            if not getattr(base_query, "client_name", None):
+                c_id = disbursement.client_id if disbursement else None
+                if not c_id and pda and isinstance(pda.meraki_pda_data, dict):
+                    c_id = pda.meraki_pda_data.get("client_id")
+                
+                if c_id:
+                    comp = db.query(MaCompany).filter(MaCompany.company_id == c_id).first()
+                    if comp and comp.company_name:
+                        setattr(base_query, "client_name", comp.company_name)
+                
+                if not getattr(base_query, "client_name", None) and disbursement and disbursement.created_by:
+                    db_user = db.query(User).filter(or_(User.username == disbursement.created_by, User.email == disbursement.created_by)).first()
+                    if db_user and db_user.companyid:
+                        comp = db.query(MaCompany).filter(MaCompany.company_id == db_user.companyid).first()
+                        if comp and comp.company_name:
+                            setattr(base_query, "client_name", comp.company_name)
+
         return base_query
     
     def UpdateDisbursementDetails(username: str, disbursement_data: DisbursementTrackerDetailsDTO, db: Session):
