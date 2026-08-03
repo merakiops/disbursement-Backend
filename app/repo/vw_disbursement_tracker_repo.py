@@ -430,6 +430,8 @@ class DisbursementRepository:
             raw_agent_sum = sum(parse_amount(item.get("total") or item.get("sub_total")) for item in primary_items if isinstance(item, dict))
             target_amount = base_query.portagent_pda_amount or base_query.actual_pda_amount
 
+            # Check if values are in local currency and need ROE conversion to USD
+            # or if USD amount field is directly present in the json item
             should_apply_roe = False
             if roe and roe > 0 and target_amount and raw_agent_sum > 0:
                 unconverted_diff = abs(raw_agent_sum - target_amount)
@@ -444,7 +446,14 @@ class DisbursementRepository:
                 desc = item.get("service") or item.get("name") or f"Service {s_no}"
                 key = desc.strip().lower()
 
-                a_amount = parse_amount(item.get("total") or item.get("sub_total"))
+                # Prefer direct USD amount if provided in item dict, else parse total/sub_total
+                a_usd = item.get("total_usd") or item.get("amount_usd") or item.get("total_in_usd")
+                if a_usd is not None and a_usd != "":
+                    a_amount = parse_amount(a_usd)
+                else:
+                    a_amount = parse_amount(item.get("total") or item.get("sub_total"))
+                    if should_apply_roe and roe:
+                        a_amount = a_amount * roe
 
                 s_item = sys_item_map.get(key)
                 if not s_item and idx - 1 < len(sys_items):
@@ -452,11 +461,13 @@ class DisbursementRepository:
 
                 m_amount = 0.0
                 if isinstance(s_item, dict):
-                    m_amount = parse_amount(s_item.get("total") or s_item.get("sub_total"))
-
-                if should_apply_roe and roe:
-                    m_amount = m_amount * roe
-                    a_amount = a_amount * roe
+                    m_usd = s_item.get("total_usd") or s_item.get("amount_usd") or s_item.get("total_in_usd")
+                    if m_usd is not None and m_usd != "":
+                        m_amount = parse_amount(m_usd)
+                    else:
+                        m_amount = parse_amount(s_item.get("total") or s_item.get("sub_total"))
+                        if should_apply_roe and roe:
+                            m_amount = m_amount * roe
 
                 pda_expenses.append({
                     "S. No": s_no,

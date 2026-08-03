@@ -32,78 +32,31 @@ class PdaReportServiceImpl(PdaReportService):
             
             report_dict["service_charge"]["chunks"] = chunks
         
-        # Chunk system_service_charge (system/payment currency)
-        if report_dict.get("system_service_charge") and "items" in report_dict["system_service_charge"]:
-            ## fetch the system service charges only to the respective service charges
-            
+        # Chunk system_service_charge (system/payment currency) mapped 1-to-1 with service_charge
+        if report_dict.get("service_charge") and "chunks" in report_dict["service_charge"]:
             service_charge_chunks = report_dict["service_charge"]["chunks"]
-            system_items = report_dict["system_service_charge"]["items"]
+            system_items = report_dict.get("system_service_charge", {}).get("items", []) if report_dict.get("system_service_charge") else []
 
-            # Collect service names from service_charge chunks
-            service_names = set()
-
-            for chunk in service_charge_chunks:
-                for item in chunk:
-                    service_name = item.get("service")
-
-                    if service_name:
-                        service_names.add(service_name.strip().lower())
-
-            # Filter matching system services
-            filtered_system_items = []
-
+            # Map system items by service name
+            system_item_map = {}
             for item in system_items:
-                system_service_name = item.get("service", "").strip().lower()
+                if isinstance(item, dict) and item.get("service"):
+                    key = item["service"].strip().lower()
+                    system_item_map[key] = item
 
-                if system_service_name in service_names:
-                    filtered_system_items.append(item)
-            # KEEP filtered system items separately
-            report_dict["system_service_charge"]["items"] = filtered_system_items
-            items = filtered_system_items
-            chunks = []
-            current_chunk = []
-            current_height = 0
-            max_height = 950
-            
-            for item in items:
-                row_height = 60 + (len(item.get("service", "")) // 50) * 20 + (len(item.get("info_msg", "") or "") // 50) * 15
-                
-                if current_height + row_height > max_height and current_chunk:
-                    chunks.append(current_chunk)
-                    current_chunk = [item]
-                    current_height = row_height
-                else:
-                    current_chunk.append(item)
-                    current_height += row_height
-            
-            if current_chunk:
-                chunks.append(current_chunk)
-            
-            report_dict["system_service_charge"]["chunks"] = chunks
-            # Calculate grand total from chunks
-            # grand_total = 0
+            system_chunks = []
+            for agent_chunk in service_charge_chunks:
+                sys_chunk = []
+                for agent_item in agent_chunk:
+                    service_name = (agent_item.get("service") or "").strip().lower()
+                    sys_match = system_item_map.get(service_name, {})
+                    sys_chunk.append(sys_match)
+                    
+                    if sys_match.get("info_msg"):
+                        agent_item["info_msg"] = sys_match.get("info_msg")
+                system_chunks.append(sys_chunk)
 
-            # for chunk in chunks:
-            #     for item in chunk:
-            #         try:
-            #             grand_total += float(item.get("total") or 0)
-            #         except Exception:
-            #             pass
+            report_dict["system_service_charge"] = report_dict.get("system_service_charge") or {}
+            report_dict["system_service_charge"]["chunks"] = system_chunks
 
-            # report_dict["system_service_charge"]["grand_total"] = round(grand_total, 2)
-            
-
-            # add the info msg from system_service_charge to service charges
-            system_info_msg_map = {
-                item.get("service", "").strip().lower(): item.get("info_msg")
-                for item in filtered_system_items
-                if item.get("info_msg")
-            }
-
-            for chunk in report_dict["service_charge"]["chunks"]:
-                for item in chunk:
-                    service_key = item.get("service", "").strip().lower()
-                    if service_key in system_info_msg_map:
-                        item["info_msg"] = system_info_msg_map[service_key]
-        
         return report_dict
