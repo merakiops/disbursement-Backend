@@ -11,38 +11,36 @@ from enum import Enum
 
 
 class OwningCompanyDTO(BaseModel):
-    id: int
-    name: str
+    id: Optional[int] = None
+    name: Optional[str] = None
     model_config = {
         "from_attributes": True
     }
 
 class CompanyTypeDTO(BaseModel):
-    id: int
-    name: str
+    id: Optional[int] = None
+    name: Optional[str] = None
     model_config = {
         "from_attributes": True
     }
 
-
-
 class CompanyDTO(BaseModel):
     company_id: int
-    company_name: str
-    status: str
-    created_by: str
-    owning_company: OwningCompanyDTO
-    company_type: CompanyTypeDTO
+    company_name: Optional[str] = None
+    status: Optional[str] = None
+    created_by: Optional[str] = None
+    owning_company: Optional[OwningCompanyDTO] = None
+    company_type: Optional[CompanyTypeDTO] = None
     model_config = {
         "from_attributes": True
     }
 
 class RoleDTO(BaseModel):
     role_id: int
-    created_on: datetime
+    created_on: Optional[datetime] = None
     role_name: Optional[str] = None
-    status: str
-    created_by: str
+    status: Optional[str] = None
+    created_by: Optional[str] = None
     model_config = {
         "from_attributes": True
     }
