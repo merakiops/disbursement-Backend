@@ -514,76 +514,9 @@ class DashboardRepository:
     def get_dashboard_filter_data(client_id: Optional[int], data_source: Optional[str] = "all", db: Session = None):
         """
         Get unique filter data for dashboard filters.
-        Combines standard values with excel_data_dev schema tables.
+        Only queries excel_data_dev schema tables if client_id is 84 ("X-Platform") or data_source is "excel".
+        Otherwise, returns standard system data.
         """
-        # Query for distinct client IDs from disbursement table
-        client_ids_result = db.query(TxnDisbursement.client_id).distinct().order_by(
-            TxnDisbursement.client_id
-        ).all()
-        client_ids = [c[0] for c in client_ids_result if c[0]]
-        
-        # Distinct vessel names from standard view + excel lookup
-        vsl_1 = [v[0] for v in db.query(VwFdaProcessingDetails.vessel_name).distinct().all() if v[0]]
-        vsl_2 = [v[0] for v in db.query(ExcelVessel.vessel_name).distinct().all() if v[0]]
-        vessel_names = sorted(list(set(vsl_1 + vsl_2)))
-        
-        # Distinct country names from standard view + excel lookup
-        c_1 = [c[0] for c in db.query(VwFdaProcessingDetails.country_name).distinct().all() if c[0]]
-        c_2 = [c[0] for c in db.query(ExcelCountry.country_name).distinct().all() if c[0]]
-        country_names = sorted(list(set(c_1 + c_2)))
-        
-        # Distinct port names from standard view + excel lookup
-        p_1 = [p[0] for p in db.query(VwFdaProcessingDetails.port_name).distinct().all() if p[0]]
-        p_2 = [p[0] for p in db.query(ExcelPort.port_name).distinct().all() if p[0]]
-        port_names = sorted(list(set(p_1 + p_2)))
-
-        # Query distinct filter values from excel_data_dev schema tables safely using savepoints
-        distinct_vessel_types = []
-        distinct_agents = []
-        distinct_cargo_grades = []
-        distinct_counterparties = []
-
-        try:
-            with db.begin_nested():
-                v_types_1 = [r[0] for r in db.query(ExcelDisbursementsIndividualItemsCost.vessel_type).distinct().all() if r[0]]
-                v_types_2 = [r[0] for r in db.query(ExcelDisbursementsPaidAmountsAnalysis.vessel_type).distinct().all() if r[0]]
-                v_types_3 = [r[0] for r in db.query(ExcelDisbursementsTotalPortCost.vessel_type).distinct().all() if r[0]]
-                distinct_vessel_types = sorted(list(set(v_types_1 + v_types_2 + v_types_3)))
-
-                agents_1 = [r[0] for r in db.query(ExcelDisbursementsIndividualItemsCost.agent).distinct().all() if r[0]]
-                agents_2 = [r[0] for r in db.query(ExcelDisbursementsPaidAmountsAnalysis.agent).distinct().all() if r[0]]
-                agents_3 = [r[0] for r in db.query(ExcelDisbursementsTotalPortCost.vendor_short_name).distinct().all() if r[0]]
-                distinct_agents = sorted(list(set(agents_1 + agents_2 + agents_3)))
-
-                distinct_cargo_grades = sorted([r[0] for r in db.query(ExcelDisbursementsTotalPortCost.cargo_grades).distinct().all() if r[0]])
-                distinct_counterparties = sorted([r[0] for r in db.query(ExcelDisbursementsTotalPortCost.counterparty_short_name).distinct().all() if r[0]])
-        except Exception:
-            db.rollback()
-        
-        # Query for LOA min/max values
-        loa_stats = db.query(
-            func.min(VwFdaProcessingDetails.loa).label('min_loa'),
-            func.max(VwFdaProcessingDetails.loa).label('max_loa')
-        ).filter(VwFdaProcessingDetails.loa.isnot(None)).first()
-        
-        # Query for NRT min/max values
-        nrt_stats = db.query(
-            func.min(VwFdaProcessingDetails.nrt).label('min_nrt'),
-            func.max(VwFdaProcessingDetails.nrt).label('max_nrt')
-        ).filter(VwFdaProcessingDetails.nrt.isnot(None)).first()
-        
-        # Query for GRT min/max values
-        grt_stats = db.query(
-            func.min(VwFdaProcessingDetails.grt).label('min_grt'),
-            func.max(VwFdaProcessingDetails.grt).label('max_grt')
-        ).filter(VwFdaProcessingDetails.grt.isnot(None)).first()
-        
-        # Query for RGRT min/max values
-        rgrt_stats = db.query(
-            func.min(VwFdaProcessingDetails.rgrt).label('min_rgrt'),
-            func.max(VwFdaProcessingDetails.rgrt).label('max_rgrt')
-        ).filter(VwFdaProcessingDetails.rgrt.isnot(None)).first()
-        
         # Get client details (id and name) from the MaCompany table (company_type_id = 2 is Client)
         clients_result = db.query(MaCompany.company_id, MaCompany.company_name).filter(
             MaCompany.company_type_id == 2,
@@ -592,13 +525,32 @@ class DashboardRepository:
         
         clients_list = [{"id": c[0], "name": c[1]} for c in clients_result] if clients_result else []
 
-        if client_id == 75 or (data_source and data_source.lower() == "excel"):
+        # If client_id is 84 ("X-Platform") or data_source is explicitly "excel", return Excel schema data only
+        if client_id == 84 or (data_source and data_source.lower() == "excel"):
+            distinct_vessel_types = []
+            distinct_agents = []
+            distinct_cargo_grades = []
+            distinct_counterparties = []
+
             try:
                 with db.begin_nested():
                     vessel_names = sorted([v[0] for v in db.query(ExcelVessel.vessel_name).distinct().all() if v[0]])
                     country_names = sorted([c[0] for c in db.query(ExcelCountry.country_name).distinct().all() if c[0]])
                     port_names = sorted([p[0] for p in db.query(ExcelPort.port_name).distinct().all() if p[0]])
                     
+                    v_types_1 = [r[0] for r in db.query(ExcelDisbursementsIndividualItemsCost.vessel_type).distinct().all() if r[0]]
+                    v_types_2 = [r[0] for r in db.query(ExcelDisbursementsPaidAmountsAnalysis.vessel_type).distinct().all() if r[0]]
+                    v_types_3 = [r[0] for r in db.query(ExcelDisbursementsTotalPortCost.vessel_type).distinct().all() if r[0]]
+                    distinct_vessel_types = sorted(list(set(v_types_1 + v_types_2 + v_types_3)))
+
+                    agents_1 = [r[0] for r in db.query(ExcelDisbursementsIndividualItemsCost.agent).distinct().all() if r[0]]
+                    agents_2 = [r[0] for r in db.query(ExcelDisbursementsPaidAmountsAnalysis.agent).distinct().all() if r[0]]
+                    agents_3 = [r[0] for r in db.query(ExcelDisbursementsTotalPortCost.vendor_short_name).distinct().all() if r[0]]
+                    distinct_agents = sorted(list(set(agents_1 + agents_2 + agents_3)))
+
+                    distinct_cargo_grades = sorted([r[0] for r in db.query(ExcelDisbursementsTotalPortCost.cargo_grades).distinct().all() if r[0]])
+                    distinct_counterparties = sorted([r[0] for r in db.query(ExcelDisbursementsTotalPortCost.counterparty_short_name).distinct().all() if r[0]])
+
                     grt_stats = db.query(
                         func.min(ExcelDisbursementsTotalPortCost.grt).label('min_grt'),
                         func.max(ExcelDisbursementsTotalPortCost.grt).label('max_grt')
@@ -620,7 +572,32 @@ class DashboardRepository:
                     }
             except Exception:
                 db.rollback()
+
+        # Otherwise (for all normal calls / non-84 clients), return ONLY standard system database data
+        vessel_names = sorted([v[0] for v in db.query(VwFdaProcessingDetails.vessel_name).distinct().all() if v[0]])
+        country_names = sorted([c[0] for c in db.query(VwFdaProcessingDetails.country_name).distinct().all() if c[0]])
+        port_names = sorted([p[0] for p in db.query(VwFdaProcessingDetails.port_name).distinct().all() if p[0]])
+
+        loa_stats = db.query(
+            func.min(VwFdaProcessingDetails.loa).label('min_loa'),
+            func.max(VwFdaProcessingDetails.loa).label('max_loa')
+        ).filter(VwFdaProcessingDetails.loa.isnot(None)).first()
         
+        nrt_stats = db.query(
+            func.min(VwFdaProcessingDetails.nrt).label('min_nrt'),
+            func.max(VwFdaProcessingDetails.nrt).label('max_nrt')
+        ).filter(VwFdaProcessingDetails.nrt.isnot(None)).first()
+        
+        grt_stats = db.query(
+            func.min(VwFdaProcessingDetails.grt).label('min_grt'),
+            func.max(VwFdaProcessingDetails.grt).label('max_grt')
+        ).filter(VwFdaProcessingDetails.grt.isnot(None)).first()
+        
+        rgrt_stats = db.query(
+            func.min(VwFdaProcessingDetails.rgrt).label('min_rgrt'),
+            func.max(VwFdaProcessingDetails.rgrt).label('max_rgrt')
+        ).filter(VwFdaProcessingDetails.rgrt.isnot(None)).first()
+
         filter_data = {
             "clients": clients_list,
             "vessel_name": vessel_names,
@@ -630,10 +607,10 @@ class DashboardRepository:
             "nrt": {"min_value": float(nrt_stats.min_nrt), "max_value": float(nrt_stats.max_nrt)} if nrt_stats and nrt_stats.min_nrt is not None else None,
             "grt": {"min_value": float(grt_stats.min_grt), "max_value": float(grt_stats.max_grt)} if grt_stats and grt_stats.min_grt is not None else None,
             "rgrt": {"min_value": float(rgrt_stats.min_rgrt), "max_value": float(rgrt_stats.max_rgrt)} if rgrt_stats and rgrt_stats.min_rgrt is not None else None,
-            "vessel_type": distinct_vessel_types,
-            "agent": distinct_agents,
-            "cargo_grade": distinct_cargo_grades,
-            "counterparty_short_name": distinct_counterparties
+            "vessel_type": [],
+            "agent": [],
+            "cargo_grade": [],
+            "counterparty_short_name": []
         }
         
         return filter_data
