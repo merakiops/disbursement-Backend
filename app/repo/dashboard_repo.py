@@ -144,132 +144,124 @@ class DashboardRepository:
         offset = 0 if is_all_records else (data_request.page - 1) * data_request.pageSize
         params = {}
 
-        where_clauses = ["(pda.disbursement_seq IS NOT NULL OR fda.disbursement_seq IS NOT NULL)"]
+        where_clauses = ["1=1"]
 
         if data_request.clientId:
             try:
                 client_ids = [int(x) for x in data_request.clientId]
             except (ValueError, TypeError):
                 client_ids = list(data_request.clientId)
-            where_clauses.append("td.client_id = ANY(:client_ids)")
+            where_clauses.append("vw.client_id = ANY(:client_ids)")
             params["client_ids"] = client_ids
 
         if getattr(data_request, 'monthRange', None):
             if data_request.monthRange.from_date:
-                where_clauses.append("COALESCE(fda.fda_etd, pda.pda_etd)::date >= :from_date::date")
+                where_clauses.append("vw.etd::date >= :from_date::date")
                 params["from_date"] = data_request.monthRange.from_date
             if data_request.monthRange.to_date:
-                where_clauses.append("COALESCE(fda.fda_etd, pda.pda_etd)::date <= :to_date::date")
+                where_clauses.append("vw.etd::date <= :to_date::date")
                 params["to_date"] = data_request.monthRange.to_date
 
         if getattr(data_request, 'yearRange', None):
             if data_request.yearRange.from_year:
-                where_clauses.append("EXTRACT(YEAR FROM COALESCE(fda.fda_etd, pda.pda_etd)) >= :from_year")
+                where_clauses.append("EXTRACT(YEAR FROM vw.etd) >= :from_year")
                 params["from_year"] = int(data_request.yearRange.from_year)
             if data_request.yearRange.to_year:
-                where_clauses.append("EXTRACT(YEAR FROM COALESCE(fda.fda_etd, pda.pda_etd)) <= :to_year")
+                where_clauses.append("EXTRACT(YEAR FROM vw.etd) <= :to_year")
                 params["to_year"] = int(data_request.yearRange.to_year)
 
         if data_request.tableFilter:
             tf = data_request.tableFilter
             if tf.vessel:
-                where_clauses.append("COALESCE(vsl.fda_vsl_dtls ->> 'name', vsl.vsl_dtls ->> 'name') = ANY(:vessel_names)")
+                where_clauses.append("vw.vessel_name = ANY(:vessel_names)")
                 params["vessel_names"] = list(tf.vessel)
             if tf.country:
-                where_clauses.append("country.name = ANY(:country_names)")
+                where_clauses.append("vw.country_name = ANY(:country_names)")
                 params["country_names"] = list(tf.country)
             if tf.port:
-                where_clauses.append("port.name = ANY(:port_names)")
+                where_clauses.append("vw.port_name = ANY(:port_names)")
                 params["port_names"] = list(tf.port)
             if tf.loa:
                 if tf.loa.min_value is not None:
-                    where_clauses.append("COALESCE((NULLIF((vsl.fda_vsl_dtls ->> 'loa'), ''))::numeric, (NULLIF((vsl.vsl_dtls ->> 'loa'), ''))::numeric) >= :loa_min")
+                    where_clauses.append("vw.loa >= :loa_min")
                     params["loa_min"] = tf.loa.min_value
                 if tf.loa.max_value is not None:
-                    where_clauses.append("COALESCE((NULLIF((vsl.fda_vsl_dtls ->> 'loa'), ''))::numeric, (NULLIF((vsl.vsl_dtls ->> 'loa'), ''))::numeric) <= :loa_max")
+                    where_clauses.append("vw.loa <= :loa_max")
                     params["loa_max"] = tf.loa.max_value
             if tf.nrt:
                 if tf.nrt.min_value is not None:
-                    where_clauses.append("COALESCE((NULLIF((vsl.fda_vsl_dtls ->> 'nrt'), ''))::numeric, (NULLIF((vsl.vsl_dtls ->> 'nrt'), ''))::numeric) >= :nrt_min")
+                    where_clauses.append("vw.nrt >= :nrt_min")
                     params["nrt_min"] = tf.nrt.min_value
                 if tf.nrt.max_value is not None:
-                    where_clauses.append("COALESCE((NULLIF((vsl.fda_vsl_dtls ->> 'nrt'), ''))::numeric, (NULLIF((vsl.vsl_dtls ->> 'nrt'), ''))::numeric) <= :nrt_max")
+                    where_clauses.append("vw.nrt <= :nrt_max")
                     params["nrt_max"] = tf.nrt.max_value
             if tf.grt:
                 if tf.grt.min_value is not None:
-                    where_clauses.append("COALESCE((NULLIF((vsl.fda_vsl_dtls ->> 'grt'), ''))::numeric, (NULLIF((vsl.vsl_dtls ->> 'grt'), ''))::numeric) >= :grt_min")
+                    where_clauses.append("vw.grt >= :grt_min")
                     params["grt_min"] = tf.grt.min_value
                 if tf.grt.max_value is not None:
-                    where_clauses.append("COALESCE((NULLIF((vsl.fda_vsl_dtls ->> 'grt'), ''))::numeric, (NULLIF((vsl.vsl_dtls ->> 'grt'), ''))::numeric) <= :grt_max")
+                    where_clauses.append("vw.grt <= :grt_max")
                     params["grt_max"] = tf.grt.max_value
             if tf.rgrt:
                 if tf.rgrt.min_value is not None:
-                    where_clauses.append("COALESCE((NULLIF((vsl.fda_vsl_dtls ->> 'rgrt'), ''))::numeric, (NULLIF((vsl.vsl_dtls ->> 'rgrt'), ''))::numeric) >= :rgrt_min")
+                    where_clauses.append("vw.rgrt >= :rgrt_min")
                     params["rgrt_min"] = tf.rgrt.min_value
                 if tf.rgrt.max_value is not None:
-                    where_clauses.append("COALESCE((NULLIF((vsl.fda_vsl_dtls ->> 'rgrt'), ''))::numeric, (NULLIF((vsl.vsl_dtls ->> 'rgrt'), ''))::numeric) <= :rgrt_max")
+                    where_clauses.append("vw.rgrt <= :rgrt_max")
                     params["rgrt_max"] = tf.rgrt.max_value
 
         where_sql = " AND ".join(where_clauses)
 
         count_query = text(f"""
-            SELECT COUNT(DISTINCT COALESCE(fda.disbursement_seq, pda.disbursement_seq))
-            FROM {SCHEMA_NAME}.vw_fda_processing_details fda
-            FULL OUTER JOIN {SCHEMA_NAME}.vw_pda_report pda ON fda.disbursement_seq = pda.disbursement_seq
-            LEFT JOIN {SCHEMA_NAME}.txn_disbursement td ON COALESCE(fda.disbursement_seq, pda.disbursement_seq) = td.disbursement_seq
-            LEFT JOIN {SCHEMA_NAME}.vw_vessel_details_comparision vsl ON COALESCE(fda.disbursement_seq, pda.disbursement_seq) = vsl.disbursement_seq
-            LEFT JOIN {SCHEMA_NAME}.ma_country country ON COALESCE(fda.country_id, pda.country_id) = country.country_id
-            LEFT JOIN {SCHEMA_NAME}.ma_ports port ON COALESCE(fda.port_id, pda.port_id) = port.port_id
+            SELECT COUNT(DISTINCT vw.disbursement_seq)
+            FROM {SCHEMA_NAME}.vw_dashboard_data vw
+            LEFT JOIN {SCHEMA_NAME}.txn_disbursement td ON vw.disbursement_seq = td.disbursement_seq
             WHERE {where_sql}
         """)
 
         standard_count = db.execute(count_query, params).scalar() or 0
 
         data_query_str = f"""
-            SELECT DISTINCT ON (COALESCE(fda.disbursement_seq, pda.disbursement_seq))
-                COALESCE(fda.disbursement_seq, pda.disbursement_seq) AS disbursement_seq,
-                td.client_id,
-                COALESCE(fda.fda_etd, pda.pda_etd) AS etd,
-                COALESCE(vsl.fda_vsl_dtls ->> 'name', vsl.vsl_dtls ->> 'name') AS vessel_name,
-                COALESCE(fda.country_id, pda.country_id) AS country_id,
-                country.name AS country_name,
-                COALESCE(fda.port_id, pda.port_id) AS port_id,
-                port.name AS port_name,
-                COALESCE((NULLIF((vsl.fda_vsl_dtls ->> 'loa'), ''))::numeric, (NULLIF((vsl.vsl_dtls ->> 'loa'), ''))::numeric) AS loa,
-                COALESCE((NULLIF((vsl.fda_vsl_dtls ->> 'grt'), ''))::numeric, (NULLIF((vsl.vsl_dtls ->> 'grt'), ''))::numeric) AS grt,
-                COALESCE((NULLIF((vsl.fda_vsl_dtls ->> 'rgrt'), ''))::numeric, (NULLIF((vsl.vsl_dtls ->> 'rgrt'), ''))::numeric) AS rgrt,
-                COALESCE((NULLIF((vsl.fda_vsl_dtls ->> 'nrt'), ''))::numeric, (NULLIF((vsl.vsl_dtls ->> 'nrt'), ''))::numeric) AS nrt,
-                pda.loss_prevention_pda,
-                fda.loss_prevention_fda,
-                COALESCE(fda.loss_prevention_fda, pda.loss_prevention_pda) AS total_loss_prevented,
-                COALESCE(fda.loss_prevented_reason, pda.loss_prevented_reason) AS loss_prevented_reason,
-                fda.fda_total_amount AS fda_amount,
-                pda.pda_total_amount AS pda_amount,
-                fda.manual_fda_amount,
-                pda.manual_pda_amount,
-                td.voyage_no,
-                td.vessel_type,
-                td.port_func,
-                td.arrival_local,
-                td.departure_local,
-                td.port_days,
-                td.agent,
-                td.cargo_grade,
-                td.counterparty_short_name,
-                td.imo_no,
-                td.advance_amt,
-                td.final_amt,
+            SELECT 
+                vw.disbursement_seq,
+                vw.client_id,
+                vw.etd,
+                vw.vessel_name,
+                vw.country_id,
+                vw.country_name,
+                vw.port_id,
+                vw.port_name,
+                vw.loa,
+                vw.grt,
+                vw.rgrt,
+                vw.nrt,
+                vw.loss_prevention_pda,
+                vw.loss_prevention_fda,
+                vw.total_loss_prevented,
+                vw.loss_prevented_reason,
+                vw.fda_amount,
+                vw.pda_amount,
+                vw.manual_fda_amount,
+                vw.manual_pda_amount,
+                td.voyage AS voyage_no,
+                NULL::text AS vessel_type,
+                NULL::text AS port_func,
+                NULL::text AS arrival_local,
+                NULL::text AS departure_local,
+                NULL::numeric AS port_days,
+                NULL::text AS agent,
+                NULL::text AS cargo_grade,
+                NULL::text AS counterparty_short_name,
+                NULL::text AS imo_no,
+                NULL::numeric AS advance_amt,
+                NULL::numeric AS final_amt,
                 td.advance_amount_remitted,
                 td.outstanding_balance,
                 td.remark
-            FROM {SCHEMA_NAME}.vw_fda_processing_details fda
-            FULL OUTER JOIN {SCHEMA_NAME}.vw_pda_report pda ON fda.disbursement_seq = pda.disbursement_seq
-            LEFT JOIN {SCHEMA_NAME}.txn_disbursement td ON COALESCE(fda.disbursement_seq, pda.disbursement_seq) = td.disbursement_seq
-            LEFT JOIN {SCHEMA_NAME}.vw_vessel_details_comparision vsl ON COALESCE(fda.disbursement_seq, pda.disbursement_seq) = vsl.disbursement_seq
-            LEFT JOIN {SCHEMA_NAME}.ma_country country ON COALESCE(fda.country_id, pda.country_id) = country.country_id
-            LEFT JOIN {SCHEMA_NAME}.ma_ports port ON COALESCE(fda.port_id, pda.port_id) = port.port_id
+            FROM {SCHEMA_NAME}.vw_dashboard_data vw
+            LEFT JOIN {SCHEMA_NAME}.txn_disbursement td ON vw.disbursement_seq = td.disbursement_seq
             WHERE {where_sql}
-            ORDER BY COALESCE(fda.disbursement_seq, pda.disbursement_seq), COALESCE(fda.fda_etd, pda.pda_etd) DESC
+            ORDER BY vw.etd DESC NULLS LAST
         """
 
         if not is_all_records:
