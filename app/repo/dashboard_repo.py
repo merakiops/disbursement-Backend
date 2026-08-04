@@ -23,18 +23,18 @@ class DashboardRepository:
     def get_dashboard_summary(client_ids: List[int], from_date, to_date, data_source: Optional[str] = "all", db: Session = None):
         """
         Get dashboard summary based on client_ids and data_source.
-        Client ID 75 represents EIGER Shipping SA (mapped to excel_data_dev schema).
+        Client ID 84 represents X-Platform (mapped to excel_data_dev schema).
         """
-        is_eiger = False
+        is_excel_client = False
         if client_ids:
             try:
-                is_eiger = 75 in [int(x) for x in client_ids if str(x).isdigit()]
+                is_excel_client = 84 in [int(x) for x in client_ids if str(x).isdigit()]
             except (ValueError, TypeError):
-                is_eiger = False
+                is_excel_client = False
 
         ds = (data_source or "all").lower()
 
-        if is_eiger or ds == "excel":
+        if is_excel_client or ds == "excel":
             try:
                 with db.begin_nested():
                     v_cnt = db.query(func.count(func.distinct(ExcelVessel.vessel_name))).scalar() or 0
@@ -83,49 +83,7 @@ class DashboardRepository:
         
         summary_dict = dict(result) if result else {}
 
-        if ds == "standard" or (client_ids and not is_eiger):
-            return summary_dict
-
-        # If data_source is 'all' and no client specified, aggregate metrics from excel_data_dev tables safely
-        try:
-            with db.begin_nested():
-                excel_vessels_count = db.query(func.count(func.distinct(ExcelVessel.vessel_name))).scalar() or 0
-                excel_countries_count = db.query(func.count(func.distinct(ExcelCountry.country_name))).scalar() or 0
-                excel_ports_count = db.query(func.count(func.distinct(ExcelPort.port_name))).scalar() or 0
-                excel_records_count = db.query(func.count(ExcelDisbursementsTotalPortCost.id)).scalar() or 0
-                excel_total_cost = db.query(func.sum(ExcelDisbursementsTotalPortCost.final_amt)).scalar() or 0.0
-
-                if excel_vessels_count and "vessels" in summary_dict:
-                    summary_dict["vessels"] = (summary_dict.get("vessels") or 0) + excel_vessels_count
-                if excel_countries_count and "countries" in summary_dict:
-                    summary_dict["countries"] = (summary_dict.get("countries") or 0) + excel_countries_count
-                if excel_ports_count and "ports" in summary_dict:
-                    summary_dict["ports"] = (summary_dict.get("ports") or 0) + excel_ports_count
-                if excel_records_count and "total_fda" in summary_dict:
-                    summary_dict["total_fda"] = (summary_dict.get("total_fda") or 0) + excel_records_count
-                    summary_dict["completed_fda"] = (summary_dict.get("completed_fda") or 0) + excel_records_count
-                if excel_total_cost and "fda_total_amount" in summary_dict:
-                    summary_dict["fda_total_amount"] = float(summary_dict.get("fda_total_amount") or 0.0) + float(excel_total_cost)
-
-                pda_sav = float(summary_dict.get("pdasavings") or 0.0)
-                fda_sav = float(summary_dict.get("fdasavings") or 0.0)
-                pda_tot = float(summary_dict.get("pda_total_amount") or 0.0)
-                fda_tot = float(summary_dict.get("fda_total_amount") or 0.0)
-
-                def calc_pct(savings, total):
-                    if not total or total <= 0:
-                        return 0.0
-                    pct = (savings * 100.0) / total
-                    val = round(pct, 2)
-                    if val == 0.0 and pct > 0:
-                        return round(pct, 4)
-                    return val
-
-                summary_dict["percentage_savings_pda"] = calc_pct(pda_sav, pda_tot)
-                summary_dict["percentage_savings_fda"] = calc_pct(fda_sav, fda_tot)
-        except Exception:
-            db.rollback()
-
+        # Default standard flow: return ONLY standard database summary
         return summary_dict
     
     @staticmethod
@@ -160,27 +118,28 @@ class DashboardRepository:
     @staticmethod
     def get_fda_processing_details(data_request, db: Session):
         """
-        Get FDA processing details with pagination directly querying tables + excel_data_dev.
+        Get FDA processing details with pagination.
+        Only includes excel_data_dev if client_id 84 is requested or dataSource is 'excel'.
         """
         is_all_records = data_request.pageSize <= 0 or data_request.pageSize == -1
         if not is_all_records and (data_request.page < 1 or data_request.pageSize < 1):
             raise ValueError("Page number and page size must be greater than 0")
 
-        has_eiger = False
+        has_excel_client = False
         has_other = False
         if data_request.clientId:
             for cid in data_request.clientId:
-                if str(cid) == "75":
-                    has_eiger = True
+                if str(cid) == "84":
+                    has_excel_client = True
                 else:
                     has_other = True
 
-        if has_eiger and not has_other:
+        if has_excel_client and not has_other:
             ds = "excel"
-        elif has_other and not has_eiger:
+        elif has_other and not has_excel_client:
             ds = "standard"
         else:
-            ds = (getattr(data_request, 'dataSource', None) or getattr(data_request, 'data_source', None) or "all").lower()
+            ds = (getattr(data_request, 'dataSource', None) or getattr(data_request, 'data_source', None) or "standard").lower()
 
         offset = 0 if is_all_records else (data_request.page - 1) * data_request.pageSize
         params = {}
@@ -251,101 +210,72 @@ class DashboardRepository:
                     where_clauses.append("COALESCE((NULLIF((vsl.fda_vsl_dtls ->> 'rgrt'), ''))::numeric, (NULLIF((vsl.vsl_dtls ->> 'rgrt'), ''))::numeric) <= :rgrt_max")
                     params["rgrt_max"] = tf.rgrt.max_value
 
-        where_str = " AND ".join(where_clauses)
+        where_sql = " AND ".join(where_clauses)
 
-        base_sql = f"""
-            FROM {SCHEMA_NAME}.txn_disbursement td
-            LEFT JOIN {SCHEMA_NAME}.txn_pda pda 
-                ON td.disbursement_seq = pda.disbursement_seq 
-               AND (pda.state IS NULL OR pda.state <> 'D')
-            LEFT JOIN {SCHEMA_NAME}.txn_fda fda 
-                ON td.disbursement_seq = fda.disbursement_seq 
-               AND (fda.state IS NULL OR fda.state <> 'D')
-            LEFT JOIN {SCHEMA_NAME}.txn_pda_vessel_details vsl 
-                ON td.pda_vsl_id = vsl.pda_vsl_id
-            LEFT JOIN {SCHEMA_NAME}.ma_vessels vessel 
-                ON vsl.ma_vsl_id = vessel.vsl_id
-            LEFT JOIN {SCHEMA_NAME}.ma_country country 
-                ON td.country_id = country.country_id
-            LEFT JOIN {SCHEMA_NAME}.ma_port port 
-                ON td.port_id = port.port_id
-            WHERE {where_str}
-        """
+        count_query = text(f"""
+            SELECT COUNT(DISTINCT COALESCE(fda.disbursement_seq, pda.disbursement_seq))
+            FROM {SCHEMA_NAME}.vw_fda_processing_details fda
+            FULL OUTER JOIN {SCHEMA_NAME}.vw_pda_report pda ON fda.disbursement_seq = pda.disbursement_seq
+            LEFT JOIN {SCHEMA_NAME}.txn_disbursement td ON COALESCE(fda.disbursement_seq, pda.disbursement_seq) = td.disbursement_seq
+            LEFT JOIN {SCHEMA_NAME}.vw_vessel_details_comparision vsl ON COALESCE(fda.disbursement_seq, pda.disbursement_seq) = vsl.disbursement_seq
+            LEFT JOIN {SCHEMA_NAME}.ma_country country ON COALESCE(fda.country_id, pda.country_id) = country.country_id
+            LEFT JOIN {SCHEMA_NAME}.ma_ports port ON COALESCE(fda.port_id, pda.port_id) = port.port_id
+            WHERE {where_sql}
+        """)
 
-        count_query = text(f"SELECT COUNT(DISTINCT td.disbursement_seq) {base_sql}")
         standard_count = db.execute(count_query, params).scalar() or 0
 
-        data_query = text(f"""
-            SELECT 
-                td.disbursement_seq,
+        data_query_str = f"""
+            SELECT DISTINCT ON (COALESCE(fda.disbursement_seq, pda.disbursement_seq))
+                COALESCE(fda.disbursement_seq, pda.disbursement_seq) AS disbursement_seq,
                 td.client_id,
                 COALESCE(fda.fda_etd, pda.pda_etd) AS etd,
-                COALESCE(
-                    vsl.fda_vsl_dtls ->> 'name',
-                    vsl.vsl_dtls ->> 'name',
-                    vessel.name
-                ) AS vessel_name,
-                COALESCE(
-                    vsl.fda_vsl_dtls ->> 'imo_number',
-                    vsl.vsl_dtls ->> 'imo_number',
-                    vessel.imo_number
-                ) AS imo_no,
-                td.country_id,
+                COALESCE(vsl.fda_vsl_dtls ->> 'name', vsl.vsl_dtls ->> 'name') AS vessel_name,
+                COALESCE(fda.country_id, pda.country_id) AS country_id,
                 country.name AS country_name,
-                td.port_id,
+                COALESCE(fda.port_id, pda.port_id) AS port_id,
                 port.name AS port_name,
-                COALESCE(
-                    (NULLIF((vsl.fda_vsl_dtls ->> 'loa'), ''))::numeric,
-                    (NULLIF((vsl.vsl_dtls ->> 'loa'), ''))::numeric
-                ) AS loa,
-                COALESCE(
-                    (NULLIF((vsl.fda_vsl_dtls ->> 'grt'), ''))::numeric,
-                    (NULLIF((vsl.vsl_dtls ->> 'grt'), ''))::numeric
-                ) AS grt,
-                COALESCE(
-                    (NULLIF((vsl.fda_vsl_dtls ->> 'rgrt'), ''))::numeric,
-                    (NULLIF((vsl.vsl_dtls ->> 'rgrt'), ''))::numeric
-                ) AS rgrt,
-                COALESCE(
-                    (NULLIF((vsl.fda_vsl_dtls ->> 'nrt'), ''))::numeric,
-                    (NULLIF((vsl.vsl_dtls ->> 'nrt'), ''))::numeric
-                ) AS nrt,
-                td.loss_prevention_pda,
-                td.loss_prevention_fda,
-                CASE 
-                    WHEN td.loss_prevention_pda IS NULL AND td.loss_prevention_fda IS NULL THEN td.total_loss_prevented
-                    ELSE (COALESCE(td.loss_prevention_pda, 0) + COALESCE(td.loss_prevention_fda, 0))
-                END AS total_loss_prevented,
-                td.loss_prevented_reason,
-                CASE
-                    WHEN fda.disbursement_seq IS NULL THEN NULL::double precision
-                    WHEN (fda.state = 'D') THEN NULL::double precision
-                    WHEN (upper(fda.fda_currency_from) = 'USD') THEN (((fda.portagent_fda_data -> 'services') ->> 'grand_total'))::double precision
-                    WHEN (upper(fda.fda_currency_to) = 'USD') THEN (round(((((fda.portagent_fda_data -> 'services') ->> 'grand_total'))::numeric * fda.fda_roe::numeric), 2))::double precision
-                    WHEN (upper(fda.pmt_curr_to) = 'USD') THEN fda.portagent_fda_amount
-                    ELSE COALESCE(fda.fda_amount, fda.portagent_fda_amount)
-                END AS fda_amount,
-                CASE
-                    WHEN pda.disbursement_seq IS NULL THEN NULL::double precision
-                    WHEN (upper(pda.pda_currency_from) = 'USD') THEN (((pda.portagent_pda_data -> 'services') ->> 'grand_total'))::double precision
-                    WHEN (upper(pda.pda_currency_to) = 'USD') THEN (round(((((pda.portagent_pda_data -> 'services') ->> 'grand_total'))::numeric * pda.pda_roe::numeric), 2))::double precision
-                    WHEN (upper(pda.pmt_curr_to) = 'USD') THEN pda.portagent_pda_amount
-                    ELSE pda.portagent_pda_amount
-                END AS pda_amount,
-                CASE
-                    WHEN fda.disbursement_seq IS NULL THEN NULL::text
-                    WHEN (fda.state = 'D') THEN ''
-                    ELSE fda.manual_fda_amount
-                END AS manual_fda_amount,
-                pda.manual_pda_amount::text AS manual_pda_amount,
+                COALESCE((NULLIF((vsl.fda_vsl_dtls ->> 'loa'), ''))::numeric, (NULLIF((vsl.vsl_dtls ->> 'loa'), ''))::numeric) AS loa,
+                COALESCE((NULLIF((vsl.fda_vsl_dtls ->> 'grt'), ''))::numeric, (NULLIF((vsl.vsl_dtls ->> 'grt'), ''))::numeric) AS grt,
+                COALESCE((NULLIF((vsl.fda_vsl_dtls ->> 'rgrt'), ''))::numeric, (NULLIF((vsl.vsl_dtls ->> 'rgrt'), ''))::numeric) AS rgrt,
+                COALESCE((NULLIF((vsl.fda_vsl_dtls ->> 'nrt'), ''))::numeric, (NULLIF((vsl.vsl_dtls ->> 'nrt'), ''))::numeric) AS nrt,
+                pda.loss_prevention_pda,
+                fda.loss_prevention_fda,
+                COALESCE(fda.loss_prevention_fda, pda.loss_prevention_pda) AS total_loss_prevented,
+                COALESCE(fda.loss_prevented_reason, pda.loss_prevented_reason) AS loss_prevented_reason,
+                fda.fda_total_amount AS fda_amount,
+                pda.pda_total_amount AS pda_amount,
+                fda.manual_fda_amount,
+                pda.manual_pda_amount,
+                td.voyage_no,
+                td.vessel_type,
+                td.port_func,
+                td.arrival_local,
+                td.departure_local,
+                td.port_days,
+                td.agent,
+                td.cargo_grade,
+                td.counterparty_short_name,
+                td.imo_no,
+                td.advance_amt,
+                td.final_amt,
                 td.advance_amount_remitted,
                 td.outstanding_balance,
                 td.remark
-            {base_sql}
-            ORDER BY etd DESC NULLS LAST
-            {"OFFSET :offset LIMIT :limit" if not is_all_records else ""}
-        """)
+            FROM {SCHEMA_NAME}.vw_fda_processing_details fda
+            FULL OUTER JOIN {SCHEMA_NAME}.vw_pda_report pda ON fda.disbursement_seq = pda.disbursement_seq
+            LEFT JOIN {SCHEMA_NAME}.txn_disbursement td ON COALESCE(fda.disbursement_seq, pda.disbursement_seq) = td.disbursement_seq
+            LEFT JOIN {SCHEMA_NAME}.vw_vessel_details_comparision vsl ON COALESCE(fda.disbursement_seq, pda.disbursement_seq) = vsl.disbursement_seq
+            LEFT JOIN {SCHEMA_NAME}.ma_country country ON COALESCE(fda.country_id, pda.country_id) = country.country_id
+            LEFT JOIN {SCHEMA_NAME}.ma_ports port ON COALESCE(fda.port_id, pda.port_id) = port.port_id
+            WHERE {where_sql}
+            ORDER BY COALESCE(fda.disbursement_seq, pda.disbursement_seq), COALESCE(fda.fda_etd, pda.pda_etd) DESC
+        """
 
+        if not is_all_records:
+            data_query_str += " OFFSET :offset LIMIT :limit"
+
+        data_query = text(data_query_str)
         if not is_all_records:
             params["offset"] = offset
             params["limit"] = data_request.pageSize
@@ -353,7 +283,10 @@ class DashboardRepository:
         raw_std = list(db.execute(data_query, params).mappings().all())
         standard_records = [dict(r, data_source="standard") for r in raw_std]
 
-        # Also query excel_data_dev records safely
+        if ds != "excel":
+            return standard_records, standard_count
+
+        # If ds == "excel", query excel_data_dev records
         excel_records = []
         excel_count = 0
         try:
@@ -443,35 +376,18 @@ class DashboardRepository:
                         "data_source": "excel"
                     }
 
-                if ds == "excel":
-                    excel_query_obj = q.order_by(desc(ExcelDisbursementsTotalPortCost.arrival_local))
-                    if not is_all_records:
-                        excel_query_obj = excel_query_obj.offset(offset).limit(data_request.pageSize)
-                    excel_fetched = excel_query_obj.all()
-
-                    for r in excel_fetched:
-                        excel_records.append(map_excel_row(r))
-                    return excel_records, excel_count
-
-                if ds == "standard":
-                    return standard_records, standard_count
-
-                # Otherwise (for 'all'), fetch page records
-                if is_all_records:
-                    excel_fetched = q.order_by(desc(ExcelDisbursementsTotalPortCost.arrival_local)).all()
-                else:
-                    needed = data_request.pageSize - len(standard_records)
-                    excel_fetched = q.order_by(desc(ExcelDisbursementsTotalPortCost.arrival_local)).offset(offset).limit(needed).all() if needed > 0 else []
+                excel_query_obj = q.order_by(desc(ExcelDisbursementsTotalPortCost.arrival_local))
+                if not is_all_records:
+                    excel_query_obj = excel_query_obj.offset(offset).limit(data_request.pageSize)
+                excel_fetched = excel_query_obj.all()
 
                 for r in excel_fetched:
                     excel_records.append(map_excel_row(r))
+                return excel_records, excel_count
         except Exception:
             db.rollback()
 
-        total_combined_count = standard_count + excel_count
-        all_records = standard_records + excel_records
-
-        return all_records, total_combined_count
+        return standard_records, standard_count
 
     @staticmethod
     def update_dashboard_row(payload, db: Session):
