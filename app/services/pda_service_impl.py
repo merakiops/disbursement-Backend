@@ -382,6 +382,19 @@ class PDAServiceImpl(PDAService):
                 else:
                     client_name = "Client"
             
+            # Get purpose/operation name safely
+            operation_name = ""
+            if disbursement.purpose_id:
+                from app.models.purpose import MaPurpose
+                purpose_dtl = db.query(MaPurpose).filter(MaPurpose.purpose_id == disbursement.purpose_id).first()
+                if purpose_dtl:
+                    operation_name = purpose_dtl.name
+
+            # Format ETA
+            eta_str = ""
+            if disbursement.eta:
+                eta_str = disbursement.eta.strftime("%Y-%m-%d %H:%M") if hasattr(disbursement.eta, 'strftime') else str(disbursement.eta)
+
             # Build subject
             subject_parts = [
                 vessel_name.upper() if vessel_name else "",
@@ -400,6 +413,11 @@ class PDAServiceImpl(PDAService):
                 "subject": subject,
                 "context": {
                     "client_name": client_name,
+                    "vessel_name": vessel_name,
+                    "voyage": disbursement.voyage or "",
+                    "port_name": port_name,
+                    "eta": eta_str,
+                    "operation": operation_name,
                     "pda_disbursement_link": link_data["link"],
                     "email_id": self.meraki_email,
                     "signature": signature
@@ -407,7 +425,7 @@ class PDAServiceImpl(PDAService):
             }
             
         except Exception as e:
-            logger.error(f"Failed to prepare email context")
+            logger.error(f"Failed to prepare email context: {str(e)}")
             raise
     
     def _schedule_email_notification(
@@ -488,14 +506,23 @@ class PDAServiceImpl(PDAService):
             disbursement_id=disbursement.disbursement_id
         )
         
+        operation_name = ""
+        if disbursement.purpose_id:
+            from app.models.purpose import MaPurpose
+            purpose_dtl = db.query(MaPurpose).filter(MaPurpose.purpose_id == disbursement.purpose_id).first()
+            if purpose_dtl:
+                operation_name = purpose_dtl.name
+
         context = {
             "client_name": client_name,
             "port_agent_name": port_agent_name,
             "invoice_number": disbursement.pda.invoice_ref_no,
             "vessel_name": vessel_name,
+            "voyage": disbursement.voyage or "",
             "port_name": port_name,
             "eta": disbursement.pda.pda_eta,
             "etd": disbursement.pda.pda_etd,
+            "operation": operation_name,
             "pda_disbursement_link": link,
             "signature": signature,
             "email_id": self.meraki_email
