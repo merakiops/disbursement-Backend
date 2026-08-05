@@ -167,6 +167,24 @@ class DashboardServiceImpl(DashboardService):
             nrt_val = get_val(r, 'nrt')
             pda_val = get_val(r, 'pda_amount')
             fda_val = get_val(r, 'fda_amount')
+            manual_pda = get_val(r, 'manual_pda_amount')
+            manual_fda = get_val(r, 'manual_fda_amount')
+
+            def parse_manual_amount(val):
+                if not val or not isinstance(val, str):
+                    return None
+                import re
+                match = re.search(r'[\d,]+(?:\.\d+)?', val)
+                if match:
+                    try:
+                        return float(match.group(0).replace(',', ''))
+                    except ValueError:
+                        return None
+                return None
+
+            pda_numeric = float(pda_val) if pda_val is not None and float(pda_val) > 0 else (parse_manual_amount(manual_pda) or (float(pda_val) if pda_val is not None else 0.0))
+            fda_numeric = float(fda_val) if fda_val is not None and float(fda_val) > 0 else (parse_manual_amount(manual_fda) or (float(fda_val) if fda_val is not None else 0.0))
+
             lp_pda = get_val(r, 'loss_prevention_pda')
             lp_fda = get_val(r, 'loss_prevention_fda')
             tot_lp = get_val(r, 'total_loss_prevented')
@@ -182,10 +200,10 @@ class DashboardServiceImpl(DashboardService):
                 "grt": float(grt_val) if grt_val is not None else None,
                 "rgrt": float(rgrt_val) if rgrt_val is not None else None,
                 "nrt": float(nrt_val) if nrt_val is not None else None,
-                "pdaAmount": float(pda_val) if pda_val is not None else 0.0,
-                "fdaAmount": float(fda_val) if fda_val is not None else 0.0,
-                "manual_pda_amount": get_val(r, 'manual_pda_amount'),
-                "manual_fda_amount": get_val(r, 'manual_fda_amount'),
+                "pdaAmount": pda_numeric,
+                "fdaAmount": fda_numeric,
+                "manual_pda_amount": manual_pda,
+                "manual_fda_amount": manual_fda,
                 "loss_prevention_pda": float(lp_pda) if lp_pda is not None else None,
                 "loss_prevention_fda": float(lp_fda) if lp_fda is not None else None,
                 "total_loss_prevented": round((float(lp_pda or 0) + float(lp_fda or 0)), 2) if (lp_pda is not None or lp_fda is not None) else (float(tot_lp) if tot_lp is not None else None),
