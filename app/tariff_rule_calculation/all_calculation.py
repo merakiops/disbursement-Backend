@@ -1350,7 +1350,9 @@ def evaluate_basic_value(basic_value: str, sub, vessel, db: Session, services: l
                 # If vessel property (e.g., Fixed:NRT:Pilotage:NA)
                 elif value_part.replace(" ","").isalpha():
                     logger.info(f"the vessel attr is -> {value_part}")
-                    return direct_vessel_property(value_part, vessel,dto)
+                    res = direct_vessel_property(value_part, vessel,dto)
+                    if res and isinstance(res, dict) and res.get('value') is not None:
+                        return res
             if 'round' in basic_value:
                 should_round=True
             else:
@@ -1697,7 +1699,7 @@ def calculate_subservice(sub: dict, vessel, db: Session, services: list = None, 
             formula_eval = sub["formula_result"].lower()
             
             # Replace basic value, movement, tariff first
-            formula_eval = formula_eval.replace("basic value", str(basic_val["value"])).replace("movement", str(movement)).replace("tariff %", str(tariff))
+            formula_eval = formula_eval.replace("basic value", str(basic_val["value"])).replace("movement", str(movement_val)).replace("tariff %", str(tariff))
             
             # Then replace the custom property (e.g., ROE)
             formula_eval = formula_eval.replace(attr, str(value_replace))        
@@ -1778,7 +1780,7 @@ def calculate_subservice(sub: dict, vessel, db: Session, services: list = None, 
             
             for word in formula_words:
                 if word.lower() not in basic_terms and not word.replace('.', '').isdigit():
-                    formula_eval = formula_eval.replace(word.lower(), '1')
+                    formula_eval = re.sub(r'\b' + re.escape(word.lower()) + r'\b', '1', formula_eval)
             
             logger.info(f"the formula_eval is {formula_eval}")
         try:

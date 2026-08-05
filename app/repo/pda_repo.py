@@ -1385,8 +1385,9 @@ class PDARepository:
         print(f"vessel_info  enrich_vessel_info {vessel_info.__dict__}")
         # --- Work on a copy of Meraki PDA Data (only JSON is copied) ---
         meraki_pda_data_json = copy.deepcopy(disbursement_dtl.pda.meraki_pda_data)
-        services = request_data.port_tariff_rule.items if request_data.port_tariff_rule and request_data.port_tariff_rule.items else []
-        services = {"items": services}
+        raw_items = request_data.port_tariff_rule.items if request_data.port_tariff_rule and request_data.port_tariff_rule.items else []
+        services_list = [item.dict() if hasattr(item, "dict") else item for item in raw_items]
+        services = {"items": services_list}
        
         try:
             meraki_pda_data_json["services"] = process_services_calculation(services,vessel_info,db,disbursement_dtl.disbursement_seq,"PDA",request_data)
