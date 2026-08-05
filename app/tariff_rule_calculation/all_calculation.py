@@ -1737,7 +1737,7 @@ def calculate_subservice(sub: dict, vessel, db: Session, services: list = None, 
 
 
             else:
-                formula_eval = formula_eval.lower().replace("basic value", str(basic_val["value"])).replace("movement", str(movement)).replace("tariff %", str(tariff))
+                formula_eval = formula_eval.lower().replace("basic value", str(basic_val["value"])).replace("movement", str(movement_val)).replace("tariff %", str(tariff))
                 logger.info(f"the formal eval is: {formula_eval}")
         else:
             # Handle dynamic property multiplication
@@ -1765,7 +1765,7 @@ def calculate_subservice(sub: dict, vessel, db: Session, services: list = None, 
             logger.info(f"Dynamic multiplier: {matched_prop} = {multiplier_value}")
             
             formula_eval = sub["formula_result"].lower()
-            formula_eval = formula_eval.replace("basic value", str(basic_val["value"])).replace("movement", str(movement)).replace("tariff %", str(tariff))
+            formula_eval = formula_eval.replace("basic value", str(basic_val["value"])).replace("movement", str(movement_val)).replace("tariff %", str(tariff))
             
             # Replace the matched property or any unmatched terms with the multiplier value
             if matched_prop:

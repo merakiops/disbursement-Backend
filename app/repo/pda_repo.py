@@ -1397,7 +1397,7 @@ class PDARepository:
 
             # --- Replace JSON on the ORM object (not persisted) ---
             disbursement_dtl.pda.meraki_pda_data = meraki_pda_data_json
-            disbursement_dtl.port_tariff_rule=request_data.port_tariff_rule.dict()
+            disbursement_dtl.port_tariff_rule = {"items": meraki_pda_data_json["services"]["items"]}
 
             disbursement_dtl.pda.portagent_pda_data = request_data.portagent_pda_data
         except SQLAlchemyError as e:
