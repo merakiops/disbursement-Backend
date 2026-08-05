@@ -63,11 +63,11 @@ class DashboardServiceImpl(DashboardService):
             fda=fda_progress
         )
         
-        pda_savings = round(float(result.get("pdasavings") or 0.0), 2)
-        fda_savings = round(float(result.get("fdasavings") or 0.0), 2)
-        pda_total = round(float(result.get("pda_total_amount") or 0.0), 2)
-        fda_total = round(float(result.get("fda_total_amount") or 0.0), 2)
-        overall_savings = round(float(result.get("overallsavingsamount") or 0.0), 2)
+        pda_savings = int(round(float(result.get("pdasavings") or 0.0)))
+        fda_savings = int(round(float(result.get("fdasavings") or 0.0)))
+        pda_total = int(round(float(result.get("pda_total_amount") or 0.0)))
+        fda_total = int(round(float(result.get("fda_total_amount") or 0.0)))
+        overall_savings = int(round(float(result.get("overallsavingsamount") or 0.0)))
 
         def calc_pct(savings, total):
             if not total or total <= 0:
