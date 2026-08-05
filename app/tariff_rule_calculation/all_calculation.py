@@ -1792,7 +1792,8 @@ def calculate_subservice(sub: dict, vessel, db: Session, services: list = None, 
         if len(movement_base) >= 4:
             value_part = movement_base[1].lower().strip()
             if value_part not in ['day','days','hour','hours'] and not re.match(r'^\d+\s*(day|days|hour|hours|hours/day|hour/day)$', value_part.replace(" ","")):
-                movement_base[1] = str(movement_val)
+                formatted_mov = int(movement_val) if isinstance(movement_val, float) and movement_val.is_integer() else (int(movement_val) if isinstance(movement_val, int) else movement_val)
+                movement_base[1] = str(formatted_mov)
                 movement = ":".join(movement_base)
             else:
                 movement = sub["movement"]
