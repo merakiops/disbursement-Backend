@@ -1350,9 +1350,7 @@ def evaluate_basic_value(basic_value: str, sub, vessel, db: Session, services: l
                 # If vessel property (e.g., Fixed:NRT:Pilotage:NA)
                 elif value_part.replace(" ","").isalpha():
                     logger.info(f"the vessel attr is -> {value_part}")
-                    res = direct_vessel_property(value_part, vessel,dto)
-                    if res and isinstance(res, dict) and res.get('value') is not None:
-                        return res
+                    return direct_vessel_property(value_part, vessel,dto)
             if 'round' in basic_value:
                 should_round=True
             else:
