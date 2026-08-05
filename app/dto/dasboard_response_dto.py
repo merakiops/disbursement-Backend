@@ -91,9 +91,9 @@ class FdaProcessingDetailDTO(BaseModel):
 
 
 class FDAStatsDTO(BaseModel):
-    lowestFDAAmount: float
-    averageFDAAmount: float
-    highestFDAAmount: float
+    lowestFDAAmount: int
+    averageFDAAmount: int
+    highestFDAAmount: int
 
 
 class FDACostTrackerDTO(BaseModel):

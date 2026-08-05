@@ -136,9 +136,9 @@ class DashboardServiceImpl(DashboardService):
             min_amount = median_amount = max_amount = 0.0
         
         stats = FDAStatsDTO(
-            lowestFDAAmount=round(min_amount, 2),
-            averageFDAAmount=round(median_amount, 2),
-            highestFDAAmount=round(max_amount, 2)
+            lowestFDAAmount=int(round(min_amount)),
+            averageFDAAmount=int(round(median_amount)),
+            highestFDAAmount=int(round(max_amount))
         )
         is_client = user_role == 3
         
