@@ -144,7 +144,10 @@ class DashboardRepository:
         offset = 0 if is_all_records else (data_request.page - 1) * data_request.pageSize
         params = {}
 
-        where_clauses = ["1=1"]
+        where_clauses = [
+            "1=1",
+            "(vw.fda_amount IS NOT NULL OR (vw.manual_fda_amount IS NOT NULL AND vw.manual_fda_amount != ''))"
+        ]
 
         if data_request.clientId:
             try:
