@@ -6,7 +6,6 @@ from sqlalchemy import create_engine,MetaData
 from sqlalchemy.orm import sessionmaker, Session,configure_mappers
 from sqlalchemy.engine.url import make_url
 from sqlalchemy.ext.declarative import declarative_base
-from app.models import *
 
 # Load environment variables
 load_dotenv('.env') 
@@ -90,9 +89,52 @@ engine = create_db_engine()
 # Session factory
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
+# Remote MySQL Engine and Session Setup
+_mysql_engine_instance = None
+
+def get_mysql_engine():
+    global _mysql_engine_instance
+    if _mysql_engine_instance is not None:
+        return _mysql_engine_instance
+    
+    db_url = os.getenv("MYSQL_DB_URL")
+    if not db_url:
+        load_dotenv('.env', override=True)
+        db_url = os.getenv("MYSQL_DB_URL")
+    
+    if not db_url:
+        db_url = "mysql+pymysql://admin:disbursementdev980@disbursement-dev.cxstuhubx9sn.us-east-1.rds.amazonaws.com:3306/meraki-final"
+        
+    try:
+        _mysql_engine_instance = create_engine(
+            db_url,
+            echo=False,
+            pool_pre_ping=True,
+            pool_size=10,
+            max_overflow=5,
+            pool_recycle=3600
+        )
+        logger.info("Remote MySQL Database engine created successfully!")
+        return _mysql_engine_instance
+    except Exception as e:
+        logger.warning(f"Could not create MySQL engine: {e}")
+        return None
+
+mysql_engine = get_mysql_engine()
+
 # Dependency for database session
 def get_db():
     db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+def get_mysql_db():
+    if not MysqlSessionLocal:
+        db = SessionLocal()
+    else:
+        db = MysqlSessionLocal()
     try:
         yield db
     finally:

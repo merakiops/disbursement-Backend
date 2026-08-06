@@ -10,9 +10,12 @@ class FilteryearDTO(BaseModel):
     to_year : Optional[str] = None
 
 class DashboardRequestDTO(BaseModel):
-    clientId: Optional[List[Union[int, str]]] = None
+    clientId: Optional[Union[List[Union[int, str]], int, str]] = None
+    client_id: Optional[Union[List[Union[int, str]], int, str]] = None
     monthRange: Optional[FilterdateDTO] = None
     yearRange : Optional[FilteryearDTO] = None
+    dataSource: Optional[str] = "all"
+    data_source: Optional[str] = None
 
 class RangeFilterDTO(BaseModel):
     min_value: Optional[float] = None
@@ -34,11 +37,13 @@ class TableFilterDTO(BaseModel):
 class DashboardDataRequest(BaseModel):
     page: int = 1
     pageSize: int = 10
-    clientId: Optional[List[Union[int, str]]] = None
+    clientId: Optional[Union[List[Union[int, str]], int, str]] = None
+    client_id: Optional[Union[List[Union[int, str]], int, str]] = None
     monthRange: Optional[FilterdateDTO] = None
     yearRange: Optional[FilteryearDTO] = None
     tableFilter: Optional[TableFilterDTO] = None
-    dataSource: Optional[str] = "all"  # "all", "excel", or "standard"
+    dataSource: Optional[str] = "all"  # "all", "excel", "kamba", or "standard"
+    data_source: Optional[str] = None
 
 class UpdateDashboardRowDTO(BaseModel):
     disbursement_seq: int

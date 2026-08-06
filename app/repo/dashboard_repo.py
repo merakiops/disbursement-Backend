@@ -24,15 +24,66 @@ class DashboardRepository:
         """
         Get dashboard summary based on client_ids and data_source.
         Client ID 84 represents X-Platform (mapped to excel_data_dev schema).
+        Client ID 85 represents Kamba (mapped to Remote MySQL RDS database).
         """
         is_excel_client = False
+        is_kamba_client = False
         if client_ids:
             try:
-                is_excel_client = 84 in [int(x) for x in client_ids if str(x).isdigit()]
+                c_ids = [int(x) for x in client_ids if str(x).isdigit()]
+                is_excel_client = 84 in c_ids and len(c_ids) == 1
+                is_kamba_client = 85 in c_ids and len(c_ids) == 1
             except (ValueError, TypeError):
                 is_excel_client = False
+                is_kamba_client = False
 
         ds = (data_source or "all").lower()
+
+        if is_kamba_client or (ds in ["kamba", "mysql"] and client_ids and 85 in [int(x) for x in client_ids if str(x).isdigit()] and len(client_ids) == 1):
+            from app.db import get_mysql_engine
+            mysql_engine = get_mysql_engine()
+            if mysql_engine:
+                try:
+                    with mysql_engine.connect() as conn:
+                        v_cnt = conn.execute(text("SELECT COUNT(DISTINCT vessel) FROM vessels")).scalar() or 0
+                        c_cnt = conn.execute(text("SELECT COUNT(DISTINCT country) FROM countries")).scalar() or 0
+                        p_cnt = conn.execute(text("SELECT COUNT(DISTINCT port) FROM ports")).scalar() or 0
+                        tot_fda = conn.execute(text("SELECT COUNT(*) FROM disbursements")).scalar() or 0
+                        tot_amt = conn.execute(text("SELECT SUM(CAST(NULLIF(REPLACE(REPLACE(amount, ',', ''), 'USD', ''), '') AS DECIMAL(15,2))) FROM fdadetails")).scalar() or 0.0
+                        tot_pda_amt = conn.execute(text("SELECT SUM(CAST(NULLIF(REPLACE(REPLACE(amount, ',', ''), 'USD', ''), '') AS DECIMAL(15,2))) FROM pdadetails")).scalar() or 0.0
+                        
+                        pda_total = float(tot_pda_amt)
+                        fda_total = float(tot_amt)
+                        overall_savings = max(0.0, pda_total - fda_total)
+                        pda_savings = overall_savings
+                        fda_savings = overall_savings
+                        pct_savings = round((overall_savings / pda_total * 100), 2) if pda_total > 0 else 0.0
+                        pct_savings_fda = round((fda_savings / fda_total * 100), 2) if fda_total > 0 else 0.0
+                        pct_savings_pda = round((pda_savings / pda_total * 100), 2) if pda_total > 0 else 0.0
+
+                        return {
+                            "countries": c_cnt,
+                            "ports": p_cnt,
+                            "vessels": v_cnt,
+                            "total_pda": tot_fda,
+                            "completed_pda": tot_fda,
+                            "under_process_pda": 0,
+                            "total_fda": tot_fda,
+                            "completed_fda": tot_fda,
+                            "under_process_fda": 0,
+                            "yet_to_process": 0,
+                            "pdasavings": pda_savings,
+                            "fdasavings": fda_savings,
+                            "overallsavingsamount": overall_savings,
+                            "fda_total_amount": fda_total,
+                            "percentage_savings": pct_savings,
+                            "percentage_savings_fda": pct_savings_fda,
+                            "percentage_savings_pda": pct_savings_pda,
+                            "pda_total_amount": pda_total,
+                            "pda_completed_no_fda": 0
+                        }
+                except Exception as e:
+                    print("Error querying remote MySQL RDS summary:", e)
 
         if is_excel_client or ds == "excel":
             try:
@@ -125,37 +176,259 @@ class DashboardRepository:
         if not is_all_records and (data_request.page < 1 or data_request.pageSize < 1):
             raise ValueError("Page number and page size must be greater than 0")
 
+        raw_cids = data_request.clientId if data_request.clientId is not None else data_request.client_id
+        client_ids_list = []
+        if raw_cids is not None:
+            if isinstance(raw_cids, list):
+                client_ids_list = [str(x) for x in raw_cids]
+            else:
+                client_ids_list = [str(raw_cids)]
+
         has_excel_client = False
+        has_kamba_client = False
         has_other = False
-        if data_request.clientId:
-            for cid in data_request.clientId:
+        if client_ids_list:
+            for cid in client_ids_list:
                 if str(cid) == "84":
                     has_excel_client = True
+                elif str(cid) == "85":
+                    has_kamba_client = True
                 else:
                     has_other = True
 
-        if has_excel_client and not has_other:
+        if has_kamba_client and not has_other and not has_excel_client:
+            ds = "kamba"
+        elif has_excel_client and not has_other and not has_kamba_client:
             ds = "excel"
-        elif has_other and not has_excel_client:
-            ds = "standard"
         else:
-            ds = (getattr(data_request, 'dataSource', None) or getattr(data_request, 'data_source', None) or "standard").lower()
+            ds = "standard"
 
         offset = 0 if is_all_records else (data_request.page - 1) * data_request.pageSize
-        params = {}
+        if ds in ["kamba", "mysql"]:
+            from app.db import get_mysql_engine
+            mysql_engine = get_mysql_engine()
+            if mysql_engine:
+                try:
+                    kamba_records = []
+                    with mysql_engine.connect() as conn:
+                        where_clauses = ["1=1"]
+                        params = {}
+                        if data_request.tableFilter:
+                            tf = data_request.tableFilter
+                            if tf.vessel and len(tf.vessel) > 0:
+                                where_clauses.append("v.vessel IN :vessels")
+                                params["vessels"] = tuple(tf.vessel)
+                            if tf.country and len(tf.country) > 0:
+                                where_clauses.append("c.country IN :countries")
+                                params["countries"] = tuple(tf.country)
+                            if tf.port and len(tf.port) > 0:
+                                where_clauses.append("p.port IN :ports")
+                                params["ports"] = tuple(tf.port)
 
+                        where_sql = " AND ".join(where_clauses)
+                        count_sql = f"SELECT COUNT(*) FROM disbursements d LEFT JOIN vessels v ON d.vessels_id=v.id LEFT JOIN countries c ON d.countries_id=c.id LEFT JOIN ports p ON d.ports_id=p.id WHERE {where_sql}"
+                        kamba_count = conn.execute(text(count_sql), params).scalar() or 0
+
+                        data_sql = f"""
+                            SELECT 
+                                d.id AS disbursement_seq,
+                                v.vessel AS vessel_name,
+                                c.country AS country_name,
+                                p.port AS port_name,
+                                v.loa, v.grt, v.rgrt, v.nrt,
+                                d.pda_number,
+                                d.created_at AS etd,
+                                COALESCE(pda_sum.pda_amount, 0.0) AS pda_amount,
+                                COALESCE(fda_sum.fda_amount, 0.0) AS fda_amount
+                            FROM disbursements d
+                            LEFT JOIN vessels v ON d.vessels_id = v.id
+                            LEFT JOIN countries c ON d.countries_id = c.id
+                            LEFT JOIN ports p ON d.ports_id = p.id
+                            LEFT JOIN (
+                                SELECT disbursements_id, SUM(CAST(NULLIF(REPLACE(REPLACE(amount, ',', ''), 'USD', ''), '') AS DECIMAL(15,2))) AS pda_amount
+                                FROM pdadetails
+                                GROUP BY disbursements_id
+                            ) pda_sum ON d.id = pda_sum.disbursements_id
+                            LEFT JOIN (
+                                SELECT disbursements_id, SUM(CAST(NULLIF(REPLACE(REPLACE(amount, ',', ''), 'USD', ''), '') AS DECIMAL(15,2))) AS fda_amount
+                                FROM fdadetails
+                                GROUP BY disbursements_id
+                            ) fda_sum ON d.id = fda_sum.disbursements_id
+                            WHERE {where_sql}
+                            ORDER BY d.id DESC
+                        """
+                        if not is_all_records:
+                            data_sql += " LIMIT :limit OFFSET :offset"
+                            params["limit"] = data_request.pageSize
+                            params["offset"] = offset
+
+                        rows = conn.execute(text(data_sql), params).mappings().all()
+                        for r in rows:
+                            etd_val = r.get("etd")
+                            etd_str = etd_val.isoformat() if hasattr(etd_val, 'isoformat') else str(etd_val or "")
+                            pda_amt = abs(float(r["pda_amount"])) if r["pda_amount"] is not None else 0.0
+                            fda_amt = abs(float(r["fda_amount"])) if r["fda_amount"] is not None else 0.0
+                            kamba_records.append({
+                                "disbursement_seq": r["disbursement_seq"],
+                                "client_id": 85,
+                                "etd": etd_str,
+                                "vessel_name": r["vessel_name"] or f"Vessel-{r['disbursement_seq']}",
+                                "country_id": None,
+                                "country_name": r["country_name"] or "N/A",
+                                "port_id": None,
+                                "port_name": r["port_name"] or "N/A",
+                                "loa": float(r["loa"]) if r["loa"] is not None else None,
+                                "grt": float(r["grt"]) if r["grt"] is not None else None,
+                                "rgrt": float(r["rgrt"]) if r["rgrt"] is not None else None,
+                                "nrt": float(r["nrt"]) if r["nrt"] is not None else None,
+                                "loss_prevention_pda": None,
+                                "loss_prevention_fda": None,
+                                "total_loss_prevented": None,
+                                "loss_prevented_reason": None,
+                                "fda_amount": fda_amt,
+                                "pda_amount": pda_amt,
+                                "manual_fda_amount": f"USD {fda_amt:.2f}" if fda_amt > 0 else None,
+                                "manual_pda_amount": f"USD {pda_amt:.2f}" if pda_amt > 0 else None,
+                                "voyage_no": None,
+                                "vessel_type": None,
+                                "port_func": None,
+                                "arrival_local": etd_str,
+                                "departure_local": None,
+                                "port_days": None,
+                                "agent": None,
+                                "cargo_grade": None,
+                                "counterparty_short_name": None,
+                                "imo_no": None,
+                                "advance_amt": pda_amt if pda_amt > 0 else None,
+                                "final_amt": fda_amt if fda_amt > 0 else None,
+                                "advance_amount_remitted": None,
+                                "outstanding_balance": None,
+                                "remark": None,
+                                "data_source": "kamba"
+                            })
+                        return kamba_records, kamba_count
+                except Exception as e:
+                    import traceback
+                    traceback.print_exc()
+                    print(f"DEBUG ERROR IN KAMBA MYSQL: {type(e).__name__} - {e}")
+                    return [], 0
+
+        if ds == "excel":
+            excel_records = []
+            excel_count = 0
+            try:
+                with db.begin_nested():
+                    q = db.query(
+                        ExcelDisbursementsTotalPortCost.id.label("disbursement_seq"),
+                        ExcelVessel.vessel_name,
+                        ExcelCountry.country_name,
+                        ExcelPort.port_name,
+                        ExcelDisbursementsTotalPortCost.arrival_local.label("etd"),
+                        ExcelDisbursementsTotalPortCost.advance_amt.label("pda_amount"),
+                        ExcelDisbursementsTotalPortCost.final_amt.label("fda_amount"),
+                        ExcelDisbursementsTotalPortCost.grt,
+                        ExcelDisbursementsTotalPortCost.dwt,
+                        ExcelDisbursementsTotalPortCost.vendor_short_name.label("agent"),
+                        ExcelDisbursementsTotalPortCost.cargo_grades.label("cargo_grade"),
+                        ExcelDisbursementsTotalPortCost.counterparty_short_name,
+                        ExcelDisbursementsTotalPortCost.voyage_no,
+                        ExcelDisbursementsTotalPortCost.vessel_type,
+                        ExcelDisbursementsTotalPortCost.port_func,
+                        ExcelDisbursementsTotalPortCost.departure_local,
+                        ExcelDisbursementsTotalPortCost.port_days,
+                        ExcelDisbursementsTotalPortCost.imo_no,
+                        ExcelDisbursementsTotalPortCost.advance_amount_remitted,
+                        ExcelDisbursementsTotalPortCost.outstanding_balance,
+                        ExcelDisbursementsTotalPortCost.remark
+                    ).outerjoin(ExcelVessel, ExcelDisbursementsTotalPortCost.vessel_id == ExcelVessel.id)\
+                     .outerjoin(ExcelCountry, ExcelDisbursementsTotalPortCost.country_id == ExcelCountry.id)\
+                     .outerjoin(ExcelPort, ExcelDisbursementsTotalPortCost.port_id == ExcelPort.id)
+
+                    if data_request.tableFilter:
+                        tf = data_request.tableFilter
+                        if tf.vessel:
+                            q = q.filter(ExcelVessel.vessel_name.in_(tf.vessel))
+                        if tf.country:
+                            q = q.filter(ExcelCountry.country_name.in_(tf.country))
+                        if tf.port:
+                            q = q.filter(ExcelPort.port_name.in_(tf.port))
+                        if tf.vessel_type:
+                            q = q.filter(ExcelDisbursementsTotalPortCost.vessel_type.in_(tf.vessel_type))
+                        if tf.agent:
+                            q = q.filter(ExcelDisbursementsTotalPortCost.vendor_short_name.in_(tf.agent))
+                        if tf.cargo_grade:
+                            q = q.filter(ExcelDisbursementsTotalPortCost.cargo_grades.in_(tf.cargo_grade))
+                        if tf.counterparty_short_name:
+                            q = q.filter(ExcelDisbursementsTotalPortCost.counterparty_short_name.in_(tf.counterparty_short_name))
+
+                    excel_count = q.count()
+                    
+                    def map_excel_row(r):
+                        return {
+                            "disbursement_seq": r.disbursement_seq,
+                            "client_id": None,
+                            "etd": r.etd,
+                            "vessel_name": r.vessel_name or r.imo_no or f"Vessel-{r.disbursement_seq}",
+                            "country_id": None,
+                            "country_name": r.country_name or "N/A",
+                            "port_id": None,
+                            "port_name": r.port_name or "N/A",
+                            "loa": None,
+                            "grt": float(r.grt) if r.grt is not None else None,
+                            "rgrt": None,
+                            "nrt": None,
+                            "loss_prevention_pda": None,
+                            "loss_prevention_fda": None,
+                            "total_loss_prevented": None,
+                            "loss_prevented_reason": None,
+                            "fda_amount": abs(float(r.fda_amount)) if r.fda_amount is not None else 0.0,
+                            "pda_amount": abs(float(r.pda_amount)) if r.pda_amount is not None else 0.0,
+                            "manual_fda_amount": None,
+                            "manual_pda_amount": None,
+                            "voyage_no": str(r.voyage_no) if r.voyage_no else None,
+                            "vessel_type": r.vessel_type,
+                            "port_func": r.port_func,
+                            "arrival_local": r.etd.isoformat() if r.etd else None,
+                            "departure_local": r.departure_local.isoformat() if r.departure_local else None,
+                            "port_days": float(r.port_days) if r.port_days is not None else None,
+                            "agent": r.agent,
+                            "cargo_grade": r.cargo_grade,
+                            "counterparty_short_name": r.counterparty_short_name,
+                            "imo_no": r.imo_no,
+                            "advance_amt": abs(float(r.pda_amount)) if r.pda_amount is not None else None,
+                            "final_amt": abs(float(r.fda_amount)) if r.fda_amount is not None else None,
+                            "advance_amount_remitted": float(r.advance_amount_remitted) if r.advance_amount_remitted is not None else None,
+                            "outstanding_balance": float(r.outstanding_balance) if r.outstanding_balance is not None else None,
+                            "remark": r.remark,
+                            "data_source": "excel"
+                        }
+
+                    excel_query_obj = q.order_by(desc(ExcelDisbursementsTotalPortCost.arrival_local))
+                    if not is_all_records:
+                        excel_query_obj = excel_query_obj.offset(offset).limit(data_request.pageSize)
+                    excel_fetched = excel_query_obj.all()
+
+                    for r in excel_fetched:
+                        excel_records.append(map_excel_row(r))
+                    return excel_records, excel_count
+            except Exception:
+                db.rollback()
+                return [], 0
+
+        params = {}
         where_clauses = [
             "1=1",
             "(vw.fda_amount IS NOT NULL OR (vw.manual_fda_amount IS NOT NULL AND vw.manual_fda_amount != ''))"
         ]
 
-        if data_request.clientId:
+        if client_ids_list:
             try:
-                client_ids = [int(x) for x in data_request.clientId]
+                int_cids = [int(x) for x in client_ids_list if str(x).isdigit()]
             except (ValueError, TypeError):
-                client_ids = list(data_request.clientId)
-            where_clauses.append("vw.client_id = ANY(:client_ids)")
-            params["client_ids"] = client_ids
+                int_cids = list(client_ids_list)
+            if int_cids:
+                where_clauses.append("vw.client_id = ANY(:client_ids)")
+                params["client_ids"] = int_cids
 
         if getattr(data_request, 'monthRange', None):
             if data_request.monthRange.from_date:
@@ -277,111 +550,6 @@ class DashboardRepository:
 
         raw_std = list(db.execute(data_query, params).mappings().all())
         standard_records = [dict(r, data_source="standard") for r in raw_std]
-
-        if ds != "excel":
-            return standard_records, standard_count
-
-        # If ds == "excel", query excel_data_dev records
-        excel_records = []
-        excel_count = 0
-        try:
-            with db.begin_nested():
-                q = db.query(
-                    ExcelDisbursementsTotalPortCost.id.label("disbursement_seq"),
-                    ExcelVessel.vessel_name,
-                    ExcelCountry.country_name,
-                    ExcelPort.port_name,
-                    ExcelDisbursementsTotalPortCost.arrival_local.label("etd"),
-                    ExcelDisbursementsTotalPortCost.advance_amt.label("pda_amount"),
-                    ExcelDisbursementsTotalPortCost.final_amt.label("fda_amount"),
-                    ExcelDisbursementsTotalPortCost.grt,
-                    ExcelDisbursementsTotalPortCost.dwt,
-                    ExcelDisbursementsTotalPortCost.vendor_short_name.label("agent"),
-                    ExcelDisbursementsTotalPortCost.cargo_grades.label("cargo_grade"),
-                    ExcelDisbursementsTotalPortCost.counterparty_short_name,
-                    ExcelDisbursementsTotalPortCost.voyage_no,
-                    ExcelDisbursementsTotalPortCost.vessel_type,
-                    ExcelDisbursementsTotalPortCost.port_func,
-                    ExcelDisbursementsTotalPortCost.departure_local,
-                    ExcelDisbursementsTotalPortCost.port_days,
-                    ExcelDisbursementsTotalPortCost.imo_no,
-                    ExcelDisbursementsTotalPortCost.advance_amount_remitted,
-                    ExcelDisbursementsTotalPortCost.outstanding_balance,
-                    ExcelDisbursementsTotalPortCost.remark
-                ).outerjoin(ExcelVessel, ExcelDisbursementsTotalPortCost.vessel_id == ExcelVessel.id)\
-                 .outerjoin(ExcelCountry, ExcelDisbursementsTotalPortCost.country_id == ExcelCountry.id)\
-                 .outerjoin(ExcelPort, ExcelDisbursementsTotalPortCost.port_id == ExcelPort.id)
-
-                if data_request.tableFilter:
-                    tf = data_request.tableFilter
-                    if tf.vessel:
-                        q = q.filter(ExcelVessel.vessel_name.in_(tf.vessel))
-                    if tf.country:
-                        q = q.filter(ExcelCountry.country_name.in_(tf.country))
-                    if tf.port:
-                        q = q.filter(ExcelPort.port_name.in_(tf.port))
-                    if tf.vessel_type:
-                        q = q.filter(ExcelDisbursementsTotalPortCost.vessel_type.in_(tf.vessel_type))
-                    if tf.agent:
-                        q = q.filter(ExcelDisbursementsTotalPortCost.vendor_short_name.in_(tf.agent))
-                    if tf.cargo_grade:
-                        q = q.filter(ExcelDisbursementsTotalPortCost.cargo_grades.in_(tf.cargo_grade))
-                    if tf.counterparty_short_name:
-                        q = q.filter(ExcelDisbursementsTotalPortCost.counterparty_short_name.in_(tf.counterparty_short_name))
-
-                excel_count = q.count()
-                
-                def map_excel_row(r):
-                    return {
-                        "disbursement_seq": r.disbursement_seq,
-                        "client_id": None,
-                        "etd": r.etd,
-                        "vessel_name": r.vessel_name or r.imo_no or f"Vessel-{r.disbursement_seq}",
-                        "country_id": None,
-                        "country_name": r.country_name or "N/A",
-                        "port_id": None,
-                        "port_name": r.port_name or "N/A",
-                        "loa": None,
-                        "grt": float(r.grt) if r.grt is not None else None,
-                        "rgrt": None,
-                        "nrt": None,
-                        "loss_prevention_pda": None,
-                        "loss_prevention_fda": None,
-                        "total_loss_prevented": None,
-                        "loss_prevented_reason": None,
-                        "fda_amount": abs(float(r.fda_amount)) if r.fda_amount is not None else 0.0,
-                        "pda_amount": abs(float(r.pda_amount)) if r.pda_amount is not None else 0.0,
-                        "manual_fda_amount": None,
-                        "manual_pda_amount": None,
-                        "voyage_no": str(r.voyage_no) if r.voyage_no else None,
-                        "vessel_type": r.vessel_type,
-                        "port_func": r.port_func,
-                        "arrival_local": r.etd.isoformat() if r.etd else None,
-                        "departure_local": r.departure_local.isoformat() if r.departure_local else None,
-                        "port_days": float(r.port_days) if r.port_days is not None else None,
-                        "agent": r.agent,
-                        "cargo_grade": r.cargo_grade,
-                        "counterparty_short_name": r.counterparty_short_name,
-                        "imo_no": r.imo_no,
-                        "advance_amt": abs(float(r.pda_amount)) if r.pda_amount is not None else None,
-                        "final_amt": abs(float(r.fda_amount)) if r.fda_amount is not None else None,
-                        "advance_amount_remitted": float(r.advance_amount_remitted) if r.advance_amount_remitted is not None else None,
-                        "outstanding_balance": float(r.outstanding_balance) if r.outstanding_balance is not None else None,
-                        "remark": r.remark,
-                        "data_source": "excel"
-                    }
-
-                excel_query_obj = q.order_by(desc(ExcelDisbursementsTotalPortCost.arrival_local))
-                if not is_all_records:
-                    excel_query_obj = excel_query_obj.offset(offset).limit(data_request.pageSize)
-                excel_fetched = excel_query_obj.all()
-
-                for r in excel_fetched:
-                    excel_records.append(map_excel_row(r))
-                return excel_records, excel_count
-        except Exception:
-            db.rollback()
-
         return standard_records, standard_count
 
     @staticmethod
@@ -435,6 +603,38 @@ class DashboardRepository:
         ).order_by(MaCompany.company_name).all()
         
         clients_list = [{"id": c[0], "name": c[1]} for c in clients_result] if clients_result else []
+
+        # If client_id is 85 ("Kamba") or data_source is "kamba"/"mysql", return Remote MySQL RDS data
+        if client_id == 85 or (data_source and data_source.lower() in ["kamba", "mysql"]):
+            from app.db import get_mysql_engine
+            mysql_engine = get_mysql_engine()
+            if mysql_engine:
+                try:
+                    with mysql_engine.connect() as conn:
+                        vessel_names = sorted([v[0] for v in conn.execute(text("SELECT DISTINCT vessel FROM vessels WHERE vessel IS NOT NULL AND vessel != ''")).all() if v[0]])
+                        country_names = sorted([c[0] for c in conn.execute(text("SELECT DISTINCT country FROM countries WHERE country IS NOT NULL AND country != ''")).all() if c[0]])
+                        port_names = sorted([p[0] for p in conn.execute(text("SELECT DISTINCT port FROM ports WHERE port IS NOT NULL AND port != ''")).all() if p[0]])
+
+                        grt_res = conn.execute(text("SELECT MIN(grt), MAX(grt) FROM vessels WHERE grt IS NOT NULL")).first()
+                        min_grt = float(grt_res[0]) if grt_res and grt_res[0] is not None else None
+                        max_grt = float(grt_res[1]) if grt_res and grt_res[1] is not None else None
+
+                        return {
+                            "clients": clients_list,
+                            "vessel_name": vessel_names,
+                            "country_name": country_names,
+                            "port_name": port_names,
+                            "loa": None,
+                            "nrt": None,
+                            "grt": {"min_value": min_grt, "max_value": max_grt} if min_grt is not None else None,
+                            "rgrt": None,
+                            "vessel_type": [],
+                            "agent": [],
+                            "cargo_grade": [],
+                            "counterparty_short_name": []
+                        }
+                except Exception as e:
+                    print("Error querying remote MySQL RDS filter data:", e)
 
         # If client_id is 84 ("X-Platform") or data_source is explicitly "excel", return Excel schema data only
         if client_id == 84 or (data_source and data_source.lower() == "excel"):

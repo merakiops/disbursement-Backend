@@ -106,6 +106,7 @@ pydyf==0.12.1
 pyee==13.0.1
 Pygments==2.20.0
 PyJWT==2.10.1
+PyMySQL==1.2.0
 PyMuPDF==1.27.2.3
 pyogrio==0.12.1
 pyparsing==3.3.2
