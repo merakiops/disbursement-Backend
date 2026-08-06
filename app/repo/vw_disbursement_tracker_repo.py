@@ -469,11 +469,15 @@ class DisbursementRepository:
                         if should_apply_roe and roe:
                             m_amount = m_amount * roe
 
+                agent_amt = round(a_amount, 2)
+                if agent_amt == 0.0:
+                    continue
+
                 pda_expenses.append({
-                    "S. No": s_no,
+                    "S. No": len(pda_expenses) + 1,
                     "Description": desc,
                     "Meraki Amount": round(m_amount, 2),
-                    "Agent Amount": round(a_amount, 2)
+                    "Agent Amount": agent_amt
                 })
 
             setattr(base_query, "pda_expenses", pda_expenses)
