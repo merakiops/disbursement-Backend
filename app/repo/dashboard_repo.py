@@ -40,50 +40,46 @@ class DashboardRepository:
         ds = (data_source or "all").lower()
 
         if is_kamba_client or (ds in ["kamba", "mysql"] and client_ids and 85 in [int(x) for x in client_ids if str(x).isdigit()] and len(client_ids) == 1):
-            from app.db import get_mysql_engine
-            mysql_engine = get_mysql_engine()
-            if mysql_engine:
-                try:
-                    with mysql_engine.connect() as conn:
-                        v_cnt = conn.execute(text("SELECT COUNT(DISTINCT vessel) FROM vessels")).scalar() or 0
-                        c_cnt = conn.execute(text("SELECT COUNT(DISTINCT country) FROM countries")).scalar() or 0
-                        p_cnt = conn.execute(text("SELECT COUNT(DISTINCT port) FROM ports")).scalar() or 0
-                        tot_fda = conn.execute(text("SELECT COUNT(*) FROM disbursements")).scalar() or 0
-                        tot_amt = conn.execute(text("SELECT SUM(CAST(NULLIF(REPLACE(REPLACE(amount, ',', ''), 'USD', ''), '') AS DECIMAL(15,2))) FROM fdadetails")).scalar() or 0.0
-                        tot_pda_amt = conn.execute(text("SELECT SUM(CAST(NULLIF(REPLACE(REPLACE(amount, ',', ''), 'USD', ''), '') AS DECIMAL(15,2))) FROM pdadetails")).scalar() or 0.0
-                        
-                        pda_total = float(tot_pda_amt)
-                        fda_total = float(tot_amt)
-                        overall_savings = max(0.0, pda_total - fda_total)
-                        pda_savings = overall_savings
-                        fda_savings = overall_savings
-                        pct_savings = round((overall_savings / pda_total * 100), 2) if pda_total > 0 else 0.0
-                        pct_savings_fda = round((fda_savings / fda_total * 100), 2) if fda_total > 0 else 0.0
-                        pct_savings_pda = round((pda_savings / pda_total * 100), 2) if pda_total > 0 else 0.0
+            try:
+                v_cnt = db.execute(text("SELECT COUNT(DISTINCT vessel) FROM kamba_data.vessels")).scalar() or 0
+                c_cnt = db.execute(text("SELECT COUNT(DISTINCT country) FROM kamba_data.countries")).scalar() or 0
+                p_cnt = db.execute(text("SELECT COUNT(DISTINCT port) FROM kamba_data.ports")).scalar() or 0
+                tot_fda = db.execute(text("SELECT COUNT(*) FROM kamba_data.disbursements")).scalar() or 0
+                tot_amt = db.execute(text("SELECT SUM(CAST(NULLIF(REPLACE(REPLACE(amount, ',', ''), 'USD', ''), '') AS DECIMAL(15,2))) FROM kamba_data.fdadetails")).scalar() or 0.0
+                tot_pda_amt = db.execute(text("SELECT SUM(CAST(NULLIF(REPLACE(REPLACE(amount, ',', ''), 'USD', ''), '') AS DECIMAL(15,2))) FROM kamba_data.pdadetails")).scalar() or 0.0
+                
+                pda_total = float(tot_pda_amt or 0.0)
+                fda_total = float(tot_amt or 0.0)
+                overall_savings = max(0.0, pda_total - fda_total)
+                pda_savings = overall_savings
+                fda_savings = overall_savings
+                pct_savings = round((overall_savings / pda_total * 100), 2) if pda_total > 0 else 0.0
+                pct_savings_fda = round((fda_savings / fda_total * 100), 2) if fda_total > 0 else 0.0
+                pct_savings_pda = round((pda_savings / pda_total * 100), 2) if pda_total > 0 else 0.0
 
-                        return {
-                            "countries": c_cnt,
-                            "ports": p_cnt,
-                            "vessels": v_cnt,
-                            "total_pda": tot_fda,
-                            "completed_pda": tot_fda,
-                            "under_process_pda": 0,
-                            "total_fda": tot_fda,
-                            "completed_fda": tot_fda,
-                            "under_process_fda": 0,
-                            "yet_to_process": 0,
-                            "pdasavings": pda_savings,
-                            "fdasavings": fda_savings,
-                            "overallsavingsamount": overall_savings,
-                            "fda_total_amount": fda_total,
-                            "percentage_savings": pct_savings,
-                            "percentage_savings_fda": pct_savings_fda,
-                            "percentage_savings_pda": pct_savings_pda,
-                            "pda_total_amount": pda_total,
-                            "pda_completed_no_fda": 0
-                        }
-                except Exception as e:
-                    print("Error querying remote MySQL RDS summary:", e)
+                return {
+                    "countries": c_cnt,
+                    "ports": p_cnt,
+                    "vessels": v_cnt,
+                    "total_pda": tot_fda,
+                    "completed_pda": tot_fda,
+                    "under_process_pda": 0,
+                    "total_fda": tot_fda,
+                    "completed_fda": tot_fda,
+                    "under_process_fda": 0,
+                    "yet_to_process": 0,
+                    "pdasavings": pda_savings,
+                    "fdasavings": fda_savings,
+                    "overallsavingsamount": overall_savings,
+                    "fda_total_amount": fda_total,
+                    "percentage_savings": pct_savings,
+                    "percentage_savings_fda": pct_savings_fda,
+                    "percentage_savings_pda": pct_savings_pda,
+                    "pda_total_amount": pda_total,
+                    "pda_completed_no_fda": 0
+                }
+            except Exception as e:
+                print("Error querying PostgreSQL kamba_data summary:", e)
 
         if is_excel_client or ds == "excel":
             try:
@@ -205,113 +201,109 @@ class DashboardRepository:
 
         offset = 0 if is_all_records else (data_request.page - 1) * data_request.pageSize
         if ds in ["kamba", "mysql"]:
-            from app.db import get_mysql_engine
-            mysql_engine = get_mysql_engine()
-            if mysql_engine:
-                try:
-                    kamba_records = []
-                    with mysql_engine.connect() as conn:
-                        where_clauses = ["1=1"]
-                        params = {}
-                        if data_request.tableFilter:
-                            tf = data_request.tableFilter
-                            if tf.vessel and len(tf.vessel) > 0:
-                                where_clauses.append("v.vessel IN :vessels")
-                                params["vessels"] = tuple(tf.vessel)
-                            if tf.country and len(tf.country) > 0:
-                                where_clauses.append("c.country IN :countries")
-                                params["countries"] = tuple(tf.country)
-                            if tf.port and len(tf.port) > 0:
-                                where_clauses.append("p.port IN :ports")
-                                params["ports"] = tuple(tf.port)
+            kamba_records = []
+            try:
+                where_clauses = ["1=1"]
+                params = {}
+                if data_request.tableFilter:
+                    tf = data_request.tableFilter
+                    if tf.vessel and len(tf.vessel) > 0:
+                        where_clauses.append("v.vessel IN :vessels")
+                        params["vessels"] = tuple(tf.vessel)
+                    if tf.country and len(tf.country) > 0:
+                        where_clauses.append("c.country IN :countries")
+                        params["countries"] = tuple(tf.country)
+                    if tf.port and len(tf.port) > 0:
+                        where_clauses.append("p.port IN :ports")
+                        params["ports"] = tuple(tf.port)
 
-                        where_sql = " AND ".join(where_clauses)
-                        count_sql = f"SELECT COUNT(*) FROM disbursements d LEFT JOIN vessels v ON d.vessels_id=v.id LEFT JOIN countries c ON d.countries_id=c.id LEFT JOIN ports p ON d.ports_id=p.id WHERE {where_sql}"
-                        kamba_count = conn.execute(text(count_sql), params).scalar() or 0
+                where_sql = " AND ".join(where_clauses)
+                count_sql = f"SELECT COUNT(*) FROM kamba_data.disbursements d LEFT JOIN kamba_data.vessels v ON d.vessels_id=v.id LEFT JOIN kamba_data.countries c ON d.countries_id=c.id LEFT JOIN kamba_data.ports p ON d.ports_id=p.id WHERE {where_sql}"
+                kamba_count = db.execute(text(count_sql), params).scalar() or 0
 
-                        data_sql = f"""
-                            SELECT 
-                                d.id AS disbursement_seq,
-                                v.vessel AS vessel_name,
-                                c.country AS country_name,
-                                p.port AS port_name,
-                                v.loa, v.grt, v.rgrt, v.nrt,
-                                d.pda_number,
-                                d.created_at AS etd,
-                                COALESCE(pda_sum.pda_amount, 0.0) AS pda_amount,
-                                COALESCE(fda_sum.fda_amount, 0.0) AS fda_amount
-                            FROM disbursements d
-                            LEFT JOIN vessels v ON d.vessels_id = v.id
-                            LEFT JOIN countries c ON d.countries_id = c.id
-                            LEFT JOIN ports p ON d.ports_id = p.id
-                            LEFT JOIN (
-                                SELECT disbursements_id, SUM(CAST(NULLIF(REPLACE(REPLACE(amount, ',', ''), 'USD', ''), '') AS DECIMAL(15,2))) AS pda_amount
-                                FROM pdadetails
-                                GROUP BY disbursements_id
-                            ) pda_sum ON d.id = pda_sum.disbursements_id
-                            LEFT JOIN (
-                                SELECT disbursements_id, SUM(CAST(NULLIF(REPLACE(REPLACE(amount, ',', ''), 'USD', ''), '') AS DECIMAL(15,2))) AS fda_amount
-                                FROM fdadetails
-                                GROUP BY disbursements_id
-                            ) fda_sum ON d.id = fda_sum.disbursements_id
-                            WHERE {where_sql}
-                            ORDER BY d.id DESC
-                        """
-                        if not is_all_records:
-                            data_sql += " LIMIT :limit OFFSET :offset"
-                            params["limit"] = data_request.pageSize
-                            params["offset"] = offset
+                data_sql = f"""
+                    SELECT 
+                        d.id AS disbursement_seq,
+                        v.vessel AS vessel_name,
+                        c.country AS country_name,
+                        p.port AS port_name,
+                        v.loa, v.grt, v.rgrt, v.nrt,
+                        d.pda_number,
+                        d.created_at AS etd,
+                        COALESCE(pda_sum.pda_amount, 0.0) AS pda_amount,
+                        COALESCE(fda_sum.fda_amount, 0.0) AS fda_amount
+                    FROM kamba_data.disbursements d
+                    LEFT JOIN kamba_data.vessels v ON d.vessels_id = v.id
+                    LEFT JOIN kamba_data.countries c ON d.countries_id = c.id
+                    LEFT JOIN kamba_data.ports p ON d.ports_id = p.id
+                    LEFT JOIN (
+                        SELECT disbursements_id, SUM(CAST(NULLIF(REPLACE(REPLACE(amount, ',', ''), 'USD', ''), '') AS DECIMAL(15,2))) AS pda_amount
+                        FROM kamba_data.pdadetails
+                        GROUP BY disbursements_id
+                    ) pda_sum ON d.id = pda_sum.disbursements_id
+                    LEFT JOIN (
+                        SELECT disbursements_id, SUM(CAST(NULLIF(REPLACE(REPLACE(amount, ',', ''), 'USD', ''), '') AS DECIMAL(15,2))) AS fda_amount
+                        FROM kamba_data.fdadetails
+                        GROUP BY disbursements_id
+                    ) fda_sum ON d.id = fda_sum.disbursements_id
+                    WHERE {where_sql}
+                    ORDER BY d.id DESC
+                """
+                if not is_all_records:
+                    data_sql += " LIMIT :limit OFFSET :offset"
+                    params["limit"] = data_request.pageSize
+                    params["offset"] = offset
 
-                        rows = conn.execute(text(data_sql), params).mappings().all()
-                        for r in rows:
-                            etd_val = r.get("etd")
-                            etd_str = etd_val.isoformat() if hasattr(etd_val, 'isoformat') else str(etd_val or "")
-                            pda_amt = abs(float(r["pda_amount"])) if r["pda_amount"] is not None else 0.0
-                            fda_amt = abs(float(r["fda_amount"])) if r["fda_amount"] is not None else 0.0
-                            kamba_records.append({
-                                "disbursement_seq": r["disbursement_seq"],
-                                "client_id": 85,
-                                "etd": etd_str,
-                                "vessel_name": r["vessel_name"] or f"Vessel-{r['disbursement_seq']}",
-                                "country_id": None,
-                                "country_name": r["country_name"] or "N/A",
-                                "port_id": None,
-                                "port_name": r["port_name"] or "N/A",
-                                "loa": float(r["loa"]) if r["loa"] is not None else None,
-                                "grt": float(r["grt"]) if r["grt"] is not None else None,
-                                "rgrt": float(r["rgrt"]) if r["rgrt"] is not None else None,
-                                "nrt": float(r["nrt"]) if r["nrt"] is not None else None,
-                                "loss_prevention_pda": None,
-                                "loss_prevention_fda": None,
-                                "total_loss_prevented": None,
-                                "loss_prevented_reason": None,
-                                "fda_amount": fda_amt,
-                                "pda_amount": pda_amt,
-                                "manual_fda_amount": f"USD {fda_amt:.2f}" if fda_amt > 0 else None,
-                                "manual_pda_amount": f"USD {pda_amt:.2f}" if pda_amt > 0 else None,
-                                "voyage_no": None,
-                                "vessel_type": None,
-                                "port_func": None,
-                                "arrival_local": etd_str,
-                                "departure_local": None,
-                                "port_days": None,
-                                "agent": None,
-                                "cargo_grade": None,
-                                "counterparty_short_name": None,
-                                "imo_no": None,
-                                "advance_amt": pda_amt if pda_amt > 0 else None,
-                                "final_amt": fda_amt if fda_amt > 0 else None,
-                                "advance_amount_remitted": None,
-                                "outstanding_balance": None,
-                                "remark": None,
-                                "data_source": "kamba"
-                            })
-                        return kamba_records, kamba_count
-                except Exception as e:
-                    import traceback
-                    traceback.print_exc()
-                    print(f"DEBUG ERROR IN KAMBA MYSQL: {type(e).__name__} - {e}")
-                    return [], 0
+                rows = db.execute(text(data_sql), params).mappings().all()
+                for r in rows:
+                    etd_val = r.get("etd")
+                    etd_str = etd_val.isoformat() if hasattr(etd_val, 'isoformat') else str(etd_val or "")
+                    pda_amt = abs(float(r["pda_amount"])) if r["pda_amount"] is not None else 0.0
+                    fda_amt = abs(float(r["fda_amount"])) if r["fda_amount"] is not None else 0.0
+                    kamba_records.append({
+                        "disbursement_seq": r["disbursement_seq"],
+                        "client_id": 85,
+                        "etd": etd_str,
+                        "vessel_name": r["vessel_name"] or f"Vessel-{r['disbursement_seq']}",
+                        "country_id": None,
+                        "country_name": r["country_name"] or "N/A",
+                        "port_id": None,
+                        "port_name": r["port_name"] or "N/A",
+                        "loa": float(r["loa"]) if r["loa"] is not None else None,
+                        "grt": float(r["grt"]) if r["grt"] is not None else None,
+                        "rgrt": float(r["rgrt"]) if r["rgrt"] is not None else None,
+                        "nrt": float(r["nrt"]) if r["nrt"] is not None else None,
+                        "loss_prevention_pda": None,
+                        "loss_prevention_fda": None,
+                        "total_loss_prevented": None,
+                        "loss_prevented_reason": None,
+                        "fda_amount": fda_amt,
+                        "pda_amount": pda_amt,
+                        "manual_fda_amount": f"USD {fda_amt:.2f}" if fda_amt > 0 else None,
+                        "manual_pda_amount": f"USD {pda_amt:.2f}" if pda_amt > 0 else None,
+                        "voyage_no": None,
+                        "vessel_type": None,
+                        "port_func": None,
+                        "arrival_local": etd_str,
+                        "departure_local": None,
+                        "port_days": None,
+                        "agent": None,
+                        "cargo_grade": None,
+                        "counterparty_short_name": None,
+                        "imo_no": None,
+                        "advance_amt": pda_amt if pda_amt > 0 else None,
+                        "final_amt": fda_amt if fda_amt > 0 else None,
+                        "advance_amount_remitted": None,
+                        "outstanding_balance": None,
+                        "remark": None,
+                        "data_source": "kamba"
+                    })
+                return kamba_records, kamba_count
+            except Exception as e:
+                import traceback
+                traceback.print_exc()
+                print(f"DEBUG ERROR IN KAMBA POSTGRES: {type(e).__name__} - {e}")
+                return [], 0
 
         if ds == "excel":
             excel_records = []
@@ -606,35 +598,31 @@ class DashboardRepository:
 
         # If client_id is 85 ("Kamba") or data_source is "kamba"/"mysql", return Remote MySQL RDS data
         if client_id == 85 or (data_source and data_source.lower() in ["kamba", "mysql"]):
-            from app.db import get_mysql_engine
-            mysql_engine = get_mysql_engine()
-            if mysql_engine:
-                try:
-                    with mysql_engine.connect() as conn:
-                        vessel_names = sorted([v[0] for v in conn.execute(text("SELECT DISTINCT vessel FROM vessels WHERE vessel IS NOT NULL AND vessel != ''")).all() if v[0]])
-                        country_names = sorted([c[0] for c in conn.execute(text("SELECT DISTINCT country FROM countries WHERE country IS NOT NULL AND country != ''")).all() if c[0]])
-                        port_names = sorted([p[0] for p in conn.execute(text("SELECT DISTINCT port FROM ports WHERE port IS NOT NULL AND port != ''")).all() if p[0]])
+            try:
+                vessel_names = sorted([v[0] for v in db.execute(text("SELECT DISTINCT vessel FROM kamba_data.vessels WHERE vessel IS NOT NULL AND vessel != ''")).all() if v[0]])
+                country_names = sorted([c[0] for c in db.execute(text("SELECT DISTINCT country FROM kamba_data.countries WHERE country IS NOT NULL AND country != ''")).all() if c[0]])
+                port_names = sorted([p[0] for p in db.execute(text("SELECT DISTINCT port FROM kamba_data.ports WHERE port IS NOT NULL AND port != ''")).all() if p[0]])
 
-                        grt_res = conn.execute(text("SELECT MIN(grt), MAX(grt) FROM vessels WHERE grt IS NOT NULL")).first()
-                        min_grt = float(grt_res[0]) if grt_res and grt_res[0] is not None else None
-                        max_grt = float(grt_res[1]) if grt_res and grt_res[1] is not None else None
+                grt_res = db.execute(text("SELECT MIN(grt), MAX(grt) FROM kamba_data.vessels WHERE grt IS NOT NULL")).first()
+                min_grt = float(grt_res[0]) if grt_res and grt_res[0] is not None else None
+                max_grt = float(grt_res[1]) if grt_res and grt_res[1] is not None else None
 
-                        return {
-                            "clients": clients_list,
-                            "vessel_name": vessel_names,
-                            "country_name": country_names,
-                            "port_name": port_names,
-                            "loa": None,
-                            "nrt": None,
-                            "grt": {"min_value": min_grt, "max_value": max_grt} if min_grt is not None else None,
-                            "rgrt": None,
-                            "vessel_type": [],
-                            "agent": [],
-                            "cargo_grade": [],
-                            "counterparty_short_name": []
-                        }
-                except Exception as e:
-                    print("Error querying remote MySQL RDS filter data:", e)
+                return {
+                    "clients": clients_list,
+                    "vessel_name": vessel_names,
+                    "country_name": country_names,
+                    "port_name": port_names,
+                    "loa": None,
+                    "nrt": None,
+                    "grt": {"min_value": min_grt, "max_value": max_grt} if min_grt is not None else None,
+                    "rgrt": None,
+                    "vessel_type": [],
+                    "agent": [],
+                    "cargo_grade": [],
+                    "counterparty_short_name": []
+                }
+            except Exception as e:
+                print("Error querying PostgreSQL kamba_data filter data:", e)
 
         # If client_id is 84 ("X-Platform") or data_source is explicitly "excel", return Excel schema data only
         if client_id == 84 or (data_source and data_source.lower() == "excel"):

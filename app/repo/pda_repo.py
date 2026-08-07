@@ -357,11 +357,19 @@ class PDARepository:
         
     def validate_pda_link(db: Session, pda_token: str, email: str):
         now = datetime.now()
+        token_clean = pda_token.strip() if pda_token else ""
+        token_base = token_clean.rstrip('=')
 
         pda_link = (
             db.query(PAFormLink)
             .filter(
-                PAFormLink.pda_token == pda_token
+                or_(
+                    PAFormLink.pda_token == token_clean,
+                    PAFormLink.pda_token == token_base,
+                    PAFormLink.pda_token == token_base + '=',
+                    PAFormLink.pda_token == token_base + '==',
+                    func.rtrim(PAFormLink.pda_token, '=') == token_base
+                )
             )
             .first()
         )
@@ -369,38 +377,52 @@ class PDARepository:
         if not pda_link:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Invalid link"
-                )
+                detail="Invalid link or token not found"
+            )
         if pda_link.status == 'N':
             raise HTTPException(
                 status_code=status.HTTP_410_GONE,
-               detail="Link is InActive / not Active "
-        )
-        # if pda_link.link_expiry <= now:
-        #     raise HTTPException(
-        #         status_code=status.HTTP_410_GONE,
-        #         detail="Link has expired"
-        #     )
+                detail="Link is InActive / not Active "
+            )
 
-        email_list = [e.strip().lower() for e in pda_link.email_to.split(',')]
-        if email.lower() not in email_list:
-            return None
-        disbursement=PDARepository.get_disbursement_by_disbursment_seq(pda_link.disbursement_seq, db)
+        email_req = email.strip().lower() if email else ""
+        email_list = [e.strip().lower() for e in pda_link.email_to.split(',') if e.strip()] if pda_link.email_to else []
+
+        # Check if requested email is in authorized email_to or port agent email
+        disbursement = PDARepository.get_disbursement_by_disbursment_seq(pda_link.disbursement_seq, db)
+        port_agent_emails = []
+        if disbursement and disbursement.portagent_id:
+            from app.models.company import MaCompany
+            pa_company = db.query(MaCompany).filter(MaCompany.company_id == disbursement.portagent_id).first()
+            if pa_company and pa_company.email:
+                if isinstance(pa_company.email, list):
+                    port_agent_emails = [e.strip().lower() for e in pa_company.email if e]
+                else:
+                    port_agent_emails = [e.strip().lower() for e in str(pa_company.email).split(',') if e]
+
+        all_authorized_emails = set(email_list + port_agent_emails)
+
+        if email_req not in all_authorized_emails:
+            # If email is not in email_to list, raise explicit bad request error instead of silent None
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Email '{email}' is not authorized to access this PDA link."
+            )
+
         PDARepository.check_inactive_or_deleted(disbursement)
         existing_otp_entry = (
             db.query(TxnPAFormOTP)
             .filter(TxnPAFormOTP.disbursement_seq == pda_link.disbursement_seq)
             .first()
-            )
+        )
         if existing_otp_entry:
-            if existing_otp_entry.email.lower() == email.lower():
+            if existing_otp_entry.email.lower() == email_req:
                 return pda_link
             else:
                 raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Invalid  Disbursement already started by {existing_otp_entry.email}"
-            )
-
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Invalid. Disbursement already started by {existing_otp_entry.email}"
+                )
 
         return pda_link
     
