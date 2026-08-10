@@ -1,10 +1,16 @@
 from sqlalchemy.orm import Session
-from sqlalchemy import or_
+from sqlalchemy import or_, desc
 from typing import Optional, Dict, Any, List
 from app.models.txn_disbursement_timeline import TxnDisbursementTimeline
+from app.models.txn_client_disbursement_request import TxnClientDisbursementRequest
+from app.models.txn_disbursement import TxnDisbursement
+from app.models.ports import MaPort
+from app.models.vessels import MaVessel
 import logging
 
 logger = logging.getLogger("app_logger")
+
+STANDARD_STAGES = ["Submitted", "Under Review", "Approved", "Completed"]
 
 class TimelineRepository:
 
@@ -34,7 +40,7 @@ class TimelineRepository:
             db.add(entry)
             db.commit()
             db.refresh(entry)
-            logger.info(f"Timeline entry created: ID {entry.timeline_id}, status: {status}, disbursement_id: {disbursement_id}")
+            logger.info(f"Timeline entry created: ID {entry.timeline_id}, status: {status}")
             return entry
         except Exception as e:
             db.rollback()
@@ -42,10 +48,8 @@ class TimelineRepository:
             raise e
 
     @staticmethod
-    def get_timeline(db: Session, identifier: str) -> List[TxnDisbursementTimeline]:
+    def get_raw_timeline_entries(db: Session, identifier: str) -> List[TxnDisbursementTimeline]:
         query = db.query(TxnDisbursementTimeline)
-        
-        # Check if identifier is integer (disbursement_seq or request_id)
         if identifier.isdigit():
             val = int(identifier)
             query = query.filter(
@@ -57,5 +61,8 @@ class TimelineRepository:
             )
         else:
             query = query.filter(TxnDisbursementTimeline.disbursement_id == identifier)
-            
         return query.order_by(TxnDisbursementTimeline.created_on.asc()).all()
+
+    @staticmethod
+    def get_all_client_requests(db: Session) -> List[TxnClientDisbursementRequest]:
+        return db.query(TxnClientDisbursementRequest).order_by(TxnClientDisbursementRequest.request_id.desc()).all()
