@@ -95,7 +95,7 @@ async def getCompanyList(request: Request,body: MasterDataRequestDTO,  db: Sessi
         port_agents = port_agent_service.get_all_port_agents(db)
         port_agents_list = list(port_agents) if port_agents is not None else []
         if not any(getattr(pa, 'company_name', '') and str(getattr(pa, 'company_name', '')).lower() == "others" for pa in port_agents_list):
-            port_agents_list.append(PortAgentCreateUpdateDTO(company_id=0, company_name="Others", status="Y"))
+            port_agents_list.append(PortAgentCreateUpdateDTO(company_id=0, company_name="Others", email=["others@merakishippingservices.com"], status="Y"))
         result["port_agent"] = port_agents_list
 
     if "all" in requested_fields or "companies" in requested_fields:
