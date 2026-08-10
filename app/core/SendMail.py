@@ -16,27 +16,28 @@ from email.mime.text import MIMEText
 from email.mime.application import MIMEApplication
 from jinja2 import Template
 import logging
+logger = logging.getLogger("app_logger")
 # Load environment variables
 load_dotenv()
-
 
 def _get_clean_env(key: str) -> Optional[str]:
     val = os.getenv(key)
     if not val:
         return None
     val = val.strip().strip('"').strip("'")
-    if "configured" in val or "app-password" in val:
+    if "not_configured" in val or "your_email_here" in val:
         return None
     return val
 
-SMTP_SERVER = _get_clean_env("SMTP_HOST") or _get_clean_env("SMTP_SERVER") or "smtp.gmail.com"
-SMTP_PORT = int(_get_clean_env("SMTP_PORT") or 587)
+def get_smtp_config():
+    server = _get_clean_env("SMTP_HOST") or _get_clean_env("SMTP_SERVER") or "smtp.gmail.com"
+    port = int(_get_clean_env("SMTP_PORT") or 587)
+    email = _get_clean_env("SMTP_USER") or _get_clean_env("EMAIL_ADDRESS")
+    raw_pass = _get_clean_env("SMTP_PASS") or _get_clean_env("EMAIL_PASSWORD")
+    password = raw_pass.replace(" ", "") if raw_pass else None
+    return server, port, email, password
 
-EMAIL_ADDRESS = _get_clean_env("SMTP_USER") or _get_clean_env("EMAIL_ADDRESS")
-_raw_pass = _get_clean_env("SMTP_PASS") or _get_clean_env("EMAIL_PASSWORD")
-EMAIL_PASSWORD = _raw_pass.replace(" ", "") if _raw_pass else None
-
-print(f"DEBUG SendMail Config -> SMTP_SERVER={SMTP_SERVER}, SMTP_PORT={SMTP_PORT}, EMAIL_ADDRESS={EMAIL_ADDRESS}, PASS_LEN={len(EMAIL_PASSWORD) if EMAIL_PASSWORD else 0}")
+SMTP_SERVER, SMTP_PORT, EMAIL_ADDRESS, EMAIL_PASSWORD = get_smtp_config()
 
 # Define email templates directory
 # TEMPLATE_DIR = "email_templates"
@@ -186,9 +187,15 @@ class SendMail:
                     raise ValueError("Message is required for plain text emails.")
                 email_body = message
 
+            smtp_server, smtp_port, email_address, email_password = get_smtp_config()
+
+            if not email_address or not email_password:
+                logger.error(f"Cannot send email: SMTP credentials incomplete (email: {email_address}, password set: {bool(email_password)})")
+                raise ValueError("SMTP credentials not properly configured on server.")
+
             # Create email
             msg = MIMEMultipart()
-            msg["From"] = EMAIL_ADDRESS
+            msg["From"] = email_address
             msg["To"] = ", ".join(to_email)
             if cc_email:
                 msg["Cc"] = ", ".join(cc_email)
@@ -196,15 +203,15 @@ class SendMail:
             msg.attach(MIMEText(email_body, "html" if template_type == "html" else "plain"))
 
             # Send email via SMTP
-            with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
+            with smtplib.SMTP(smtp_server, smtp_port) as server:
                 server.starttls()  # Secure connection
-                server.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
-                server.sendmail(EMAIL_ADDRESS, recipients, msg.as_string())
+                server.login(email_address, email_password)
+                server.sendmail(email_address, recipients, msg.as_string())
 
-            print(f"Email sent to {', '.join(to_email)} with CC to {', '.join(cc_email) if cc_email else 'None'}")
+            logger.info(f"Email sent to {', '.join(to_email)} with CC to {', '.join(cc_email) if cc_email else 'None'}")
         except Exception as e:
-            print(f"Email sending failed: {e}")  # Print error for debugging
-            raise HTTPException(status_code=500, detail=f"Failed to send email")
+            logger.error(f"Failed to send template email to {to_email}: {e}", exc_info=True)
+            raise HTTPException(status_code=500, detail=f"Failed to send email: {str(e)}")
 
     @staticmethod
     def send_email_with_pdf(
