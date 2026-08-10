@@ -3,10 +3,16 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.dto.timeline_dto import DisbursementTimelineListResponseDTO
 from app.services.timeline_service import TimelineService
-from app.core.decorators import jwt_required, role_required, ALLOWED_ROLES_ALL
+from app.core.decorators import jwt_required, role_required
 import logging
 
 logger = logging.getLogger("app_logger")
+
+ALLOWED_ROLES_ALL = [
+    {"id": 1, "name": "Admin"},
+    {"id": 2, "name": "User"},
+    {"id": 3, "name": "Client"}
+]
 
 timelineController = APIRouter()
 
