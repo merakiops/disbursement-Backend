@@ -4,6 +4,8 @@ Description: This module defines the abstract class `PDAService`, which provides
 such as adding, validating, and updating PDA statuses in a database.
 """
 from abc import ABC, abstractmethod
+from typing import Any
+from fastapi import BackgroundTasks
 from sqlalchemy.orm import Session
 from app.dto.pda_dto import TxnDisbursementInitiateDTo,DisbursementPAFormRequestDTO,TxnDisbursementInitiateManualDTo,TxnPdaEditDto, TxnReRequestInitiateDTo,DisbursementClientFormRequestDTO,RecalculateDisbursementRequestDTO,TxnClientApprovalRequestInitiateDTo,PtmInstrMailRequestDTO
 from app.models.txn_pa_form_link import PAFormLink
@@ -119,4 +121,8 @@ class PDAService(ABC):
 
     @abstractmethod
     def payment_instruction_mail(self,dto:PtmInstrMailRequestDTO,username,db):   
+        pass
+
+    @abstractmethod
+    def initiate_client_disbursement(self, user: str, request_data: Any, background_tasks: BackgroundTasks, db: Session):
         pass

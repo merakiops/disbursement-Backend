@@ -24,10 +24,9 @@ from .txn_communication_history import TxnCommunicationHistory
 from .txn_portagent_response import TxnPortAgentResponse
 from .txn_pa_form_link import PAFormLink
 from .txn_disbursement_files import TxnDisbursementFiles
+from .txn_client_disbursement_request import TxnClientDisbursementRequest
 from sqlalchemy.orm import configure_mappers
-from .txn_pa_form_otp import TxnPAFormOTP
-
 
 configure_mappers()
 
-__all__ = ["MaStatus","BankDetails","MaVessel", "CompVslAsso", "MaCompany", "AppOwningCompany", "MaCompanyType","MaCountry","MaPort","MaPortServiceType","MaPortSubServiceType","MaTariffService","TxnTariffServiceColumn","MaPortTariffRule","TxnDisbursement","PDAModel","TxnFDA","PDAPortAgentHistory","TxnCommunicationHistory","TxnPortAgentResponse","PAFormLink","TxnDisbursementFiles","TxnPAFormOTP","PdaVesselDetails"]
+__all__ = ["MaStatus","BankDetails","MaVessel", "CompVslAsso", "MaCompany", "AppOwningCompany", "MaCompanyType","MaCountry","MaPort","MaPortServiceType","MaPortSubServiceType","MaTariffService","TxnTariffServiceColumn","MaPortTariffRule","TxnDisbursement","PDAModel","TxnFDA","PDAPortAgentHistory","TxnCommunicationHistory","TxnPortAgentResponse","PAFormLink","TxnDisbursementFiles","TxnPAFormOTP","PdaVesselDetails","TxnClientDisbursementRequest"]

@@ -1707,4 +1707,113 @@ class PDARepository:
     def payment_instruction_mail(dto,username,db):
         PDARepository._update_user_signature(username,dto.signature,db)
         db.commit()
-        
+
+    @staticmethod
+    def initiate_client_disbursement(user: str, dto: Any, db: Session):
+        from app.models.txn_client_disbursement_request import TxnClientDisbursementRequest
+
+        # Generate disbursement ID using existing generator
+        disbursement_id = PDARepository._get_next_disbursement_id(db)
+
+        # Convert portAgents list of objects/DTOs to list of dicts for JSON column
+        port_agents_data = []
+        if dto.portAgents:
+            for pa in dto.portAgents:
+                if hasattr(pa, 'model_dump'):
+                    port_agents_data.append(pa.model_dump())
+                elif hasattr(pa, 'dict'):
+                    port_agents_data.append(pa.dict())
+                elif isinstance(pa, dict):
+                    port_agents_data.append(pa)
+
+        client_request = TxnClientDisbursementRequest(
+            disbursement_id=disbursement_id,
+            country_id=dto.country_id,
+            client_id=dto.client_id,
+            vessel_id=dto.vessel_id,
+            port_id=dto.port_id,
+            cargo_id=dto.cargo_id,
+            draft=dto.draft,
+            imo_number=dto.imo_number,
+            vessel=dto.vessel,
+            nrt=dto.nrt,
+            grt=dto.grt,
+            rgrt=dto.rgrt,
+            loa=dto.loa,
+            beam=dto.beam,
+            depth=dto.depth,
+            dwt=dto.dwt,
+            type=dto.type,
+            eta=dto.eta,
+            etd=dto.etd,
+            vessel_stay=dto.vessel_stay,
+            voyage=dto.voyage,
+            pda_roe=dto.pda_roe,
+            pda_currency_from=dto.pda_currency_from,
+            pda_currency_to=dto.pda_currency_to,
+            invoice_ref_no=dto.invoice_ref_no,
+            port_agents=port_agents_data,
+            status="PENDING",
+            created_by=user,
+            updated_by=user
+        )
+
+        db.add(client_request)
+        db.commit()
+        db.refresh(client_request)
+
+        # Fetch names for 'others' response dictionary
+        from app.models.vessels import MaVessel
+        from app.models.ports import MaPort
+        from app.models.cargo import MaCargo
+        from app.models.company import MaCompany
+        from app.models.purpose import MaPurpose
+
+        vessel_name = dto.vessel
+        if not vessel_name and dto.vessel_id:
+            vsl_obj = db.query(MaVessel).filter(MaVessel.vessel_id == dto.vessel_id).first()
+            if vsl_obj:
+                vessel_name = vsl_obj.name
+
+        port_name = None
+        if dto.port_id:
+            port_obj = db.query(MaPort).filter(MaPort.port_id == dto.port_id).first()
+            if port_obj:
+                port_name = port_obj.name
+
+        cargo_name = None
+        if dto.cargo_id:
+            cargo_obj = db.query(MaCargo).filter(MaCargo.cargo_id == dto.cargo_id).first()
+            if cargo_obj:
+                cargo_name = cargo_obj.type
+
+        port_agent_names = []
+        purpose_names = []
+
+        if dto.portAgents:
+            for pa in dto.portAgents:
+                pa_id = pa.portagent_id if hasattr(pa, 'portagent_id') else pa.get('portagent_id')
+                p_id = pa.purpose_id if hasattr(pa, 'purpose_id') else pa.get('purpose_id')
+
+                if pa_id:
+                    pa_obj = db.query(MaCompany).filter(MaCompany.company_id == pa_id).first()
+                    if pa_obj and pa_obj.company_name:
+                        port_agent_names.append(pa_obj.company_name)
+
+                if p_id:
+                    purp_obj = db.query(MaPurpose).filter(MaPurpose.purpose_id == p_id).first()
+                    if purp_obj and purp_obj.name:
+                        purpose_names.append(purp_obj.name)
+
+        others = {
+            "vessel": vessel_name,
+            "port": port_name,
+            "cargo": cargo_name,
+            "port_agent": ", ".join(port_agent_names) if port_agent_names else None,
+            "purpose": ", ".join(purpose_names) if purpose_names else None
+        }
+
+        from app.dto.client_disbursement_request_dto import TxnClientDisbursementRequestResponseDTO
+        res_dto = TxnClientDisbursementRequestResponseDTO.model_validate(client_request)
+        res_dto.others = others
+        return res_dto

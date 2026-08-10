@@ -605,3 +605,57 @@ class PDAServiceImpl(PDAService):
             template_type="html",
             cc_email=dto.email_cc or []
         )
+
+    def initiate_client_disbursement(self, user: str, request_data: Any, background_tasks: BackgroundTasks, db: Session):
+        response = self.pda_repo.initiate_client_disbursement(user, request_data, db)
+        
+        try:
+            email_to_list = request_data.get_email_to_list() if hasattr(request_data, "get_email_to_list") else []
+            email_cc_list = request_data.get_email_cc_list() if hasattr(request_data, "get_email_cc_list") else []
+            
+            if not email_to_list:
+                port_agent_emails = []
+                if hasattr(request_data, "portAgents") and request_data.portAgents:
+                    pa_ids = [pa.portagent_id if hasattr(pa, "portagent_id") else pa.get("portagent_id") for pa in request_data.portAgents if pa]
+                    pa_ids = [pid for pid in pa_ids if pid]
+                    if pa_ids:
+                        companies = db.query(MaCompany).filter(MaCompany.company_id.in_(pa_ids)).all()
+                        for comp in companies:
+                            if comp.email:
+                                port_agent_emails.extend([e.strip() for e in comp.email.split(",") if e.strip()])
+                
+                if port_agent_emails:
+                    email_to_list = port_agent_emails
+                elif self.meraki_email:
+                    email_to_list = [self.meraki_email]
+
+            if email_to_list:
+                vessel_name = request_data.vessel or ""
+                subject = f"Client Disbursement Request - {response.disbursement_id or response.request_id} - {vessel_name.upper()}"
+                
+                signature = getattr(request_data, "email_signature", None)
+                if signature:
+                    signature = signature.replace("\n", "<br>")
+
+                context = {
+                    "request_id": response.request_id,
+                    "disbursement_id": response.disbursement_id or "",
+                    "vessel_name": vessel_name,
+                    "voyage": getattr(request_data, "voyage", "") or "",
+                    "email_id": self.meraki_email,
+                    "signature": signature
+                }
+
+                background_tasks.add_task(
+                    SendMail.send_template_email,
+                    to_email=email_to_list,
+                    subject=subject,
+                    template_name="pda_disbursement.html",
+                    context=context,
+                    template_type="html",
+                    cc_email=email_cc_list
+                )
+        except Exception as e:
+            logger.error(f"Failed to schedule email notification for client_initiate_disbursement: {e}")
+
+        return response

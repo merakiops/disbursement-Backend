@@ -76,10 +76,42 @@ if not _raw_meraki_email or "configured" in _raw_meraki_email or "default-email"
 else:
     MERAKI_DISBURSEMENT_EMAIL_ADDRESS = _raw_meraki_email
 
+from app.dto.client_disbursement_request_dto import TxnClientDisbursementInitiateDTO, TxnClientDisbursementRequestResponseDTO
+
+@disbursementController.post("/api/v1/client_initiate_disbursement", tags=["Disbursement"], response_model=TxnClientDisbursementRequestResponseDTO)
+@jwt_required
+@role_required(ALLOWED_ROLES_ALL)
+async def client_initiate_disbursement(request: Request, background_tasks: BackgroundTasks, request_data: TxnClientDisbursementInitiateDTO, db: Session = Depends(get_db)):
+    try:
+        username = request.state.user["username"]
+        response = pda_service.initiate_client_disbursement(
+            user=username,
+            request_data=request_data,
+            background_tasks=background_tasks,
+            db=db
+        )
+        logger.info(f"Client Disbursement request initiated successfully: {response.request_id}, ID: {response.disbursement_id}")
+        return response
+    except HTTPException:
+        raise
+    except ValueError as e:
+        logger.error(f"Validation error in client_initiate_disbursement: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Failed to initiate client disbursement"
+        )
+    except Exception as e:
+        logger.error(f"Unexpected error in client_initiate_disbursement: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to initiate client disbursement"
+        )
+
 @disbursementController.post("/api/v1/initiate_disbursement", tags=["Disbursement"],response_model=TxnDisbursementDto)
 @jwt_required
 @role_required(ALLOWED_ROLES_ALL)
 async def initiate_disbursement(request: Request, background_tasks: BackgroundTasks,request_data: TxnDisbursementInitiateDTo, db: Session = Depends(get_db)):
+
     
     try:
         username = request.state.user["username"]
