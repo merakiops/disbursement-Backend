@@ -373,7 +373,14 @@ class DisbursementRepository:
             disbursement = db.query(TxnDisbursement).filter(TxnDisbursement.disbursement_seq == disbursement_seq).first()
             pda_report = db.query(PdaReport).filter(PdaReport.disbursement_seq == disbursement_seq).first()
 
-            roe = base_query.roe_agent or (pda.pda_roe if pda else None) or (pda.conversion_rate if pda else None) or (pda_report.pda_roe if pda_report else None)
+            roe_candidates = [
+                pda.pda_roe if pda else None,
+                pda_report.pda_roe if pda_report else None,
+                base_query.roe_agent if base_query.roe_agent and base_query.roe_agent != 1.0 else None,
+                pda.conversion_rate if pda else None,
+                base_query.roe_actual_oanda
+            ]
+            roe = next((r for r in roe_candidates if r is not None), None)
             try:
                 roe = float(roe) if roe is not None else None
             except (ValueError, TypeError):
@@ -519,7 +526,14 @@ class DisbursementRepository:
             fda_primary_items = fda_agent_items if fda_agent_items else fda_sys_items
 
             if fda_primary_items:
-                fda_roe_val = base_query.roe_actual_oanda or (fda.fda_roe if fda else None) or (fda.conversion_rate if fda else None) or (fda_report.fda_roe if fda_report else None)
+                fda_roe_candidates = [
+                    fda.fda_roe if fda else None,
+                    fda.conversion_rate if fda and fda.conversion_rate != 1.0 else None,
+                    fda_report.fda_roe if fda_report else None,
+                    base_query.roe_agent if base_query.roe_agent and base_query.roe_agent != 1.0 else None,
+                    base_query.roe_actual_oanda
+                ]
+                fda_roe_val = next((r for r in fda_roe_candidates if r is not None), None)
                 try:
                     fda_roe_val = float(fda_roe_val) if fda_roe_val is not None else None
                 except (ValueError, TypeError):
