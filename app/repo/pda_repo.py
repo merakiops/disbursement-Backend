@@ -1801,9 +1801,15 @@ class PDARepository:
                         port_agent_names.append(pa_obj.company_name)
 
                 if p_id:
-                    purp_obj = db.query(MaPurpose).filter(MaPurpose.purpose_id == p_id).first()
-                    if purp_obj and purp_obj.name:
-                        purpose_names.append(purp_obj.name)
+                    if isinstance(p_id, list):
+                        purp_objs = db.query(MaPurpose).filter(MaPurpose.purpose_id.in_(p_id)).all()
+                        for purp in purp_objs:
+                            if purp and purp.name and purp.name not in purpose_names:
+                                purpose_names.append(purp.name)
+                    else:
+                        purp_obj = db.query(MaPurpose).filter(MaPurpose.purpose_id == p_id).first()
+                        if purp_obj and purp_obj.name and purp_obj.name not in purpose_names:
+                            purpose_names.append(purp_obj.name)
 
         others = {
             "vessel": vessel_name,
