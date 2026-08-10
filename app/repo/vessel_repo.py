@@ -160,24 +160,18 @@ class VesselRepository:
             raise HTTPException(status_code=500, detail=f"Unexpected error in vessel repository: %s")
         
     @staticmethod
-    def get_all_vessels_by_status(company_id: int, status: str, db: Session):
-        print(f"vessel repo company_id is :{company_id} and status {status}")
-        if company_id and company_id != 1:
-            asso_exists = db.query(CompVslAsso).filter(CompVslAsso.company_id == company_id).first()
-            if asso_exists:
-                vessels = (
-                    db.query(MaVessel)
-                    .join(CompVslAsso, CompVslAsso.vsl_id == MaVessel.vessel_id)
-                    .filter(
-                        CompVslAsso.company_id == company_id,
-                        MaVessel.status == status
-                    )
-                    .order_by(MaVessel.name.asc())
-                    .all()
-                )
-                return vessels
+    def get_all_vessels_by_status(company_id :int,status:str, db: Session) :
+        print(f"vessel repor company_id is :{company_id} and status {status}")
+        vessels = (
+            db.query(MaVessel)
+            .join(CompVslAsso, CompVslAsso.vsl_id == MaVessel.vessel_id)
+            .filter(
+                CompVslAsso.company_id == company_id,
+                MaVessel.status == status
+            )
+            .all()
+        )
 
-        vessels = db.query(MaVessel).filter(MaVessel.status == status).order_by(MaVessel.name.asc()).all()
         return vessels
     
     @staticmethod
