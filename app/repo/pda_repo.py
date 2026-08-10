@@ -1712,8 +1712,10 @@ class PDARepository:
     def initiate_client_disbursement(user: str, dto: Any, db: Session):
         from app.models.txn_client_disbursement_request import TxnClientDisbursementRequest
 
-        # Generate disbursement ID using existing generator
-        disbursement_id = PDARepository._get_next_disbursement_id(db)
+        # Generate client request ID (REQ prefix) to ensure 100% separation from txn_disbursement (MDA prefix)
+        last_req = db.query(TxnClientDisbursementRequest).order_by(TxnClientDisbursementRequest.request_id.desc()).first()
+        next_num = (last_req.request_id + 1) if (last_req and last_req.request_id) else 1
+        disbursement_id = f"REQ{next_num}"
 
         # Convert portAgents list of objects/DTOs to list of dicts for JSON column
         port_agents_data = []
