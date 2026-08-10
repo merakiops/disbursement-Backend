@@ -16,6 +16,7 @@ class DisbursementTrackerDetailsDTO(BaseModel):
     disbursement_seq: Optional[int]
     disbursement_id: Optional[str]
     pda_expenses: Optional[List[Dict[str, Any]]] = None
+    fda_expenses: Optional[List[Dict[str, Any]]] = None
 
     pic: Optional[str]
     client_name: Optional[str]

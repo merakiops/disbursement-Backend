@@ -482,6 +482,108 @@ class DisbursementRepository:
 
             setattr(base_query, "pda_expenses", pda_expenses)
 
+            # --- FDA Expenses Calculation ---
+            fda_expenses = []
+            from app.models.txn_fda import TxnFDA
+            from app.models.vw_fda_report import FdaReport
+            fda = db.query(TxnFDA).filter(TxnFDA.disbursement_seq == disbursement_seq, TxnFDA.state != 'D').first()
+            fda_report = db.query(FdaReport).filter(FdaReport.disbursement_seq == disbursement_seq).first()
+
+            fda_sys_items = []
+            fda_agent_items = []
+
+            if fda_report:
+                fda_sys_charge = fda_report.system_service_charge
+                fda_agent_charge = fda_report.service_charge
+
+                if isinstance(fda_sys_charge, str):
+                    try: fda_sys_charge = json.loads(fda_sys_charge)
+                    except Exception: fda_sys_charge = {}
+                if isinstance(fda_agent_charge, str):
+                    try: fda_agent_charge = json.loads(fda_agent_charge)
+                    except Exception: fda_agent_charge = {}
+
+                fda_sys_items = fda_sys_charge.get("items", []) if isinstance(fda_sys_charge, dict) else []
+                fda_agent_items = fda_agent_charge.get("items", []) if isinstance(fda_agent_charge, dict) else []
+
+            if not fda_sys_items and fda and isinstance(fda.meraki_pda_data, dict):
+                fda_sys_items = fda.meraki_pda_data.get("services", {}).get("items", [])
+                if not fda_sys_items and "port_tariff_rule" in fda.meraki_pda_data:
+                    fda_sys_items = fda.meraki_pda_data.get("port_tariff_rule", {}).get("items", [])
+
+            if not fda_agent_items and fda and isinstance(fda.portagent_fda_data, dict):
+                fda_agent_items = fda.portagent_fda_data.get("services", {}).get("items", [])
+                if not fda_agent_items and "port_tariff_rule" in fda.portagent_fda_data:
+                    fda_agent_items = fda.portagent_fda_data.get("port_tariff_rule", {}).get("items", [])
+
+            fda_primary_items = fda_agent_items if fda_agent_items else fda_sys_items
+
+            if fda_primary_items:
+                fda_roe_val = base_query.roe_actual_oanda or (fda.fda_roe if fda else None) or (fda.conversion_rate if fda else None) or (fda_report.fda_roe if fda_report else None)
+                try:
+                    fda_roe_val = float(fda_roe_val) if fda_roe_val is not None else None
+                except (ValueError, TypeError):
+                    fda_roe_val = None
+
+                fda_sys_item_map = {}
+                for s_item in fda_sys_items:
+                    if isinstance(s_item, dict):
+                        key = (s_item.get("service") or s_item.get("name") or "").strip().lower()
+                        if key:
+                            fda_sys_item_map[key] = s_item
+
+                raw_fda_agent_sum = sum(parse_amount(item.get("total") or item.get("sub_total")) for item in fda_primary_items if isinstance(item, dict))
+                target_fda_amount = base_query.portagent_fda_amount or base_query.actual_fda_amount
+
+                should_apply_fda_roe = False
+                if fda_roe_val and fda_roe_val > 0 and target_fda_amount and raw_fda_agent_sum > 0:
+                    unconverted_diff = abs(raw_fda_agent_sum - target_fda_amount)
+                    converted_diff = abs((raw_fda_agent_sum * fda_roe_val) - target_fda_amount)
+                    if converted_diff < unconverted_diff:
+                        should_apply_fda_roe = True
+
+                for idx, item in enumerate(fda_primary_items, start=1):
+                    if not isinstance(item, dict):
+                        continue
+                    s_no = item.get("SNO", idx)
+                    desc = item.get("service") or item.get("name") or f"Service {s_no}"
+                    key = desc.strip().lower()
+
+                    a_usd = item.get("total_usd") or item.get("amount_usd") or item.get("total_in_usd")
+                    if a_usd is not None and a_usd != "":
+                        a_amount = parse_amount(a_usd)
+                    else:
+                        a_amount = parse_amount(item.get("total") or item.get("sub_total"))
+                        if should_apply_fda_roe and fda_roe_val:
+                            a_amount = a_amount * fda_roe_val
+
+                    s_item = fda_sys_item_map.get(key)
+                    if not s_item and idx - 1 < len(fda_sys_items):
+                        s_item = fda_sys_items[idx - 1]
+
+                    m_amount = 0.0
+                    if isinstance(s_item, dict):
+                        m_usd = s_item.get("total_usd") or s_item.get("amount_usd") or s_item.get("total_in_usd")
+                        if m_usd is not None and m_usd != "":
+                            m_amount = parse_amount(m_usd)
+                        else:
+                            m_amount = parse_amount(s_item.get("total") or s_item.get("sub_total"))
+                            if should_apply_fda_roe and fda_roe_val:
+                                m_amount = m_amount * fda_roe_val
+
+                    agent_amt = round(a_amount, 2)
+                    if agent_amt == 0.0:
+                        continue
+
+                    fda_expenses.append({
+                        "S. No": len(fda_expenses) + 1,
+                        "Description": desc,
+                        "Meraki Amount": round(m_amount, 2),
+                        "Agent Amount": agent_amt
+                    })
+
+            setattr(base_query, "fda_expenses", fda_expenses)
+
             if not getattr(base_query, "client_name", None):
                 c_id = disbursement.client_id if disbursement else None
                 if not c_id and pda and isinstance(pda.meraki_pda_data, dict):
