@@ -16,6 +16,10 @@ from app.services import vessel_service_impl
 from app.services.port_service_impl import PortServiceImpl
 from app.repo.tariff_repo import TariffRepo
 from typing import Optional
+from app.dto.vessel_create_or_update_dto import VesselCreateUpdateDTO
+from app.dto.cargo_create_or_update_dto import CargoCreateUpdateDTO
+from app.dto.purpose_create_or_update_dto import PurposeCreateUpdateDTO
+from app.dto.port_agent_create_or_update_dto import PortAgentCreateUpdateDTO
 
 
 userservice = user_service_impl.UserServiceImpl()
@@ -55,10 +59,15 @@ async def getCompanyList(request: Request,body: MasterDataRequestDTO,  db: Sessi
 
     if "all" in requested_fields or "active_vessels" in requested_fields:
         active_vessels = vessl_service.get_all_vessels_by_status(company_id,'Y',db)
-        result["active_vessels"] = active_vessels
+        active_vessels_list = list(active_vessels) if active_vessels is not None else []
+        if not any(getattr(v, 'name', '') and str(getattr(v, 'name', '')).lower() == "others" for v in active_vessels_list):
+            active_vessels_list.append(VesselCreateUpdateDTO(vessel_id=0, name="Others", status="Y"))
+        result["active_vessels"] = active_vessels_list
+
     if "all" in requested_fields or "inactive_vessels" in requested_fields:
         inactive_vessels = vessl_service.get_all_vessels_by_status(company_id,'N',db)
         result["inactive_vessels"] = inactive_vessels
+
     if "all" in requested_fields or "roles" in requested_fields:
          roles = userservice.getMasterRoles(db)
          roles_dto = [RoleDTO.model_validate(r) for r in roles]
@@ -66,19 +75,28 @@ async def getCompanyList(request: Request,body: MasterDataRequestDTO,  db: Sessi
     
     if "all" in requested_fields or "cargo" in requested_fields:
         cargos = cargo_service.get_all_cargo_list(db)
-        result["cargo"] = cargos
+        cargos_list = list(cargos) if cargos is not None else []
+        if not any(getattr(c, 'type', '') and str(getattr(c, 'type', '')).lower() == "others" for c in cargos_list):
+            cargos_list.append(CargoCreateUpdateDTO(cargo_id=0, type="Others", status="Y"))
+        result["cargo"] = cargos_list
 
     if "all" in requested_fields or "purpose" in requested_fields:
-        purpose = purpose_service.get_all_purpose(db)
-        result["purpose"] = purpose
+        purposes = purpose_service.get_all_purpose(db)
+        purposes_list = list(purposes) if purposes is not None else []
+        if not any(getattr(p, 'name', '') and str(getattr(p, 'name', '')).lower() == "others" for p in purposes_list):
+            purposes_list.append(PurposeCreateUpdateDTO(purpose_id=0, name="Others", status="Y"))
+        result["purpose"] = purposes_list
 
     if "all" in requested_fields or "client" in requested_fields:
         clients = client_service.get_all_clients(db)
         result["client"] = clients
 
     if "all" in requested_fields or "port_agent" in requested_fields:
-        port_agent = port_agent_service.get_all_port_agents(db)
-        result["port_agent"] = port_agent
+        port_agents = port_agent_service.get_all_port_agents(db)
+        port_agents_list = list(port_agents) if port_agents is not None else []
+        if not any(getattr(pa, 'company_name', '') and str(getattr(pa, 'company_name', '')).lower() == "others" for pa in port_agents_list):
+            port_agents_list.append(PortAgentCreateUpdateDTO(company_id=0, company_name="Others", status="Y"))
+        result["port_agent"] = port_agents_list
 
     if "all" in requested_fields or "companies" in requested_fields:
         owning_company_id = 1
