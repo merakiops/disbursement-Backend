@@ -28,6 +28,7 @@ import random
 from datetime import datetime, timedelta
 
 from app.api.dynamic_table_controller import dynamic_table_controller
+from app.api.timeline_controller import timelineController
 from app.api.auth_controller import Auth_controller
 from app.api.otp_controller import Otp_controller
 from app.api.password_rest_controller import PasswordReset_controller
@@ -264,6 +265,7 @@ app.include_router(commHistoryController,tags=["communication history"])
 app.include_router(disbursementFilter,tags=["filter"])
 app.include_router(DashboardController, tags=["Dashboard"])
 app.include_router(dynamic_table_controller, tags=["Dynamic Table Creation"])
+app.include_router(timelineController, tags=["Disbursement Timeline"])
 app.include_router(demurrage_router)
 
 # === Serve Frontend Static Files ===

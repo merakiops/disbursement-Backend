@@ -30,6 +30,7 @@ from app.models.company import MaCompany
 from app.models.txn_communication_history import TxnCommunicationHistory
 from app.repo.communication_history_repo import CommunicationHistroyRepository
 from app.utils.model_cloner import ModelCopy
+from app.services.timeline_service import TimelineService
 MERAKI_DISBURSEMENT_EMAIL_ADDRESS = os.getenv("MERAKI_DISBURSEMENT_EMAIL_ADDRESS")
 load_dotenv()
 
@@ -91,6 +92,20 @@ class PDAServiceImpl(PDAService):
                 email_context, request_data, background_tasks
             )
             
+            # 5. Log timeline event
+            try:
+                TimelineService.log_event(
+                    db=db,
+                    status="REQUEST_SENT_TO_PORT_AGENT",
+                    action_by_role="MERAKI",
+                    action_by_user=user,
+                    message="Meraki initiated disbursement request to Port Agent",
+                    disbursement_id=disbursement.disbursement_id,
+                    disbursement_seq=disbursement.disbursement_seq
+                )
+            except Exception as tle:
+                logger.error(f"Failed to log timeline event in initiate_disbursement: {tle}")
+
             logger.info(f"Disbursement {disbursement.disbursement_seq} created successfully")
             return disbursement
             
@@ -143,6 +158,21 @@ class PDAServiceImpl(PDAService):
             self.comm_history_service.create_pa_re_submit_communication_history(new_disbursement, old_disbursement, request_body, db)
         else:
             self.comm_history_service.create_pda_submission_pa_history(new_disbursement, request_body, db)
+
+        # Log timeline event
+        try:
+            disb_id = new_disbursement.disbursement_id if (new_disbursement and hasattr(new_disbursement, 'disbursement_id')) else None
+            TimelineService.log_event(
+                db=db,
+                status="PORT_AGENT_SUBMITTED_PDA",
+                action_by_role="PORT_AGENT",
+                action_by_user=request_body.email if hasattr(request_body, 'email') else "PORT_AGENT",
+                message="Port Agent submitted PDA tariff details to Meraki",
+                disbursement_id=disb_id,
+                disbursement_seq=request_body.disbursement_seq
+            )
+        except Exception as tle:
+            logger.error(f"Failed to log timeline event in update_pda_disbursement_paform_submit: {tle}")
 
         return result
 
@@ -657,5 +687,19 @@ class PDAServiceImpl(PDAService):
                 )
         except Exception as e:
             logger.error(f"Failed to schedule email notification for client_initiate_disbursement: {e}")
+
+        # Log timeline event
+        try:
+            TimelineService.log_event(
+                db=db,
+                status="CLIENT_REQUEST_SENT",
+                action_by_role="CLIENT",
+                action_by_user=user,
+                message="Client submitted disbursement initiation request to Meraki",
+                disbursement_id=response.disbursement_id,
+                request_id=response.request_id
+            )
+        except Exception as tle:
+            logger.error(f"Failed to log timeline event for client_initiate_disbursement: {tle}")
 
         return response
