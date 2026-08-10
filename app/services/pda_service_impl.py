@@ -661,6 +661,61 @@ class PDAServiceImpl(PDAService):
 
             if email_to_list:
                 vessel_name = request_data.vessel or ""
+                if not vessel_name and request_data.vessel_id:
+                    from app.models.vessels import MaVessel
+                    vsl = db.query(MaVessel).filter(MaVessel.vessel_id == request_data.vessel_id).first()
+                    if vsl:
+                        vessel_name = vsl.name
+
+                port_name = ""
+                if request_data.port_id:
+                    from app.models.ports import MaPort
+                    port_obj = db.query(MaPort).filter(MaPort.port_id == request_data.port_id).first()
+                    if port_obj:
+                        port_name = port_obj.name
+
+                client_name = ""
+                if request_data.client_id:
+                    client_comp = db.query(MaCompany).filter(MaCompany.company_id == request_data.client_id).first()
+                    if client_comp and client_comp.company_name:
+                        client_name = client_comp.company_name
+                if not client_name:
+                    client_name = user if user else "Client"
+
+                operation_name = ""
+                if hasattr(request_data, "portAgents") and request_data.portAgents:
+                    p_ids = []
+                    for pa in request_data.portAgents:
+                        pid = pa.purpose_id if hasattr(pa, "purpose_id") else (pa.get("purpose_id") if isinstance(pa, dict) else None)
+                        if pid:
+                            if isinstance(pid, list):
+                                p_ids.extend(pid)
+                            else:
+                                p_ids.append(pid)
+                    if p_ids:
+                        from app.models.purpose import MaPurpose
+                        purp_objs = db.query(MaPurpose).filter(MaPurpose.purpose_id.in_(p_ids)).all()
+                        operation_name = ", ".join([p.name for p in purp_objs if p and p.name])
+
+                eta_str = ""
+                if request_data.eta:
+                    eta_str = request_data.eta.strftime("%Y-%m-%d %H:%M") if hasattr(request_data.eta, 'strftime') else str(request_data.eta)
+
+                # Generate secure PDA link and token
+                raw_token = uuid.uuid4().hex + uuid.uuid4().hex
+                encrypted_token = encrypt_token(raw_token)
+                pda_link = f"{self.host}pda-disburesement/{encrypted_token}"
+
+                # Save link entry in PAFormLink table
+                link_entry = PAFormLink(
+                    disbursement_seq=response.request_id,
+                    registration_link=pda_link,
+                    pda_token=encrypted_token,
+                    email_to=",".join(email_to_list),
+                    status='Y'
+                )
+                PDARepository.add_pda_link(link_entry, db)
+
                 subject = f"Client Disbursement Request - {response.disbursement_id or response.request_id} - {vessel_name.upper()}"
                 
                 signature = getattr(request_data, "email_signature", None)
@@ -668,10 +723,15 @@ class PDAServiceImpl(PDAService):
                     signature = signature.replace("\n", "<br>")
 
                 context = {
-                    "request_id": response.request_id,
-                    "disbursement_id": response.disbursement_id or "",
+                    "client_name": client_name,
                     "vessel_name": vessel_name,
                     "voyage": getattr(request_data, "voyage", "") or "",
+                    "port_name": port_name,
+                    "eta": eta_str,
+                    "operation": operation_name,
+                    "pda_disbursement_link": pda_link,
+                    "request_id": response.request_id,
+                    "disbursement_id": response.disbursement_id or "",
                     "email_id": self.meraki_email,
                     "signature": signature
                 }
