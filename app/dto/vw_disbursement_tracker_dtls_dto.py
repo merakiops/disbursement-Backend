@@ -85,9 +85,15 @@ class DisbursementTrackerDetailsDTO(BaseModel):
     outstanding_balance: Optional[float] = None
     remark: Optional[str] = None
 
+    vessel_imo: Optional[str] = None
+    bank_details: Optional[Dict[str, Any]] = None
+    presigned_url: Optional[str] = None
+
+
     model_config = {
         "from_attributes": True
     }
+
 
 
 #For paging

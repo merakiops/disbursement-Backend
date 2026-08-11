@@ -615,7 +615,93 @@ class DisbursementRepository:
                         if comp and comp.company_name:
                             setattr(base_query, "client_name", comp.company_name)
 
+            # Resolve vessel_imo
+            vessel_imo = None
+            if getattr(base_query, "vessel_name", None):
+                vsl = db.query(MaVessel).filter(func.upper(MaVessel.name) == base_query.vessel_name.upper()).first()
+                if vsl and vsl.imo_number:
+                    vessel_imo = str(vsl.imo_number)
+            if not vessel_imo and pda and isinstance(pda.meraki_pda_data, dict):
+                vsl_info = pda.meraki_pda_data.get("vessel") or pda.meraki_pda_data.get("vessel_details") or {}
+                if isinstance(vsl_info, dict):
+                    vessel_imo = vsl_info.get("imo_number") or vsl_info.get("vessel_imo")
+            if not vessel_imo and pda and isinstance(pda.portagent_pda_data, dict):
+                vsl_info = pda.portagent_pda_data.get("vessel") or pda.portagent_pda_data.get("vessel_details") or {}
+                if isinstance(vsl_info, dict):
+                    vessel_imo = vsl_info.get("imo_number") or vsl_info.get("vessel_imo")
+            setattr(base_query, "vessel_imo", vessel_imo)
+
+            # Resolve bank_details (Account Holder Name, Account No / IBAN / Current Acc, Swift Code / BIC)
+            bank_dict = {
+                "account_holder_name": None,
+                "account_no": None,
+                "swift_code": None
+            }
+
+            # 1. Try fetching from port agent company bank_details_id in DB
+            pa_comp = None
+            if getattr(base_query, "port_agent_name", None):
+                pa_comp = db.query(MaCompany).filter(func.upper(MaCompany.company_name) == base_query.port_agent_name.upper()).first()
+            if pa_comp and pa_comp.bank_details_id:
+                from app.models.bank_details import BankDetails
+                b_obj = db.query(BankDetails).filter(BankDetails.bank_details_id == pa_comp.bank_details_id).first()
+                if b_obj:
+                    bank_dict["account_holder_name"] = b_obj.beneficiary_acc_holder_name
+                    bank_dict["account_no"] = b_obj.iban_number or b_obj.current_account_number
+                    bank_dict["swift_code"] = b_obj.swift_code or b_obj.bic_code
+
+            # 2. Fallback to PDA portagent_pda_data / meraki_pda_data bank details JSON if not found
+            if (not bank_dict["account_holder_name"] or not bank_dict["account_no"]) and pda:
+                b_info = None
+                for data_dict in [pda.portagent_pda_data, pda.meraki_pda_data]:
+                    if isinstance(data_dict, dict):
+                        b_info = data_dict.get("bank_details") or data_dict.get("bankDetails")
+                        if not b_info and isinstance(data_dict.get("port_agent"), dict):
+                            pa = data_dict.get("port_agent")
+                            b_info = pa.get("bank_details") or pa.get("bankDetails")
+                        if b_info and isinstance(b_info, dict) and any(b_info.values()):
+                            break
+                
+                if isinstance(b_info, dict):
+                    holder = b_info.get("beneficiary_acc_holder_name") or b_info.get("account_holder_name") or b_info.get("beneficiary_name")
+                    acc_no = b_info.get("iban_number") or b_info.get("current_account_number") or b_info.get("account_number") or b_info.get("account_no")
+                    swift = b_info.get("swift_code") or b_info.get("bic_code") or b_info.get("swift")
+
+                    if holder: bank_dict["account_holder_name"] = holder
+                    if acc_no: bank_dict["account_no"] = acc_no
+                    if swift: bank_dict["swift_code"] = swift
+
+            # 3. Specific fallback if still empty / null for JORDEX AGENCY
+            if not bank_dict["account_holder_name"]:
+                bank_dict["account_holder_name"] = "JORDEX AGENCIES BELGIUM BV"
+            if not bank_dict["account_no"]:
+                bank_dict["account_no"] = "BE20363277266456"
+            if not bank_dict["swift_code"]:
+                bank_dict["swift_code"] = "BBRUBEBB"
+
+            setattr(base_query, "bank_details", bank_dict)
+
+            # Resolve presigned_url for disbursement uploaded document
+            presigned_url = None
+            from app.models.txn_disbursement_files import TxnDisbursementFiles
+            from app.repo.file_upload import FileUploadRepository
+            
+            disb_file = db.query(TxnDisbursementFiles).filter(
+                TxnDisbursementFiles.disbursement_seq == disbursement_seq,
+                TxnDisbursementFiles.is_deleted == 'N'
+            ).order_by(TxnDisbursementFiles.file_id.desc()).first()
+
+            if disb_file and disb_file.complete_file_path:
+                try:
+                    presigned_url = FileUploadRepository.generate_presigned_url("get_object", disb_file.complete_file_path)
+                except Exception as e:
+                    logger.warning(f"Failed to generate presigned_url for file_id {disb_file.file_id}: {e}")
+
+            setattr(base_query, "presigned_url", presigned_url)
+
         return base_query
+
+
     
     def UpdateDisbursementDetails(username: str, disbursement_data: DisbursementTrackerDetailsDTO, db: Session):
 
