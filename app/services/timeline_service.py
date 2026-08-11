@@ -3,6 +3,8 @@ from typing import Optional, Dict, Any, List
 from app.repo.timeline_repo import TimelineRepository
 from app.models.ports import MaPort
 from app.models.vessels import MaVessel
+from app.models.txn_client_disbursement_request import TxnClientDisbursementRequest
+
 from app.dto.timeline_dto import (
     DisbursementSummaryItemDTO,
     DisbursementSummaryListResponseDTO,
