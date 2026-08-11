@@ -41,12 +41,14 @@ class DashboardRepository:
 
         if is_kamba_client or (ds in ["kamba", "mysql"] and client_ids and 85 in [int(x) for x in client_ids if str(x).isdigit()] and len(client_ids) == 1):
             try:
-                v_cnt = db.execute(text("SELECT COUNT(DISTINCT vessel) FROM kamba_data.vessels")).scalar() or 0
-                c_cnt = db.execute(text("SELECT COUNT(DISTINCT country) FROM kamba_data.countries")).scalar() or 0
-                p_cnt = db.execute(text("SELECT COUNT(DISTINCT port) FROM kamba_data.ports")).scalar() or 0
-                tot_fda = db.execute(text("SELECT COUNT(*) FROM kamba_data.disbursements")).scalar() or 0
-                tot_amt = db.execute(text("SELECT SUM(CAST(NULLIF(REPLACE(REPLACE(amount, ',', ''), 'USD', ''), '') AS DECIMAL(15,2))) FROM kamba_data.fdadetails")).scalar() or 0.0
-                tot_pda_amt = db.execute(text("SELECT SUM(CAST(NULLIF(REPLACE(REPLACE(amount, ',', ''), 'USD', ''), '') AS DECIMAL(15,2))) FROM kamba_data.pdadetails")).scalar() or 0.0
+                v_cnt = db.execute(text("SELECT COUNT(DISTINCT vessel) FROM kamba_data_prod.vessels")).scalar() or 0
+                c_cnt = db.execute(text("SELECT COUNT(DISTINCT country) FROM kamba_data_prod.countries")).scalar() or 0
+                p_cnt = db.execute(text("SELECT COUNT(DISTINCT port) FROM kamba_data_prod.ports")).scalar() or 0
+                tot_fda = db.execute(text("SELECT COUNT(*) FROM kamba_data_prod.disbursements")).scalar() or 0
+                tot_amt = db.execute(text("SELECT SUM(CASE WHEN amount ~ '^[0-9]+(\\.[0-9]+)?$' THEN amount::DECIMAL(15,2) ELSE 0.0 END) FROM kamba_data_prod.fdadetails")).scalar() or 0.0
+                tot_pda_amt = db.execute(text("SELECT SUM(CASE WHEN amount ~ '^[0-9]+(\\.[0-9]+)?$' THEN amount::DECIMAL(15,2) ELSE 0.0 END) FROM kamba_data_prod.pdadetails")).scalar() or 0.0
+
+
                 
                 pda_total = float(tot_pda_amt or 0.0)
                 fda_total = float(tot_amt or 0.0)
@@ -218,7 +220,7 @@ class DashboardRepository:
                         params["ports"] = tuple(tf.port)
 
                 where_sql = " AND ".join(where_clauses)
-                count_sql = f"SELECT COUNT(*) FROM kamba_data.disbursements d LEFT JOIN kamba_data.vessels v ON d.vessels_id=v.id LEFT JOIN kamba_data.countries c ON d.countries_id=c.id LEFT JOIN kamba_data.ports p ON d.ports_id=p.id WHERE {where_sql}"
+                count_sql = f"SELECT COUNT(*) FROM kamba_data_prod.disbursements d LEFT JOIN kamba_data_prod.vessels v ON d.vessels_id=v.id LEFT JOIN kamba_data_prod.countries c ON d.countries_id=c.id LEFT JOIN kamba_data_prod.ports p ON d.ports_id=p.id WHERE {where_sql}"
                 kamba_count = db.execute(text(count_sql), params).scalar() or 0
 
                 data_sql = f"""
@@ -232,20 +234,22 @@ class DashboardRepository:
                         d.created_at AS etd,
                         COALESCE(pda_sum.pda_amount, 0.0) AS pda_amount,
                         COALESCE(fda_sum.fda_amount, 0.0) AS fda_amount
-                    FROM kamba_data.disbursements d
-                    LEFT JOIN kamba_data.vessels v ON d.vessels_id = v.id
-                    LEFT JOIN kamba_data.countries c ON d.countries_id = c.id
-                    LEFT JOIN kamba_data.ports p ON d.ports_id = p.id
+                    FROM kamba_data_prod.disbursements d
+                    LEFT JOIN kamba_data_prod.vessels v ON d.vessels_id = v.id
+                    LEFT JOIN kamba_data_prod.countries c ON d.countries_id = c.id
+                    LEFT JOIN kamba_data_prod.ports p ON d.ports_id = p.id
                     LEFT JOIN (
-                        SELECT disbursements_id, SUM(CAST(NULLIF(REPLACE(REPLACE(amount, ',', ''), 'USD', ''), '') AS DECIMAL(15,2))) AS pda_amount
-                        FROM kamba_data.pdadetails
+                        SELECT disbursements_id, SUM(CASE WHEN amount ~ '^[0-9]+(\\.[0-9]+)?$' THEN amount::DECIMAL(15,2) ELSE 0.0 END) AS pda_amount
+                        FROM kamba_data_prod.pdadetails
                         GROUP BY disbursements_id
                     ) pda_sum ON d.id = pda_sum.disbursements_id
                     LEFT JOIN (
-                        SELECT disbursements_id, SUM(CAST(NULLIF(REPLACE(REPLACE(amount, ',', ''), 'USD', ''), '') AS DECIMAL(15,2))) AS fda_amount
-                        FROM kamba_data.fdadetails
+                        SELECT disbursements_id, SUM(CASE WHEN amount ~ '^[0-9]+(\\.[0-9]+)?$' THEN amount::DECIMAL(15,2) ELSE 0.0 END) AS fda_amount
+                        FROM kamba_data_prod.fdadetails
                         GROUP BY disbursements_id
                     ) fda_sum ON d.id = fda_sum.disbursements_id
+
+
                     WHERE {where_sql}
                     ORDER BY d.id DESC
                 """
@@ -599,11 +603,11 @@ class DashboardRepository:
         # If client_id is 85 ("Kamba") or data_source is "kamba"/"mysql", return Remote MySQL RDS data
         if client_id == 85 or (data_source and data_source.lower() in ["kamba", "mysql"]):
             try:
-                vessel_names = sorted([v[0] for v in db.execute(text("SELECT DISTINCT vessel FROM kamba_data.vessels WHERE vessel IS NOT NULL AND vessel != ''")).all() if v[0]])
-                country_names = sorted([c[0] for c in db.execute(text("SELECT DISTINCT country FROM kamba_data.countries WHERE country IS NOT NULL AND country != ''")).all() if c[0]])
-                port_names = sorted([p[0] for p in db.execute(text("SELECT DISTINCT port FROM kamba_data.ports WHERE port IS NOT NULL AND port != ''")).all() if p[0]])
+                vessel_names = sorted([v[0] for v in db.execute(text("SELECT DISTINCT vessel FROM kamba_data_prod.vessels WHERE vessel IS NOT NULL AND vessel != ''")).all() if v[0]])
+                country_names = sorted([c[0] for c in db.execute(text("SELECT DISTINCT country FROM kamba_data_prod.countries WHERE country IS NOT NULL AND country != ''")).all() if c[0]])
+                port_names = sorted([p[0] for p in db.execute(text("SELECT DISTINCT port FROM kamba_data_prod.ports WHERE port IS NOT NULL AND port != ''")).all() if p[0]])
 
-                grt_res = db.execute(text("SELECT MIN(grt), MAX(grt) FROM kamba_data.vessels WHERE grt IS NOT NULL")).first()
+                grt_res = db.execute(text("SELECT MIN(grt), MAX(grt) FROM kamba_data_prod.vessels WHERE grt IS NOT NULL")).first()
                 min_grt = float(grt_res[0]) if grt_res and grt_res[0] is not None else None
                 max_grt = float(grt_res[1]) if grt_res and grt_res[1] is not None else None
 
@@ -622,7 +626,8 @@ class DashboardRepository:
                     "counterparty_short_name": []
                 }
             except Exception as e:
-                print("Error querying PostgreSQL kamba_data filter data:", e)
+                print("Error querying PostgreSQL kamba_data_prod filter data:", e)
+
 
         # If client_id is 84 ("X-Platform") or data_source is explicitly "excel", return Excel schema data only
         if client_id == 84 or (data_source and data_source.lower() == "excel"):
