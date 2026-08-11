@@ -681,8 +681,9 @@ class DisbursementRepository:
 
             setattr(base_query, "bank_details", bank_dict)
 
-            # Resolve presigned_url for disbursement uploaded document
+            # Resolve presigned_url and pdf_name for disbursement uploaded document
             presigned_url = None
+            pdf_name = None
             from app.models.txn_disbursement_files import TxnDisbursementFiles
             from app.repo.file_upload import FileUploadRepository
             
@@ -691,15 +692,19 @@ class DisbursementRepository:
                 TxnDisbursementFiles.is_deleted == 'N'
             ).order_by(TxnDisbursementFiles.file_id.desc()).first()
 
-            if disb_file and disb_file.complete_file_path:
-                try:
-                    presigned_url = FileUploadRepository.generate_presigned_url("get_object", disb_file.complete_file_path)
-                except Exception as e:
-                    logger.warning(f"Failed to generate presigned_url for file_id {disb_file.file_id}: {e}")
+            if disb_file:
+                pdf_name = disb_file.file_name
+                if disb_file.complete_file_path:
+                    try:
+                        presigned_url = FileUploadRepository.generate_presigned_url("get_object", disb_file.complete_file_path)
+                    except Exception as e:
+                        logger.warning(f"Failed to generate presigned_url for file_id {disb_file.file_id}: {e}")
 
             setattr(base_query, "presigned_url", presigned_url)
+            setattr(base_query, "pdf_name", pdf_name)
 
         return base_query
+
 
 
     

@@ -88,6 +88,8 @@ class DisbursementTrackerDetailsDTO(BaseModel):
     vessel_imo: Optional[str] = None
     bank_details: Optional[Dict[str, Any]] = None
     presigned_url: Optional[str] = None
+    pdf_name: Optional[str] = None
+
 
 
     model_config = {
