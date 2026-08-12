@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session
-from sqlalchemy import func, desc, text
+from sqlalchemy import func, desc, text, extract
 from app.models.vw_fda_processing_details import VwFdaProcessingDetails
 from app.models.company import MaCompany
 from app.models.txn_disbursement import TxnDisbursement
@@ -219,6 +219,18 @@ class DashboardRepository:
                         where_clauses.append("p.port IN :ports")
                         params["ports"] = tuple(tf.port)
 
+                has_year_filter = False
+                if getattr(data_request, 'yearRange', None):
+                    if data_request.yearRange.from_year:
+                        where_clauses.append("EXTRACT(YEAR FROM d.created_at) >= :from_year")
+                        params["from_year"] = int(data_request.yearRange.from_year)
+                        has_year_filter = True
+                    if data_request.yearRange.to_year:
+                        where_clauses.append("EXTRACT(YEAR FROM d.created_at) <= :to_year")
+                        params["to_year"] = int(data_request.yearRange.to_year)
+                if not has_year_filter:
+                    where_clauses.append("EXTRACT(YEAR FROM d.created_at) >= 2026")
+
                 where_sql = " AND ".join(where_clauses)
                 count_sql = f"SELECT COUNT(*) FROM kamba_data_prod.disbursements d LEFT JOIN kamba_data_prod.vessels v ON d.vessels_id=v.id LEFT JOIN kamba_data_prod.countries c ON d.countries_id=c.id LEFT JOIN kamba_data_prod.ports p ON d.ports_id=p.id WHERE {where_sql}"
                 kamba_count = db.execute(text(count_sql), params).scalar() or 0
@@ -357,6 +369,16 @@ class DashboardRepository:
                         if tf.counterparty_short_name:
                             q = q.filter(ExcelDisbursementsTotalPortCost.counterparty_short_name.in_(tf.counterparty_short_name))
 
+                    has_year_filter = False
+                    if getattr(data_request, 'yearRange', None):
+                        if data_request.yearRange.from_year:
+                            q = q.filter(extract('year', ExcelDisbursementsTotalPortCost.arrival_local) >= int(data_request.yearRange.from_year))
+                            has_year_filter = True
+                        if data_request.yearRange.to_year:
+                            q = q.filter(extract('year', ExcelDisbursementsTotalPortCost.arrival_local) <= int(data_request.yearRange.to_year))
+                    if not has_year_filter:
+                        q = q.filter(extract('year', ExcelDisbursementsTotalPortCost.arrival_local) >= 2026)
+
                     excel_count = q.count()
                     
                     def map_excel_row(r):
@@ -434,13 +456,18 @@ class DashboardRepository:
                 where_clauses.append("vw.etd::date <= :to_date::date")
                 params["to_date"] = data_request.monthRange.to_date
 
+        has_year_filter = False
         if getattr(data_request, 'yearRange', None):
             if data_request.yearRange.from_year:
                 where_clauses.append("EXTRACT(YEAR FROM vw.etd) >= :from_year")
                 params["from_year"] = int(data_request.yearRange.from_year)
+                has_year_filter = True
             if data_request.yearRange.to_year:
                 where_clauses.append("EXTRACT(YEAR FROM vw.etd) <= :to_year")
                 params["to_year"] = int(data_request.yearRange.to_year)
+
+        if not has_year_filter:
+            where_clauses.append("EXTRACT(YEAR FROM vw.etd) >= 2026")
 
         if data_request.tableFilter:
             tf = data_request.tableFilter
