@@ -32,9 +32,21 @@ async def get_all_disbursements_timeline_summary(
 ):
     """
     Fetch list of all disbursement requests with current status, vessel, port, progress percentage, and 4 timeline steps for master table view.
+    If logged in user is a Client, filter data by their client_id. If Meraki/Admin, fetch all records.
     """
     try:
-        response = TimelineService.get_all_requests_timeline_summary(db)
+        user_info = getattr(request.state, "user", {}) or {}
+        username = (user_info.get("username") or "").lower()
+        role_id = user_info.get("roleId")
+
+        meraki_usernames = ["meraki", "meraki-operations", "meraki_superadmin", "meraki_admin"]
+        is_meraki_admin = (username in meraki_usernames) or (role_id in [1, 2])
+
+        client_id = None
+        if not is_meraki_admin:
+            client_id = user_info.get("company")
+
+        response = TimelineService.get_all_requests_timeline_summary(db, client_id=client_id)
         return response
     except Exception as e:
         logger.error(f"Error fetching all disbursement timelines: {e}")

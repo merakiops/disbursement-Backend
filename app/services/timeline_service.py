@@ -56,8 +56,8 @@ class TimelineService:
         return vessel_name or "N/A", port_name or "N/A"
 
     @staticmethod
-    def get_all_requests_timeline_summary(db: Session) -> DisbursementSummaryListResponseDTO:
-        requests = TimelineRepository.get_all_client_requests(db)
+    def get_all_requests_timeline_summary(db: Session, client_id: Optional[int] = None) -> DisbursementSummaryListResponseDTO:
+        requests = TimelineRepository.get_all_client_requests(db, client_id=client_id)
         items = []
 
         for req in requests:

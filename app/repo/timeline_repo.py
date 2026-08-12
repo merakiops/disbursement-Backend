@@ -64,5 +64,8 @@ class TimelineRepository:
         return query.order_by(TxnDisbursementTimeline.created_on.asc()).all()
 
     @staticmethod
-    def get_all_client_requests(db: Session) -> List[TxnClientDisbursementRequest]:
-        return db.query(TxnClientDisbursementRequest).order_by(TxnClientDisbursementRequest.request_id.desc()).all()
+    def get_all_client_requests(db: Session, client_id: Optional[int] = None) -> List[TxnClientDisbursementRequest]:
+        query = db.query(TxnClientDisbursementRequest)
+        if client_id is not None:
+            query = query.filter(TxnClientDisbursementRequest.client_id == client_id)
+        return query.order_by(TxnClientDisbursementRequest.request_id.desc()).all()

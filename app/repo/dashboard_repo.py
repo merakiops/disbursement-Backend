@@ -13,6 +13,7 @@ from app.models.excel_disbursements import (
 )
 from typing import List, Optional
 import os
+from datetime import datetime
 
 SCHEMA_NAME = os.getenv("DB_SCHEMA")
 
@@ -219,6 +220,7 @@ class DashboardRepository:
                         where_clauses.append("p.port IN :ports")
                         params["ports"] = tuple(tf.port)
 
+                current_year = datetime.now().year
                 has_year_filter = False
                 if getattr(data_request, 'yearRange', None):
                     if data_request.yearRange.from_year:
@@ -229,7 +231,8 @@ class DashboardRepository:
                         where_clauses.append("EXTRACT(YEAR FROM d.created_at) <= :to_year")
                         params["to_year"] = int(data_request.yearRange.to_year)
                 if not has_year_filter:
-                    where_clauses.append("EXTRACT(YEAR FROM d.created_at) >= 2026")
+                    where_clauses.append("EXTRACT(YEAR FROM d.created_at) >= :default_current_year")
+                    params["default_current_year"] = current_year
 
                 where_sql = " AND ".join(where_clauses)
                 count_sql = f"SELECT COUNT(*) FROM kamba_data_prod.disbursements d LEFT JOIN kamba_data_prod.vessels v ON d.vessels_id=v.id LEFT JOIN kamba_data_prod.countries c ON d.countries_id=c.id LEFT JOIN kamba_data_prod.ports p ON d.ports_id=p.id WHERE {where_sql}"
@@ -369,6 +372,7 @@ class DashboardRepository:
                         if tf.counterparty_short_name:
                             q = q.filter(ExcelDisbursementsTotalPortCost.counterparty_short_name.in_(tf.counterparty_short_name))
 
+                    current_year = datetime.now().year
                     has_year_filter = False
                     if getattr(data_request, 'yearRange', None):
                         if data_request.yearRange.from_year:
@@ -377,7 +381,7 @@ class DashboardRepository:
                         if data_request.yearRange.to_year:
                             q = q.filter(extract('year', ExcelDisbursementsTotalPortCost.arrival_local) <= int(data_request.yearRange.to_year))
                     if not has_year_filter:
-                        q = q.filter(extract('year', ExcelDisbursementsTotalPortCost.arrival_local) >= 2026)
+                        q = q.filter(extract('year', ExcelDisbursementsTotalPortCost.arrival_local) >= current_year)
 
                     excel_count = q.count()
                     
@@ -456,6 +460,7 @@ class DashboardRepository:
                 where_clauses.append("vw.etd::date <= :to_date::date")
                 params["to_date"] = data_request.monthRange.to_date
 
+        current_year = datetime.now().year
         has_year_filter = False
         if getattr(data_request, 'yearRange', None):
             if data_request.yearRange.from_year:
@@ -467,7 +472,8 @@ class DashboardRepository:
                 params["to_year"] = int(data_request.yearRange.to_year)
 
         if not has_year_filter:
-            where_clauses.append("EXTRACT(YEAR FROM vw.etd) >= 2026")
+            where_clauses.append("EXTRACT(YEAR FROM vw.etd) >= :default_current_year")
+            params["default_current_year"] = current_year
 
         if data_request.tableFilter:
             tf = data_request.tableFilter
