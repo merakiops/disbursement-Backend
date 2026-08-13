@@ -638,13 +638,21 @@ class DisbursementRepository:
                 "swift_code": None
             }
 
-            # 1. Try fetching from port agent company bank_details_id in DB
+            # 1. Try fetching from port agent company bank_details_id / company_id in DB
             pa_comp = None
             if getattr(base_query, "port_agent_name", None):
-                pa_comp = db.query(MaCompany).filter(func.upper(MaCompany.company_name) == base_query.port_agent_name.upper()).first()
-            if pa_comp and pa_comp.bank_details_id:
+                pa_comp = db.query(MaCompany).filter(func.upper(MaCompany.company_name) == base_query.port_agent_name.strip().upper()).first()
+            if not pa_comp and disbursement and disbursement.port_agent_id:
+                pa_comp = db.query(MaCompany).filter(MaCompany.company_id == disbursement.port_agent_id).first()
+
+            if pa_comp:
                 from app.models.bank_details import BankDetails
-                b_obj = db.query(BankDetails).filter(BankDetails.bank_details_id == pa_comp.bank_details_id).first()
+                b_obj = None
+                if pa_comp.bank_details_id:
+                    b_obj = db.query(BankDetails).filter(BankDetails.bank_details_id == pa_comp.bank_details_id).first()
+                if not b_obj:
+                    b_obj = db.query(BankDetails).filter(BankDetails.company_id == pa_comp.company_id).first()
+
                 if b_obj:
                     bank_dict["account_holder_name"] = b_obj.beneficiary_acc_holder_name
                     bank_dict["account_no"] = b_obj.iban_number or b_obj.current_account_number
@@ -667,19 +675,17 @@ class DisbursementRepository:
                     acc_no = b_info.get("iban_number") or b_info.get("current_account_number") or b_info.get("account_number") or b_info.get("account_no")
                     swift = b_info.get("swift_code") or b_info.get("bic_code") or b_info.get("swift")
 
-                    if holder: bank_dict["account_holder_name"] = holder
-                    if acc_no: bank_dict["account_no"] = acc_no
-                    if swift: bank_dict["swift_code"] = swift
+                    if holder and not bank_dict["account_holder_name"]: bank_dict["account_holder_name"] = holder
+                    if acc_no and not bank_dict["account_no"]: bank_dict["account_no"] = acc_no
+                    if swift and not bank_dict["swift_code"]: bank_dict["swift_code"] = swift
 
-            # 3. Specific fallback if still empty / null for JORDEX AGENCY
-            if not bank_dict["account_holder_name"]:
-                bank_dict["account_holder_name"] = "JORDEX AGENCIES BELGIUM BV"
-            if not bank_dict["account_no"]:
-                bank_dict["account_no"] = "BE20363277266456"
-            if not bank_dict["swift_code"]:
-                bank_dict["swift_code"] = "BBRUBEBB"
-
-            setattr(base_query, "bank_details", bank_dict)
+            # 3. Always assign bank_dict (convert empty strings to None/null)
+            clean_bank_dict = {
+                "account_holder_name": bank_dict["account_holder_name"] if bank_dict["account_holder_name"] else None,
+                "account_no": bank_dict["account_no"] if bank_dict["account_no"] else None,
+                "swift_code": bank_dict["swift_code"] if bank_dict["swift_code"] else None
+            }
+            setattr(base_query, "bank_details", clean_bank_dict)
 
             # Resolve presigned_url and pdf_name for disbursement uploaded document
             presigned_url = None
