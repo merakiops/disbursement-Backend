@@ -32,6 +32,8 @@ class DetailedTimelineStepDTO(BaseModel):
     date_time: Optional[datetime] = None
     description: Optional[str] = None
     updated_by: Optional[str] = None
+    document_url: Optional[str] = None
+    document_name: Optional[str] = None
 
 class DetailedDisbursementTimelineResponseDTO(BaseModel):
     request_id: Optional[int] = None

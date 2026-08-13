@@ -206,11 +206,19 @@ class TimelineService:
 
         for s in range(1, 5):
             evt = step_events.get(s)
+            doc_url = None
+            doc_name = None
+
             if evt:
                 st_code = "REJECTED" if (s == 3 and is_rejected) else ("COMPLETED" if s <= current_step else "PENDING")
                 desc = evt.message or f"PDA request {titles[s].lower()}."
                 upd_by = evt.action_by_role or evt.action_by_user or "System"
                 dt = evt.created_on
+
+                # Extract document info from details JSON if available
+                details_data = evt.details if isinstance(evt.details, dict) else {}
+                doc_url = details_data.get("document_url") or details_data.get("file_url") or details_data.get("url") or getattr(evt, "document_url", None)
+                doc_name = details_data.get("document_name") or details_data.get("file_name") or details_data.get("filename") or getattr(evt, "document_name", None)
             else:
                 st_code = "PENDING"
                 desc = None
@@ -224,7 +232,9 @@ class TimelineService:
                     status=st_code,
                     date_time=dt,
                     description=desc,
-                    updated_by=upd_by
+                    updated_by=upd_by,
+                    document_url=doc_url,
+                    document_name=doc_name
                 )
             )
 

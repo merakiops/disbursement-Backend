@@ -230,7 +230,8 @@ class DashboardRepository:
                     if data_request.yearRange.to_year:
                         where_clauses.append("EXTRACT(YEAR FROM d.created_at) <= :to_year")
                         params["to_year"] = int(data_request.yearRange.to_year)
-                if not has_year_filter:
+                        has_year_filter = True
+                if not has_year_filter and client_ids_list:
                     where_clauses.append("EXTRACT(YEAR FROM d.created_at) >= :default_current_year")
                     params["default_current_year"] = current_year
 
@@ -380,7 +381,8 @@ class DashboardRepository:
                             has_year_filter = True
                         if data_request.yearRange.to_year:
                             q = q.filter(extract('year', ExcelDisbursementsTotalPortCost.arrival_local) <= int(data_request.yearRange.to_year))
-                    if not has_year_filter:
+                            has_year_filter = True
+                    if not has_year_filter and client_ids_list:
                         q = q.filter(extract('year', ExcelDisbursementsTotalPortCost.arrival_local) >= current_year)
 
                     excel_count = q.count()
@@ -470,8 +472,9 @@ class DashboardRepository:
             if data_request.yearRange.to_year:
                 where_clauses.append("EXTRACT(YEAR FROM vw.etd) <= :to_year")
                 params["to_year"] = int(data_request.yearRange.to_year)
+                has_year_filter = True
 
-        if not has_year_filter:
+        if not has_year_filter and client_ids_list:
             where_clauses.append("EXTRACT(YEAR FROM vw.etd) >= :default_current_year")
             params["default_current_year"] = current_year
 
