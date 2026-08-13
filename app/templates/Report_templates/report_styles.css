@@ -187,33 +187,50 @@ hr {
 
 .agent-labels {
     display: flex;
-    flex-wrap: wrap;
-    gap: 15px;
+    flex-wrap: nowrap;
+    justify-content: space-between;
+    gap: 12px;
     margin-bottom: 10px;
 }
 
 .agent-item {
-    flex: 1 1 150px;
     min-width: 0;
-    word-break: break-all;
-    overflow-wrap: anywhere;
-    white-space: normal;
+}
+
+.agent-item:nth-child(1) { /* Account Holder */
+    flex: 1.2 1 0;
+}
+
+.agent-item:nth-child(2) { /* Account Number */
+    flex: 2.2 1 0;
+}
+
+.agent-item:nth-child(3) { /* Bank Name */
+    flex: 1.5 1 0;
+}
+
+.agent-item:nth-child(4) { /* IFSC Code */
+    flex: 0.7 1 0;
 }
 
 .agent-item .label {
     color: #666;
     font-size: 11px;
     margin-bottom: 4px;
-    word-break: break-all;
-    overflow-wrap: anywhere;
+    white-space: nowrap;
 }
 
 .agent-item .value {
     color: #333;
     display: block;
-    word-break: break-all;
-    overflow-wrap: anywhere;
-    white-space: normal;
+    font-size: 12px;
+    word-break: break-word;
+    overflow-wrap: break-word;
+}
+
+.agent-item:nth-child(2) .value { /* Force Account Number to single line */
+    white-space: nowrap;
+    letter-spacing: -0.2px;
 }
 
 /* Vessel Information Flexbox */
