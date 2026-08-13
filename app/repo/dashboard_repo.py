@@ -166,7 +166,7 @@ class DashboardRepository:
     
 
     @staticmethod
-    def get_fda_processing_details(data_request, db: Session):
+    def get_fda_processing_details(data_request, db: Session, is_meraki_user: bool = False):
         """
         Get FDA processing details with pagination.
         Only includes excel_data_dev if client_id 84 is requested or dataSource is 'excel'.
@@ -231,7 +231,7 @@ class DashboardRepository:
                         where_clauses.append("EXTRACT(YEAR FROM d.created_at) <= :to_year")
                         params["to_year"] = int(data_request.yearRange.to_year)
                         has_year_filter = True
-                if not has_year_filter and client_ids_list:
+                if not has_year_filter and (client_ids_list or not is_meraki_user):
                     where_clauses.append("EXTRACT(YEAR FROM d.created_at) >= :default_current_year")
                     params["default_current_year"] = current_year
 
@@ -382,7 +382,7 @@ class DashboardRepository:
                         if data_request.yearRange.to_year:
                             q = q.filter(extract('year', ExcelDisbursementsTotalPortCost.arrival_local) <= int(data_request.yearRange.to_year))
                             has_year_filter = True
-                    if not has_year_filter and client_ids_list:
+                    if not has_year_filter and (client_ids_list or not is_meraki_user):
                         q = q.filter(extract('year', ExcelDisbursementsTotalPortCost.arrival_local) >= current_year)
 
                     excel_count = q.count()
@@ -474,7 +474,7 @@ class DashboardRepository:
                 params["to_year"] = int(data_request.yearRange.to_year)
                 has_year_filter = True
 
-        if not has_year_filter and client_ids_list:
+        if not has_year_filter and (client_ids_list or not is_meraki_user):
             where_clauses.append("EXTRACT(YEAR FROM vw.etd) >= :default_current_year")
             params["default_current_year"] = current_year
 

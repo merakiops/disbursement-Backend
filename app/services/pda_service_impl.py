@@ -582,26 +582,59 @@ class PDAServiceImpl(PDAService):
         if dto.update_signature == 'Y' and dto.signature:
             PDARepository.payment_instruction_mail(dto,username,db)
 
-        # Build table HTML from body.table
+        # Build table HTML from body.table and bank_details
         table_html = ""
-        if dto.body and dto.body.get("table"):
-            table_data = dto.body["table"]
-
+        has_table_data = dto.body and dto.body.get("table")
+        bank_details = dto.bank_details or (dto.body.get("bank_details") if dto.body else None)
+        
+        if has_table_data or (bank_details and any(bank_details.values())):
             table_html = """
-            <table cellpadding="0" cellspacing="0" border="1" width="100%" style="background-color:#ffffff; border-collapse:collapse; border:1px solid black;">
+            <table cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#ffffff; border-collapse:collapse; border:1px solid #0b192c; font-family: Arial, sans-serif; border-radius: 4px; overflow: hidden;">
             """
+            
+            if has_table_data:
+                table_data = dto.body["table"]
+                for key, value in table_data.items():
+                    table_html += f"""
+                    <tr>
+                        <td style="font-size:13px; font-weight:bold; color:#ffffff; background-color:#0b192c; padding:8px 12px; vertical-align:top; border:1px solid #1e293b; width:40%;">
+                            {key}
+                        </td>
+                        <td style="font-size:13px; font-weight:bold; color:#1e293b; background-color:#ffffff; padding:8px 12px; vertical-align:top; border:1px solid #cbd5e1; width:60%;">
+                            {value}
+                        </td>
+                    </tr>
+                    """
 
-            for key, value in table_data.items():
-                table_html += f"""
+            if bank_details and any(bank_details.values()):
+                table_html += """
                 <tr>
-                    <td style="font-size:14px; font-weight:bold; color:#444; padding:6px 10px; vertical-align:top; border:1px solid black;">
-                        {key}
-                    </td>
-                    <td style="font-size:14px; font-weight:bold; color:#444; padding:6px 10px; vertical-align:top; border:1px solid black;">
-                        {value}
+                    <td colspan="2" style="font-size:14px; font-weight:bold; color:#ffffff; background-color:#0b192c; text-align:center; padding:9px 12px; border:1px solid #0b192c; letter-spacing:0.5px;">
+                        Bank Details
                     </td>
                 </tr>
                 """
+                bank_label_map = {
+                    "account_holder_name": "Account Holder Name",
+                    "account_no": "Account No",
+                    "swift_code": "Swift Code",
+                    "bank_name": "Bank Name",
+                    "iban": "IBAN",
+                    "branch": "Branch"
+                }
+                for b_key, b_val in bank_details.items():
+                    if b_val:
+                        label = bank_label_map.get(b_key, b_key.replace("_", " ").title())
+                        table_html += f"""
+                        <tr>
+                            <td style="font-size:13px; font-weight:bold; color:#ffffff; background-color:#0b192c; padding:8px 12px; vertical-align:top; border:1px solid #1e293b; width:40%;">
+                                {label}
+                            </td>
+                            <td style="font-size:13px; font-weight:bold; color:#1e293b; background-color:#ffffff; padding:8px 12px; vertical-align:top; border:1px solid #cbd5e1; width:60%;">
+                                {b_val}
+                            </td>
+                        </tr>
+                        """
 
             table_html += "</table>"
         

@@ -679,3 +679,5 @@ class PtmInstrMailRequestDTO(BaseModel):
     body: Optional[Dict[str, Any]] = None
     signature: Optional[str] = None
     update_signature: Optional[str] = None
+    bank_details: Optional[Dict[str, Any]] = None
+    attachments: Optional[List[Any]] = None

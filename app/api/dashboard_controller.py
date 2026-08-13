@@ -39,9 +39,12 @@ async def get_fda_processing_details(request: Request, data_request: DashboardDa
     Get FDA processing details with pagination or full dataset if pageSize <= 0.
     """
     try:
-        user_role = request.state.user.get('roleId', '')
+        user_info = getattr(request.state, 'user', {}) or {}
+        user_role = user_info.get('roleId', '')
+        raw_username = str(user_info.get('username') or user_info.get('user') or '').lower()
+        is_meraki_user = ("meraki" in raw_username) or (user_role == 1 or user_role == '1')
 
-        result = dashboard_service.get_fda_processing_details(data_request, user_role, db)
+        result = dashboard_service.get_fda_processing_details(data_request, user_role, db, is_meraki_user=is_meraki_user)
         return result
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
@@ -54,10 +57,14 @@ async def export_fda_processing_details(request: Request, data_request: Dashboar
     Export all matching FDA processing details into a downloadable Excel/CSV file.
     """
     try:
-        user_role = request.state.user.get('roleId', '')
+        user_info = getattr(request.state, 'user', {}) or {}
+        user_role = user_info.get('roleId', '')
+        raw_username = str(user_info.get('username') or user_info.get('user') or '').lower()
+        is_meraki_user = ("meraki" in raw_username) or (user_role == 1 or user_role == '1')
+
         # Force pageSize = -1 to fetch ALL matching records
         data_request.pageSize = -1
-        result = dashboard_service.get_fda_processing_details(data_request, user_role, db)
+        result = dashboard_service.get_fda_processing_details(data_request, user_role, db, is_meraki_user=is_meraki_user)
         
         output = io.StringIO()
         writer = csv.writer(output)

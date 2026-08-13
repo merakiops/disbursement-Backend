@@ -101,12 +101,12 @@ class DashboardServiceImpl(DashboardService):
         
         return DashboardResponseDTO(overallSummary=overall_summary)
     
-    def get_fda_processing_details(self, data_request, user_role: int, db: Session) -> FdaProcessingDetailsResponseDTO:
+    def get_fda_processing_details(self, data_request, user_role: int, db: Session, is_meraki_user: bool = False) -> FdaProcessingDetailsResponseDTO:
         """
         Get FDA processing details with pagination and stats.
         """
         records, total_count = DashboardRepository.get_fda_processing_details(
-            data_request, db=db
+            data_request, db=db, is_meraki_user=is_meraki_user
         )
         
         def get_val(item, key, default=None):
