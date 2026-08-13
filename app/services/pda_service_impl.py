@@ -610,7 +610,7 @@ class PDAServiceImpl(PDAService):
                 """
             table_html += "</table>"
 
-        if bank_details and any(bank_details.values()):
+        if bank_details is not None and isinstance(bank_details, dict):
             table_html += """
             <table cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#ffffff; border-collapse:collapse; border:1px solid #000000; font-family: Arial, sans-serif; margin:0 0 16px 0; width:100%;">
                 <colgroup>
@@ -631,20 +631,27 @@ class PDAServiceImpl(PDAService):
                 "iban": "IBAN",
                 "branch": "Branch"
             }
-            for b_key, b_val in bank_details.items():
-                if b_val:
-                    label = bank_label_map.get(b_key, b_key.replace("_", " ").title())
-                    b_val_upper = str(b_val).upper()
-                    table_html += f"""
-                    <tr>
-                        <td style="font-size:13px; font-weight:bold; color:#0b192c; background-color:#ffffff; padding:10px 14px; vertical-align:middle; border:1px solid #000000;">
-                            {label}
-                        </td>
-                        <td style="font-size:13px; font-weight:bold; color:#0f172a; background-color:#ffffff; padding:10px 14px; vertical-align:middle; border:1px solid #000000; text-transform:uppercase;">
-                            {b_val_upper}
-                        </td>
-                    </tr>
-                    """
+            
+            # Standard order of fields to render
+            keys_to_render = ["account_holder_name", "account_no", "swift_code"]
+            for k in bank_details.keys():
+                if k not in keys_to_render:
+                    keys_to_render.append(k)
+
+            for b_key in keys_to_render:
+                b_val = bank_details.get(b_key)
+                label = bank_label_map.get(b_key, b_key.replace("_", " ").title())
+                b_val_upper = str(b_val).upper() if (b_val is not None and str(b_val).strip() != "") else ""
+                table_html += f"""
+                <tr>
+                    <td style="font-size:13px; font-weight:bold; color:#0b192c; background-color:#ffffff; padding:10px 14px; vertical-align:middle; border:1px solid #000000;">
+                        {label}
+                    </td>
+                    <td style="font-size:13px; font-weight:bold; color:#0f172a; background-color:#ffffff; padding:10px 14px; vertical-align:middle; border:1px solid #000000; text-transform:uppercase;">
+                        {b_val_upper}
+                    </td>
+                </tr>
+                """
             table_html += "</table>"
         
         # Build email body
