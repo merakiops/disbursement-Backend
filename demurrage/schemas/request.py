@@ -78,7 +78,27 @@ class DeductionEventCreateSchema(BaseModel):
     event_name: str = Field(..., min_length=1, description="Event name is mandatory")
     start_time: datetime
     end_time: datetime
+    to_count: Optional[Union[float, int, str]] = None
     comments_clause: Optional[str] = None
+
+    @model_validator(mode='before')
+    @classmethod
+    def parse_to_count(cls, data):
+        if isinstance(data, dict):
+            tc = data.get('to_count')
+            if tc is not None:
+                if isinstance(tc, str):
+                    tc_clean = tc.replace('%', '').strip()
+                    if tc_clean == '':
+                        data['to_count'] = None
+                    else:
+                        try:
+                            data['to_count'] = float(tc_clean)
+                        except ValueError:
+                            data['to_count'] = None
+                elif isinstance(tc, (int, float)):
+                    data['to_count'] = float(tc)
+        return data
 
     @model_validator(mode='after')
     def validate_times(self) -> 'DeductionEventCreateSchema':

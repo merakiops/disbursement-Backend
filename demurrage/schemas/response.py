@@ -11,6 +11,7 @@ class DeductionResponseSchema(BaseModel):
     start_time: datetime
     end_time: datetime
     time_used: float
+    to_count: Optional[float] = None
     comments_clause: Optional[str] = None
     created_at: datetime
 

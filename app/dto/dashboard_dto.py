@@ -46,7 +46,7 @@ class DashboardDataRequest(BaseModel):
     data_source: Optional[str] = None
 
 class UpdateDashboardRowDTO(BaseModel):
-    disbursement_seq: int
+    disbursement_seq: Union[int, str]
     data_source: Optional[str] = "standard"  # "standard" or "excel"
     advance_amount_remitted: Optional[float] = None
     outstanding_balance: Optional[float] = None

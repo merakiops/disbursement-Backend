@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Optional, Union
 
 
 # Summary and Progress DTOs
@@ -55,7 +55,7 @@ class DashboardResponseDTO(BaseModel):
 # FDA Processing Details Response DTOs
 class FdaProcessingDetailDTO(BaseModel):
     sno: int
-    disbursement_seq: int
+    disbursement_seq: Union[int, str]
     date: str
     vessel: Optional[str] = None
     country: Optional[str] = None

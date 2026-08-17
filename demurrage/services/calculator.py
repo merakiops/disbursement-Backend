@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import List
+from typing import List, Optional
 
 def calculate_time_used_hours(start_time: datetime, end_time: datetime) -> float:
     """
@@ -12,6 +12,24 @@ def calculate_time_used_hours(start_time: datetime, end_time: datetime) -> float
     # Convert seconds to hours
     hours = diff.total_seconds() / 3600.0
     return hours
+
+
+def calculate_deduction_time_hours(
+    event_name: str, 
+    start_time: datetime, 
+    end_time: datetime, 
+    to_count: Optional[float] = None
+) -> float:
+    """
+    Calculates deduction event duration in hours.
+    If to_count is provided, uses to_count percentage (to_count / 100.0).
+    If to_count is None/empty, defaults to 100.0% (1.0x multiplier).
+    """
+    hours = calculate_time_used_hours(start_time, end_time)
+    if to_count is not None:
+        return hours * (float(to_count) / 100.0)
+    return hours
+
 
 
 def calculate_total_deductions_hours(deduction_times: List[float]) -> float:

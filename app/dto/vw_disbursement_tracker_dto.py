@@ -1,60 +1,58 @@
 from pydantic import BaseModel
-from typing import Optional,List,Any,Dict
-from datetime import datetime,date
+from typing import Optional, List, Any, Dict, Union
+from datetime import datetime, date
 
 class DisbursementTrackerDTO(BaseModel):
-
-    disbursement_seq : Optional[int]
-    disbursement_id : Optional[str]
-    pic : Optional[str]
-    client_name : Optional[str]
-    vessel_name : Optional[str]
-    port_agent : Optional[str]
-    port : Optional[str]
-    country : Optional[str]
-    voyage :Optional[str]
-    eta : Optional[datetime]
-    etd : Optional[datetime]
-    status : Optional[str]
-    status_background_color : Optional[str]
-    status_text_color : Optional[str]
-    due_date : Optional[datetime]
-    due_days : Optional[int]
-    due_comment : Optional[str]
-    due_flag : Optional[str]
+    disbursement_seq: Optional[Union[int, str]]
+    disbursement_id: Optional[str]
+    pic: Optional[str]
+    client_name: Optional[str]
+    vessel_name: Optional[str]
+    port_agent: Optional[str]
+    port: Optional[str]
+    country: Optional[str]
+    voyage: Optional[str]
+    eta: Optional[datetime]
+    etd: Optional[datetime]
+    status: Optional[str]
+    status_background_color: Optional[str]
+    status_text_color: Optional[str]
+    due_date: Optional[datetime]
+    due_days: Optional[int]
+    due_comment: Optional[str]
+    due_flag: Optional[str]
     due_color: Optional[str]
-    pda_state: Optional[str]=None
-    fda_state: Optional[str]=None
-    fda_id:Optional[int]=None
-    pda_id: Optional[int]=None
-    fda_amount:Optional[float]=None
-    pda_amount:Optional[float]=None
-    pda_savings:Optional[float]=None
-    fda_savings:Optional[float]=None
-    final_status: Optional[str]=None
-    purpose: Optional[str]=None
-    pda_status:Optional[str]=None
-    fda_status:Optional[str]=None
-    fda_status_background_color:Optional[str]=None
-    fda_status_text_color:Optional[str]=None
-    pda_status_background_color:Optional[str]=None
-    pda_status_text_color:Optional[str]=None
-    final_status_background_color:Optional[str]=None
-    final_status_text_color:Optional[str]=None
-    manual_fda_amount:Optional[str]=None
-    manual_pda_amount:Optional[str]=None
-    loss_prevented_reason:Optional[str]=None
-    advance_amount_remitted:Optional[float]=None
-    outstanding_balance:Optional[float]=None
-    remark:Optional[str]=None
-
+    pda_state: Optional[str] = None
+    fda_state: Optional[str] = None
+    fda_id: Optional[int] = None
+    pda_id: Optional[int] = None
+    fda_amount: Optional[float] = None
+    pda_amount: Optional[float] = None
+    pda_savings: Optional[float] = None
+    fda_savings: Optional[float] = None
+    final_status: Optional[str] = None
+    purpose: Optional[str] = None
+    pda_status: Optional[str] = None
+    fda_status: Optional[str] = None
+    fda_status_background_color: Optional[str] = None
+    fda_status_text_color: Optional[str] = None
+    pda_status_background_color: Optional[str] = None
+    pda_status_text_color: Optional[str] = None
+    final_status_background_color: Optional[str] = None
+    final_status_text_color: Optional[str] = None
+    manual_fda_amount: Optional[str] = None
+    manual_pda_amount: Optional[str] = None
+    loss_prevented_reason: Optional[str] = None
+    advance_amount_remitted: Optional[float] = None
+    outstanding_balance: Optional[float] = None
+    remark: Optional[str] = None
 
     model_config = {
         "from_attributes": True
     }
 
 class UpdateDisbursementTrackerCellDTO(BaseModel):
-    disbursement_seq: int
+    disbursement_seq: Union[int, str]
     data_source: Optional[str] = "standard"
     advance_amount_remitted: Optional[float] = None
     outstanding_balance: Optional[float] = None

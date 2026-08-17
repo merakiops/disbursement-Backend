@@ -6,6 +6,7 @@ from demurrage.schemas.request import DemurrageCaseCreateSchema, StepSaveRequest
 from demurrage.exceptions import DemurrageValidationError, DemurrageNotFoundException
 from demurrage.services.calculator import (
     calculate_time_used_hours,
+    calculate_deduction_time_hours,
     calculate_total_deductions_hours,
     calculate_demurrage_time,
     calculate_gross_demurrage_cost,
@@ -105,7 +106,7 @@ class DemurrageService:
             # 3. Process Load Deductions Table
             load_deduction_times = []
             for ded in payload.load_deductions:
-                ded_time = calculate_time_used_hours(ded.start_time, ded.end_time)
+                ded_time = calculate_deduction_time_hours(ded.event_name, ded.start_time, ded.end_time, to_count=ded.to_count)
                 load_deduction_times.append(ded_time)
                 db_ded = OperationDeduction(
                     operation_id=db_load_port.id,
@@ -113,6 +114,7 @@ class DemurrageService:
                     start_time=ded.start_time,
                     end_time=ded.end_time,
                     time_used=ded_time,
+                    to_count=ded.to_count,
                     comments_clause=ded.comments_clause
                 )
                 db.add(db_ded)
@@ -143,7 +145,7 @@ class DemurrageService:
             # 5. Process Discharge Deductions Table
             discharge_deduction_times = []
             for ded in payload.discharge_deductions:
-                ded_time = calculate_time_used_hours(ded.start_time, ded.end_time)
+                ded_time = calculate_deduction_time_hours(ded.event_name, ded.start_time, ded.end_time, to_count=ded.to_count)
                 discharge_deduction_times.append(ded_time)
                 db_ded = OperationDeduction(
                     operation_id=db_discharge_port.id,
@@ -151,6 +153,7 @@ class DemurrageService:
                     start_time=ded.start_time,
                     end_time=ded.end_time,
                     time_used=ded_time,
+                    to_count=ded.to_count,
                     comments_clause=ded.comments_clause
                 )
                 db.add(db_ded)
@@ -368,13 +371,14 @@ class DemurrageService:
                 db.flush()
 
                 for ded in (payload.load_deductions or []):
-                    ded_time = calculate_time_used_hours(ded.start_time, ded.end_time)
+                    ded_time = calculate_deduction_time_hours(ded.event_name, ded.start_time, ded.end_time, to_count=ded.to_count)
                     db.add(OperationDeduction(
                         operation_id=db_load_port.id,
                         event_name=ded.event_name,
                         start_time=ded.start_time,
                         end_time=ded.end_time,
                         time_used=ded_time,
+                        to_count=ded.to_count,
                         comments_clause=ded.comments_clause
                     ))
 
@@ -421,13 +425,14 @@ class DemurrageService:
                 db.flush()
 
                 for ded in (payload.discharge_deductions or []):
-                    ded_time = calculate_time_used_hours(ded.start_time, ded.end_time)
+                    ded_time = calculate_deduction_time_hours(ded.event_name, ded.start_time, ded.end_time, to_count=ded.to_count)
                     db.add(OperationDeduction(
                         operation_id=db_discharge_port.id,
                         event_name=ded.event_name,
                         start_time=ded.start_time,
                         end_time=ded.end_time,
                         time_used=ded_time,
+                        to_count=ded.to_count,
                         comments_clause=ded.comments_clause
                     ))
 

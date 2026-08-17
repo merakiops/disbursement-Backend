@@ -57,6 +57,15 @@ def init_db():
                 logger.info("Database migration: Added deductions_json column to port_operations table successfully.")
         except Exception as e:
             logger.debug(f"Adding deductions_json column skipped (it probably already exists): {e}")
+
+        try:
+            with engine.connect() as conn:
+                schema_prefix = f"{DEMURRAGE_DB_SCHEMA}." if DEMURRAGE_DB_SCHEMA else ""
+                conn.execute(text(f"ALTER TABLE {schema_prefix}operation_deductions ADD COLUMN to_count DOUBLE PRECISION;"))
+                conn.commit()
+                logger.info("Database migration: Added to_count column to operation_deductions table successfully.")
+        except Exception as e:
+            logger.debug(f"Adding to_count column skipped (it probably already exists): {e}")
     except Exception as e:
         logger.error(f"Failed to initialize demurrage database: {e}")
         raise e

@@ -97,6 +97,7 @@ class OperationDeduction(Base):
     start_time = Column(DateTime, nullable=False)
     end_time = Column(DateTime, nullable=False)
     time_used = Column(Float, nullable=False)
+    to_count = Column(Float, nullable=True)
     comments_clause = Column(String(255), nullable=True)
     created_at = Column(DateTime, default=func.now())
 

@@ -122,7 +122,14 @@ def generate_demurrage_pdf(voyage: Voyage) -> io.BytesIO:
             ded_start_str = ded.start_time.strftime("%d %b %Y %H:%M") if ded.start_time else ""
             ded_end_str = ded.end_time.strftime("%d %b %Y %H:%M") if ded.end_time else ""
             ded_hrs = f"{ded.time_used:.2f}"
-            deductions.append((ded.event_name, ded_start_str, ded_end_str, ded_hrs, "", ded.comments_clause or ""))
+            
+            tc_val = getattr(ded, 'to_count', None)
+            if tc_val is not None:
+                to_count_str = f"{int(tc_val)}%" if float(tc_val).is_integer() else f"{tc_val:.1f}%"
+            else:
+                to_count_str = ""
+
+            deductions.append((ded.event_name, ded_start_str, ded_end_str, ded_hrs, to_count_str, ded.comments_clause or ""))
             total_ded_hrs += ded.time_used
             
         net_hrs = op.gross_used_laytime - total_ded_hrs
