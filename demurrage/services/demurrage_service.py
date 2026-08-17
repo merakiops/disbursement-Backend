@@ -52,32 +52,58 @@ class DemurrageService:
         Performs calculations, stores dynamic deductions as JSON, generates PDF, uploads to S3, and saves all details.
         """
         try:
-            # 1. Create Voyage Entity
+            voyage_id = payload.id or payload.voyage.id
             voyage_data = payload.voyage
-            db_voyage = Voyage(
-                vessel=voyage_data.vessel,
-                vessel_imo=voyage_data.vessel_imo,
-                voyage_no=voyage_data.voyage_no,
-                charterparty_terms=voyage_data.charterparty_terms,
-
-                allowed_laytime_hours=voyage_data.allowed_laytime_hours,
-                demurrage_rate_usd_per_day=voyage_data.demurrage_rate_usd_per_day,
-                address_commission_percent=voyage_data.address_commission_percent,
-                undisputed_demurrage_paid=voyage_data.undisputed_demurrage_paid,
-                freight=str(voyage_data.freight) if voyage_data.freight is not None else None,
-                laycan=voyage_data.laycan,
-                laycan_narrowed_date=voyage_data.laycan_narrowed_date,
-                laycan_narrowed_start_time=voyage_data.laycan_narrowed_start_time,
-                laycan_narrowed_end_time=voyage_data.laycan_narrowed_end_time,
-                actual_rotation=voyage_data.actual_rotation,
-                cp_speed=str(voyage_data.cp_speed) if voyage_data.cp_speed is not None else None,
-                timebar_clause=voyage_data.timebar_clause,
-                additional_laytime=voyage_data.additional_laytime,
-                bl_date=voyage_data.bl_date,
-                cp_date=voyage_data.cp_date,
-                client_name=voyage_data.client_name
-            )
-            db.add(db_voyage)
+            
+            # 1. Create or Update Voyage Entity
+            if voyage_id:
+                db_voyage = db.query(Voyage).filter(Voyage.id == voyage_id).first()
+                if not db_voyage:
+                    raise DemurrageNotFoundException(f"Voyage with ID {voyage_id} not found.")
+                db_voyage.vessel = voyage_data.vessel
+                db_voyage.vessel_imo = voyage_data.vessel_imo
+                db_voyage.voyage_no = voyage_data.voyage_no
+                db_voyage.charterparty_terms = voyage_data.charterparty_terms
+                db_voyage.allowed_laytime_hours = voyage_data.allowed_laytime_hours
+                db_voyage.demurrage_rate_usd_per_day = voyage_data.demurrage_rate_usd_per_day
+                db_voyage.address_commission_percent = voyage_data.address_commission_percent
+                db_voyage.undisputed_demurrage_paid = voyage_data.undisputed_demurrage_paid
+                db_voyage.freight = str(voyage_data.freight) if voyage_data.freight is not None else None
+                db_voyage.laycan = voyage_data.laycan
+                db_voyage.laycan_narrowed_date = voyage_data.laycan_narrowed_date
+                db_voyage.laycan_narrowed_start_time = voyage_data.laycan_narrowed_start_time
+                db_voyage.laycan_narrowed_end_time = voyage_data.laycan_narrowed_end_time
+                db_voyage.actual_rotation = voyage_data.actual_rotation
+                db_voyage.cp_speed = str(voyage_data.cp_speed) if voyage_data.cp_speed is not None else None
+                db_voyage.timebar_clause = voyage_data.timebar_clause
+                db_voyage.additional_laytime = voyage_data.additional_laytime
+                db_voyage.bl_date = voyage_data.bl_date
+                db_voyage.cp_date = voyage_data.cp_date
+                db_voyage.client_name = voyage_data.client_name
+            else:
+                db_voyage = Voyage(
+                    vessel=voyage_data.vessel,
+                    vessel_imo=voyage_data.vessel_imo,
+                    voyage_no=voyage_data.voyage_no,
+                    charterparty_terms=voyage_data.charterparty_terms,
+                    allowed_laytime_hours=voyage_data.allowed_laytime_hours,
+                    demurrage_rate_usd_per_day=voyage_data.demurrage_rate_usd_per_day,
+                    address_commission_percent=voyage_data.address_commission_percent,
+                    undisputed_demurrage_paid=voyage_data.undisputed_demurrage_paid,
+                    freight=str(voyage_data.freight) if voyage_data.freight is not None else None,
+                    laycan=voyage_data.laycan,
+                    laycan_narrowed_date=voyage_data.laycan_narrowed_date,
+                    laycan_narrowed_start_time=voyage_data.laycan_narrowed_start_time,
+                    laycan_narrowed_end_time=voyage_data.laycan_narrowed_end_time,
+                    actual_rotation=voyage_data.actual_rotation,
+                    cp_speed=str(voyage_data.cp_speed) if voyage_data.cp_speed is not None else None,
+                    timebar_clause=voyage_data.timebar_clause,
+                    additional_laytime=voyage_data.additional_laytime,
+                    bl_date=voyage_data.bl_date,
+                    cp_date=voyage_data.cp_date,
+                    client_name=voyage_data.client_name
+                )
+                db.add(db_voyage)
             db.flush()  # Gets db_voyage.id for foreign keys
 
             # 2. Process Load Port Operation & Dynamic Deductions JSON
@@ -86,21 +112,41 @@ class DemurrageService:
             
             load_deductions_list = [ded.model_dump(mode='json') for ded in payload.load_deductions]
             
-            db_load_port = PortOperation(
-                voyage_id=db_voyage.id,
-                operation_type="LOAD",
-                port=load_data.port,
-                terminal=load_data.terminal,
-                start_time=load_data.start_time,
-                start_event=load_data.start_event,
-                end_time=load_data.end_time,
-                end_event=load_data.end_event,
-                time_used=load_time_used,
-                gross_used_laytime=load_time_used,
-                comments_clause=load_data.comments_clause,
-                deductions_json=load_deductions_list
-            )
-            db.add(db_load_port)
+            existing_load = db.query(PortOperation).filter(
+                PortOperation.voyage_id == db_voyage.id,
+                PortOperation.operation_type == "LOAD"
+            ).first()
+
+            if existing_load:
+                existing_load.port = load_data.port
+                existing_load.terminal = load_data.terminal
+                existing_load.start_time = load_data.start_time
+                existing_load.start_event = load_data.start_event
+                existing_load.end_time = load_data.end_time
+                existing_load.end_event = load_data.end_event
+                existing_load.time_used = load_time_used
+                existing_load.gross_used_laytime = load_time_used
+                existing_load.comments_clause = load_data.comments_clause
+                existing_load.deductions_json = load_deductions_list
+                db_load_port = existing_load
+                # Delete existing deductions
+                db.query(OperationDeduction).filter(OperationDeduction.operation_id == db_load_port.id).delete()
+            else:
+                db_load_port = PortOperation(
+                    voyage_id=db_voyage.id,
+                    operation_type="LOAD",
+                    port=load_data.port,
+                    terminal=load_data.terminal,
+                    start_time=load_data.start_time,
+                    start_event=load_data.start_event,
+                    end_time=load_data.end_time,
+                    end_event=load_data.end_event,
+                    time_used=load_time_used,
+                    gross_used_laytime=load_time_used,
+                    comments_clause=load_data.comments_clause,
+                    deductions_json=load_deductions_list
+                )
+                db.add(db_load_port)
             db.flush()
 
             # 3. Process Load Deductions Table
@@ -125,21 +171,41 @@ class DemurrageService:
             
             discharge_deductions_list = [ded.model_dump(mode='json') for ded in payload.discharge_deductions]
             
-            db_discharge_port = PortOperation(
-                voyage_id=db_voyage.id,
-                operation_type="DISCHARGE",
-                port=discharge_data.port,
-                terminal=discharge_data.terminal,
-                start_time=discharge_data.start_time,
-                start_event=discharge_data.start_event,
-                end_time=discharge_data.end_time,
-                end_event=discharge_data.end_event,
-                time_used=discharge_time_used,
-                gross_used_laytime=discharge_time_used,
-                comments_clause=discharge_data.comments_clause,
-                deductions_json=discharge_deductions_list
-            )
-            db.add(db_discharge_port)
+            existing_discharge = db.query(PortOperation).filter(
+                PortOperation.voyage_id == db_voyage.id,
+                PortOperation.operation_type == "DISCHARGE"
+            ).first()
+
+            if existing_discharge:
+                existing_discharge.port = discharge_data.port
+                existing_discharge.terminal = discharge_data.terminal
+                existing_discharge.start_time = discharge_data.start_time
+                existing_discharge.start_event = discharge_data.start_event
+                existing_discharge.end_time = discharge_data.end_time
+                existing_discharge.end_event = discharge_data.end_event
+                existing_discharge.time_used = discharge_time_used
+                existing_discharge.gross_used_laytime = discharge_time_used
+                existing_discharge.comments_clause = discharge_data.comments_clause
+                existing_discharge.deductions_json = discharge_deductions_list
+                db_discharge_port = existing_discharge
+                # Delete existing deductions
+                db.query(OperationDeduction).filter(OperationDeduction.operation_id == db_discharge_port.id).delete()
+            else:
+                db_discharge_port = PortOperation(
+                    voyage_id=db_voyage.id,
+                    operation_type="DISCHARGE",
+                    port=discharge_data.port,
+                    terminal=discharge_data.terminal,
+                    start_time=discharge_data.start_time,
+                    start_event=discharge_data.start_event,
+                    end_time=discharge_data.end_time,
+                    end_event=discharge_data.end_event,
+                    time_used=discharge_time_used,
+                    gross_used_laytime=discharge_time_used,
+                    comments_clause=discharge_data.comments_clause,
+                    deductions_json=discharge_deductions_list
+                )
+                db.add(db_discharge_port)
             db.flush()
 
             # 5. Process Discharge Deductions Table
@@ -175,6 +241,9 @@ class DemurrageService:
                 db_voyage.undisputed_demurrage_paid, 
                 add_commission
             )
+
+            # Remove existing summary before creating a new one
+            db.query(DemurrageSummary).filter(DemurrageSummary.voyage_id == db_voyage.id).delete()
 
             db_summary = DemurrageSummary(
                 voyage_id=db_voyage.id,

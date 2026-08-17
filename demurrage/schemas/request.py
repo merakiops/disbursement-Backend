@@ -3,6 +3,7 @@ from typing import List, Optional, Union
 from pydantic import BaseModel, Field, model_validator
 
 class VoyageCreateSchema(BaseModel):
+    id: Optional[int] = None
     vessel: str = Field(..., min_length=1, description="Vessel is mandatory")
     vessel_imo: Optional[str] = Field(default=None, description="Vessel IMO Number")
     voyage_no: Optional[str] = None
@@ -108,6 +109,7 @@ class DeductionEventCreateSchema(BaseModel):
 
 
 class DemurrageCaseCreateSchema(BaseModel):
+    id: Optional[int] = None
     voyage: VoyageCreateSchema
     load_port: PortOperationCreateSchema
     load_deductions: List[DeductionEventCreateSchema] = Field(default_factory=list)
