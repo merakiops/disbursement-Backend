@@ -194,23 +194,8 @@ hr {
 }
 
 .agent-item {
+    flex: 1;
     min-width: 0;
-}
-
-.agent-item:nth-child(1) { /* Account Holder */
-    flex: 1.2 1 0;
-}
-
-.agent-item:nth-child(2) { /* Account Number */
-    flex: 2.2 1 0;
-}
-
-.agent-item:nth-child(3) { /* Bank Name */
-    flex: 1.5 1 0;
-}
-
-.agent-item:nth-child(4) { /* IFSC Code */
-    flex: 0.7 1 0;
 }
 
 .agent-item .label {
