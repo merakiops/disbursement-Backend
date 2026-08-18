@@ -317,6 +317,7 @@ class DemurrageService:
         Retrieves a paginated list of all demurrage cases.
         """
         from sqlalchemy import or_
+        from sqlalchemy.orm import selectinload
         db_query = db.query(Voyage)
         if query:
             search_pattern = f"%{query}%"
@@ -329,7 +330,10 @@ class DemurrageService:
             )
 
         total_count = db_query.count()
-        voyages = db_query.order_by(Voyage.id.desc()).offset((page - 1) * page_size).limit(page_size).all()
+        voyages = db_query.options(
+            selectinload(Voyage.port_operations).selectinload(PortOperation.deductions),
+            selectinload(Voyage.summary)
+        ).order_by(Voyage.id.desc()).offset((page - 1) * page_size).limit(page_size).all()
 
         cases_data = []
         for voyage in voyages:
