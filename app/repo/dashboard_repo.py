@@ -290,15 +290,15 @@ class DashboardRepository:
             has_year_filter = False
             if getattr(data_request, 'yearRange', None):
                 if data_request.yearRange.from_year:
-                    where_clauses.append("EXTRACT(YEAR FROM d.created_at) >= :k_from_year")
+                    where_clauses.append("EXTRACT(YEAR FROM d.etd) >= :k_from_year")
                     params["k_from_year"] = int(data_request.yearRange.from_year)
                     has_year_filter = True
                 if data_request.yearRange.to_year:
-                    where_clauses.append("EXTRACT(YEAR FROM d.created_at) <= :k_to_year")
+                    where_clauses.append("EXTRACT(YEAR FROM d.etd) <= :k_to_year")
                     params["k_to_year"] = int(data_request.yearRange.to_year)
                     has_year_filter = True
             if not has_year_filter and not is_meraki_user:
-                where_clauses.append("EXTRACT(YEAR FROM d.created_at) >= :k_default_year")
+                where_clauses.append("EXTRACT(YEAR FROM d.etd) >= :k_default_year")
                 params["k_default_year"] = current_year
 
             where_sql = " AND ".join(where_clauses)
@@ -317,7 +317,7 @@ class DashboardRepository:
                     p.port AS port_name,
                     v.loa, v.grt, v.rgrt, v.nrt,
                     d.pda_number,
-                    d.created_at AS etd,
+                    d.etd AS etd,
                     COALESCE(pda_sum.pda_amount, 0.0) AS pda_amount,
                     COALESCE(fda_sum.fda_amount, 0.0) AS fda_amount
                 FROM kamba_data_prod.disbursements d
