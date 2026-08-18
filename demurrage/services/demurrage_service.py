@@ -277,6 +277,19 @@ class DemurrageService:
             raise HTTPException(status_code=500, detail=f"Database transaction failed: {str(e)}")
 
     @staticmethod
+    def delete_demurrage_case(db: Session, voyage_id: int) -> bool:
+        """
+        Deletes a complete demurrage case by Voyage ID.
+        """
+        voyage = db.query(Voyage).filter(Voyage.id == voyage_id).first()
+        if not voyage:
+            raise DemurrageNotFoundException(f"Demurrage case with Voyage ID {voyage_id} not found.")
+
+        db.delete(voyage)
+        db.commit()
+        return True
+
+    @staticmethod
     def get_demurrage_case(db: Session, voyage_id: int) -> dict:
         """
         Retrieves a complete demurrage case by Voyage ID.

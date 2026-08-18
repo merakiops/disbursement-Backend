@@ -81,6 +81,15 @@ def save_demurrage_case(
     return case_data
 
 
+@router.delete("/{voyage_id}")
+def delete_demurrage_case(voyage_id: int, db: Session = Depends(get_db)):
+    """
+    Deletes the complete details of a Demurrage Case including Voyage, Ports, Deductions, and Calculations Summary.
+    """
+    success = DemurrageService.delete_demurrage_case(db, voyage_id)
+    return {"success": success, "message": f"Demurrage case with ID {voyage_id} deleted successfully"}
+
+
 @router.get("/{voyage_id}", response_model=DemurrageCaseResponseSchema)
 def get_demurrage_case(voyage_id: int, db: Session = Depends(get_db)):
     """
