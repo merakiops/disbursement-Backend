@@ -23,6 +23,7 @@ class VoyageCreateSchema(BaseModel):
     timebar_clause: Optional[str] = None
     additional_laytime: Optional[str] = None
     client_name: Optional[str] = None
+    charteres_name: Optional[str] = None
     bl_date: Optional[datetime] = None
     cp_date: Optional[datetime] = None
     bl_dated: Optional[datetime] = None

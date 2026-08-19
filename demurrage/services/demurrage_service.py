@@ -80,6 +80,7 @@ class DemurrageService:
                 db_voyage.bl_date = voyage_data.bl_date
                 db_voyage.cp_date = voyage_data.cp_date
                 db_voyage.client_name = voyage_data.client_name
+                db_voyage.charteres_name = voyage_data.charteres_name
             else:
                 db_voyage = Voyage(
                     vessel=voyage_data.vessel,
@@ -101,7 +102,8 @@ class DemurrageService:
                     additional_laytime=voyage_data.additional_laytime,
                     bl_date=voyage_data.bl_date,
                     cp_date=voyage_data.cp_date,
-                    client_name=voyage_data.client_name
+                    client_name=voyage_data.client_name,
+                    charteres_name=voyage_data.charteres_name
                 )
                 db.add(db_voyage)
             db.flush()  # Gets db_voyage.id for foreign keys
@@ -395,6 +397,7 @@ class DemurrageService:
                     db_voyage.freight = str(v_data.freight) if v_data.freight is not None else None
                     db_voyage.laycan = v_data.laycan
                     db_voyage.client_name = v_data.client_name
+                    db_voyage.charteres_name = v_data.charteres_name
                     db_voyage.bl_date = v_data.bl_date
                     db_voyage.cp_date = v_data.cp_date
                 else:
@@ -410,6 +413,7 @@ class DemurrageService:
                         freight=str(v_data.freight) if v_data.freight is not None else None,
                         laycan=v_data.laycan,
                         client_name=v_data.client_name,
+                        charteres_name=v_data.charteres_name,
                         bl_date=v_data.bl_date,
                         cp_date=v_data.cp_date
                     )

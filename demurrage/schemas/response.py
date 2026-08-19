@@ -76,6 +76,7 @@ class VoyageResponseSchema(BaseModel):
     timebar_clause: Optional[str] = None
     additional_laytime: Optional[str] = None
     client_name: Optional[str] = None
+    charteres_name: Optional[str] = None
     report_s3_url: Optional[str] = None
     created_at: datetime
     updated_at: datetime

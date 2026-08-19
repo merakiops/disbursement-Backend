@@ -33,6 +33,7 @@ class Voyage(Base):
     timebar_clause = Column(String(255), nullable=True)
     additional_laytime = Column(String(100), nullable=True)
     client_name = Column(String(100), nullable=True)
+    charteres_name = Column(String(255), nullable=True)
     bl_date = Column(DateTime, nullable=True)
     cp_date = Column(DateTime, nullable=True)
     report_s3_url = Column(String(500), nullable=True)
