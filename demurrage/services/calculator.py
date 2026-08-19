@@ -42,13 +42,14 @@ def calculate_total_deductions_hours(deduction_times: List[float]) -> float:
 def calculate_demurrage_time(
     total_used_laytime: float, 
     total_deductions: float, 
-    allowed_laytime_hours: float
+    allowed_laytime_hours: float,
+    additional_laytime_hours: float = 0.0
 ) -> float:
     """
-    Formula: demurrage_time = max(0.0, total_used_laytime - total_deductions - allowed_laytime)
+    Formula: demurrage_time = max(0.0, total_used_laytime - total_deductions - allowed_laytime - additional_laytime_hours)
     """
     net_used = total_used_laytime - total_deductions
-    demurrage = net_used - allowed_laytime_hours
+    demurrage = net_used - allowed_laytime_hours - additional_laytime_hours
     return max(0.0, demurrage)
 
 

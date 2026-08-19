@@ -231,8 +231,15 @@ class DemurrageService:
             total_used_laytime = db_load_port.gross_used_laytime + db_discharge_port.gross_used_laytime
             total_deductions = loading_total_ded + discharging_total_ded
             allowed_laytime = db_voyage.allowed_laytime_hours
-            
-            demurrage_time = calculate_demurrage_time(total_used_laytime, total_deductions, allowed_laytime)
+
+            additional_laytime_hours = 0.0
+            if db_voyage.additional_laytime:
+                try:
+                    additional_laytime_hours = float(db_voyage.additional_laytime)
+                except ValueError:
+                    pass
+
+            demurrage_time = calculate_demurrage_time(total_used_laytime, total_deductions, allowed_laytime, additional_laytime_hours)
             gross_demurrage_cost = calculate_gross_demurrage_cost(demurrage_time, db_voyage.demurrage_rate_usd_per_day)
             add_commission = calculate_add_commission(gross_demurrage_cost, db_voyage.address_commission_percent)
             
@@ -537,7 +544,14 @@ class DemurrageService:
                 total_deductions = loading_total_ded + discharging_total_ded
                 allowed_laytime = db_voyage.allowed_laytime_hours
 
-                demurrage_time = calculate_demurrage_time(total_used_laytime, total_deductions, allowed_laytime)
+                additional_laytime_hours = 0.0
+                if db_voyage.additional_laytime:
+                    try:
+                        additional_laytime_hours = float(db_voyage.additional_laytime)
+                    except ValueError:
+                        pass
+
+                demurrage_time = calculate_demurrage_time(total_used_laytime, total_deductions, allowed_laytime, additional_laytime_hours)
                 gross_demurrage_cost = calculate_gross_demurrage_cost(demurrage_time, db_voyage.demurrage_rate_usd_per_day)
                 add_commission = calculate_add_commission(gross_demurrage_cost, db_voyage.address_commission_percent)
                 net_demurrage = calculate_net_demurrage(gross_demurrage_cost, db_voyage.undisputed_demurrage_paid, add_commission)
