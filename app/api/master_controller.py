@@ -37,11 +37,15 @@ port_agent_service=PortAgentServiceImpl()
 tariff_repo = TariffRepo()
 
 @masterController.post("/api/v1/getmaster-data",status_code=status.HTTP_200_OK, response_model= MasterDataResponseDTO)
-@jwt_required
 async def getCompanyList(request: Request,body: MasterDataRequestDTO,  db: Session = Depends(get_db)):
-    username = request.state.user['username']
-    company_id = request.state.user['company']
-    user = userservice.get_user_by_username(username, db=db)
+    user = None
+    company_id = None
+    username = None
+    if hasattr(request.state, 'user') and request.state.user:
+        username = request.state.user.get('username')
+        company_id = request.state.user.get('company')
+        if username:
+            user = userservice.get_user_by_username(username, db=db)
     requested_fields = [field.lower() for field in body.fields] if body.fields else ["all"]
 
     allowed_fields = {"all", "country", "active_vessels","inactive_vessels", "roles","cargo","purpose","client","port_agent","companies","company_types","vessel_properties","port_services","tariff_services","currency"}
@@ -58,14 +62,16 @@ async def getCompanyList(request: Request,body: MasterDataRequestDTO,  db: Sessi
         result["country"] = countries
 
     if "all" in requested_fields or "active_vessels" in requested_fields:
-        active_vessels = vessl_service.get_all_vessels_by_status(company_id,'Y',db)
+        eff_company_id = company_id if company_id is not None else 1
+        active_vessels = vessl_service.get_all_vessels_by_status(eff_company_id,'Y',db)
         active_vessels_list = list(active_vessels) if active_vessels is not None else []
         if not any(getattr(v, 'name', '') and str(getattr(v, 'name', '')).lower() == "others" for v in active_vessels_list):
             active_vessels_list.append(VesselCreateUpdateDTO(vessel_id=0, name="Others", status="Y"))
         result["active_vessels"] = active_vessels_list
 
     if "all" in requested_fields or "inactive_vessels" in requested_fields:
-        inactive_vessels = vessl_service.get_all_vessels_by_status(company_id,'N',db)
+        eff_company_id = company_id if company_id is not None else 1
+        inactive_vessels = vessl_service.get_all_vessels_by_status(eff_company_id,'N',db)
         result["inactive_vessels"] = inactive_vessels
 
     if "all" in requested_fields or "roles" in requested_fields:
