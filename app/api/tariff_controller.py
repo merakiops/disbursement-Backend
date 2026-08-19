@@ -29,9 +29,7 @@ def create_or_update_tariff_rule(request:Request,dto: PortTariffRuleDTO, db: Ses
 
 
 @tariffController.post("/api/v1/tariff_rules",response_model=PortTariffRulesFinalDTO,summary="Get all Tariff rules")
-@jwt_required
 def create_or_update_tariff_rule(request:Request,dto:PortTariffRulesRequestDTO, db: Session = Depends(get_db)):
-    username = request.state.user["username"]
     try:
         tariff_rules = tariff_service.get_all_tariff_rules(dto,db)
         return tariff_rules
