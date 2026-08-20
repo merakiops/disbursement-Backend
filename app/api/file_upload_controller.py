@@ -29,9 +29,9 @@ def presigned_url(request: Request,dto:FileUploadRequestDTO,db: Session = Depend
     
 
 @file_upload.post("/api/v1/file_upload_save")
-@jwt_required
+# @jwt_required
 def file_upload_save(request:Request,dto:FileUploadSaveRequestDTO,db: Session = Depends(get_db)):
-    username = request.state.user["username"]
+    username = "system"
     try: 
         file_uploads.file_upload_save(dto,db,username)   
         return JSONResponse(
