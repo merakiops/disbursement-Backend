@@ -303,7 +303,7 @@ async def reviewValidateOtp(request: Request, background_tasks: BackgroundTasks,
 
 @disbursementController.post("/api/v1/pda_pa_form_submit",tags=["Disbursement"])
 # @jwt_required
-@role_required(ALLOWED_ROLES_PORT_AGENT)
+# @role_required(ALLOWED_ROLES_PORT_AGENT)
 async def pdaFormSubmit(request: Request, request_body:DisbursementPAFormRequestDTO, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     try:
         
