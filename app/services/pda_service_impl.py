@@ -45,7 +45,8 @@ class PDAServiceImpl(PDAService):
         self.comm_history_service = TxnCommunicationHistoryServiceImpl()
         raw_host = os.getenv("HOST")
         if not raw_host or "application url" in raw_host:
-            raw_host = "https://disbursement.merakishippingservices.com/"
+            # raw_host = "https://disbursement.merakishippingservices.com/"
+            raw_host = "https://apps.merakishippingservices.com/"
         if not raw_host.startswith("http://") and not raw_host.startswith("https://"):
             raw_host = f"https://{raw_host}"
         if not raw_host.endswith("/"):
