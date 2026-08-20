@@ -43,9 +43,10 @@ def file_upload_save(request:Request,dto:FileUploadSaveRequestDTO,db: Session = 
     
 
 @file_upload.post("/api/v1/list_of_uploaded_files")
-@jwt_required
+# @jwt_required
 def list_of_uploaded_files(request:Request,dto:ListOfUploadedFilesRequestDTO,db: Session = Depends(get_db)):
-    username = request.state.user["username"]
+    # username = request.state.user["username"]
+    username = "system"
     try: 
         file=file_uploads.list_of_uploaded_files(dto,db,username)
         return file
