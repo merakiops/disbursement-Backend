@@ -221,7 +221,6 @@ class TimelineService:
                     has_pda = True
                 if db.query(TxnFDA).filter(TxnFDA.disbursement_seq == disb.disbursement_seq).first():
                     has_fda = True
-                    has_pda = True # FDA implies PDA was done
 
         existing_titles = [t.title.upper() for t in timeline_list]
 
@@ -241,10 +240,12 @@ class TimelineService:
                     )
                 )
 
-        if has_pda:
+        if has_pda or has_fda:
             if not timeline_list:
                 add_missing("Client Request Sent")
             add_missing("Port Agent Assigned")
+            
+        if has_pda:
             add_missing("Pda Uploaded")
             add_missing("Pda Approved")
 
