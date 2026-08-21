@@ -25,7 +25,8 @@ class TimelineService:
         disbursement_id: Optional[str] = None,
         disbursement_seq: Optional[int] = None,
         request_id: Optional[int] = None,
-        details: Optional[Dict[str, Any]] = None
+        details: Optional[Dict[str, Any]] = None,
+        created_on = None
     ):
         return TimelineRepository.add_timeline_entry(
             db=db,
@@ -36,7 +37,8 @@ class TimelineService:
             disbursement_id=disbursement_id,
             disbursement_seq=disbursement_seq,
             request_id=request_id,
-            details=details
+            details=details,
+            created_on=created_on
         )
 
     @staticmethod
@@ -163,80 +165,65 @@ class TimelineService:
 
         entries = TimelineRepository.get_raw_timeline_entries(db, identifier)
         
-        # Build step details mapping
-        step_events = {1: None, 2: None, 3: None, 4: None}
-        is_rejected = False
-
-        for entry in entries:
-            st = (entry.status or "").upper()
-            if "CLIENT_REQUEST" in st or "SUBMIT" in st:
-                step_events[1] = entry
-            if "PORT_AGENT" in st or "REVIEW" in st or "INITIATE" in st:
-                step_events[2] = entry
-            if "APPROV" in st:
-                step_events[3] = entry
-            if "COMPLET" in st:
-                step_events[4] = entry
-            if "REJECT" in st:
-                is_rejected = True
-                step_events[3] = entry
-
-        current_step = 1
-        if step_events[4]:
-            current_step = 4
-        elif step_events[3]:
-            current_step = 3
-        elif step_events[2]:
-            current_step = 2
-
-        status_name = "Submitted"
-        if is_rejected:
-            status_name = "Rejected"
-        elif current_step == 4:
-            status_name = "Completed"
-        elif current_step == 3:
-            status_name = "Approved"
-        elif current_step == 2:
-            status_name = "Under Review"
-
-        progress_pct = current_step * 25
-
         timeline_list = []
-        titles = {1: "Submitted", 2: "Under Review", 3: "Rejected" if is_rejected else "Approved", 4: "Completed"}
+        is_rejected = False
+        current_step = 1
 
-        for s in range(1, 5):
-            evt = step_events.get(s)
-            doc_url = None
-            doc_name = None
+        if entries:
+            # Deduplicate consecutive identical status entries
+            deduped_entries = []
+            last_status = None
+            for entry in entries:
+                if entry.status != last_status:
+                    deduped_entries.append(entry)
+                    last_status = entry.status
 
-            if evt:
-                st_code = "REJECTED" if (s == 3 and is_rejected) else ("COMPLETED" if s <= current_step else "PENDING")
-                desc = evt.message or f"PDA request {titles[s].lower()}."
-                upd_by = evt.action_by_role or evt.action_by_user or "System"
-                dt = evt.created_on
-
-                # Extract document info from details JSON if available
+            current_step = len(deduped_entries)
+            for s, evt in enumerate(deduped_entries, start=1):
+                st = (evt.status or "").upper()
+                if "REJECT" in st:
+                    is_rejected = True
+                
                 details_data = evt.details if isinstance(evt.details, dict) else {}
                 doc_url = details_data.get("document_url") or details_data.get("file_url") or details_data.get("url") or getattr(evt, "document_url", None)
                 doc_name = details_data.get("document_name") or details_data.get("file_name") or details_data.get("filename") or getattr(evt, "document_name", None)
-            else:
-                st_code = "PENDING"
-                desc = None
-                upd_by = None
-                dt = None
 
-            timeline_list.append(
-                DetailedTimelineStepDTO(
-                    step=s,
-                    title=titles[s],
-                    status=st_code,
-                    date_time=dt,
-                    description=desc,
-                    updated_by=upd_by,
-                    document_url=doc_url,
-                    document_name=doc_name
+                title = (evt.status or "Action").replace("_", " ").title()
+                st_code = "REJECTED" if "REJECT" in st else "COMPLETED"
+                desc = evt.message or title
+                upd_by = evt.action_by_role or evt.action_by_user or "System"
+                dt = evt.created_on
+
+                timeline_list.append(
+                    DetailedTimelineStepDTO(
+                        step=s,
+                        title=title,
+                        status=st_code,
+                        date_time=dt,
+                        description=desc,
+                        updated_by=upd_by,
+                        document_url=doc_url,
+                        document_name=doc_name
+                    )
                 )
-            )
+        
+        # Determine current status based on the last entry
+        status_name = "Submitted"
+        if timeline_list:
+            last_entry_title = timeline_list[-1].title.upper()
+            if is_rejected:
+                status_name = "Rejected"
+            elif "COMPLET" in last_entry_title:
+                status_name = "Completed"
+            elif "APPROV" in last_entry_title:
+                status_name = "Approved"
+            elif "REVIEW" in last_entry_title or "PORT" in last_entry_title or "INITIATE" in last_entry_title or len(timeline_list) > 1:
+                status_name = "Under Review"
+
+        # Calculate progress
+        progress_pct = min(100, current_step * 25)
+        if status_name == "Completed":
+            progress_pct = 100
 
         return DetailedDisbursementTimelineResponseDTO(
             request_id=request_id,

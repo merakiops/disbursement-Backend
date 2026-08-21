@@ -1,6 +1,7 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, desc
 from typing import Optional, Dict, Any, List
+from datetime import datetime
 from app.models.txn_disbursement_timeline import TxnDisbursementTimeline
 from app.models.txn_client_disbursement_request import TxnClientDisbursementRequest
 from app.models.txn_disbursement import TxnDisbursement
@@ -24,7 +25,8 @@ class TimelineRepository:
         disbursement_id: Optional[str] = None,
         disbursement_seq: Optional[int] = None,
         request_id: Optional[int] = None,
-        details: Optional[Dict[str, Any]] = None
+        details: Optional[Dict[str, Any]] = None,
+        created_on: Optional[datetime] = None
     ) -> TxnDisbursementTimeline:
         try:
             entry = TxnDisbursementTimeline(
@@ -37,6 +39,8 @@ class TimelineRepository:
                 message=message,
                 details=details
             )
+            if created_on:
+                entry.created_on = created_on
             db.add(entry)
             db.commit()
             db.refresh(entry)
