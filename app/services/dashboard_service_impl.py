@@ -365,22 +365,42 @@ class DashboardServiceImpl(DashboardService):
     def get_savings_insights(self, request_payload: DashboardRequestDTO, db: Session):
         return SavingsInsightsDTO(
             overall_savings={
-                "total_savings": 5013000,
-                "savings_percentage": 15.2,
-                "total_spends": 33150000
+                "total_savings_delta_amount": "5,013,000",
+                "total_savings_delta_percentage": "15.2%",
+                "fda_actual_spent": "33,150,000",
+                "pda_estimated": "38,163,000",
+                "total_port_calls": 120,
+                "pda_utilized_percentage": "86.8%",
+                "efficiency_rate": "92%",
+                "avg_fda": "276,250"
             },
-            pda_savings={
-                "initial_amount": 15200000,
-                "negotiated_amount": 13500000,
-                "savings_amount": 1700000,
-                "savings_percentage": 11.18
+            overall_disbursement_calculation={
+                "pda_estimated": "38,163,000",
+                "fda_actual_spent": "33,150,000",
+                "total_savings_realized": "5,013,000",
+                "one_d_savings_delta": "2,000",
+                "avg_fda_per_port_call": "276,250",
+                "active_port_calls_total": "120"
             },
-            fda_savings={
-                "initial_amount": 17950000,
-                "negotiated_amount": 14637000,
-                "savings_amount": 3313000,
-                "savings_percentage": 18.45
-            }
+            utilization_breakdown=[
+                {
+                    "id": "1",
+                    "title": "Port Dues",
+                    "description": "Port handling and berthing fees",
+                    "pda_estimated": "15,000,000",
+                    "fda_spent": "14,000,000",
+                    "savings_realized": "1,000,000"
+                },
+                {
+                    "id": "2",
+                    "title": "Towage",
+                    "description": "Tug boats and assisting",
+                    "pda_estimated": "5,000,000",
+                    "fda_spent": "4,500,000",
+                    "savings_realized": "500,000"
+                }
+            ],
+            footer_note="Values are based on real-time port cost data and current negotiations."
         )
 
     def get_negotiations(self, req_type: str, db: Session):

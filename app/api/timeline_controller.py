@@ -79,3 +79,31 @@ async def get_disbursement_timeline_detail(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to fetch disbursement timeline detail: {str(e)}"
         )
+
+from app.dto.timeline_dto import TimelineDocumentUploadRequestDTO
+
+@timelineController.post(
+    "/api/v1/disbursement_timeline/{identifier}/document",
+    tags=["Disbursement Timeline"]
+)
+@jwt_required
+async def upload_timeline_document(
+    identifier: str,
+    payload: TimelineDocumentUploadRequestDTO,
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    try:
+        user_info = getattr(request.state, "user", {}) or {}
+        username = user_info.get("username", "System")
+        
+        response = TimelineService.save_timeline_document(identifier, payload, username, db)
+        return response
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error uploading document: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to upload document: {str(e)}"
+        )

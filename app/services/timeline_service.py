@@ -201,6 +201,16 @@ class TimelineService:
         if not entries and disb_id and disb_id != identifier:
              entries = TimelineRepository.get_raw_timeline_entries(db, disb_id)
         
+                # --- File fetching patch ---
+        from app.models.txn_disbursement_files import TxnDisbursementFiles
+        timeline_files = db.query(TxnDisbursementFiles).filter(
+            TxnDisbursementFiles.disbursement_seq == disb.disbursement_seq,
+            TxnDisbursementFiles.source_type == "TIMELINE_STEP",
+            TxnDisbursementFiles.is_deleted == "N"
+        ).all() if disb else []
+        file_map = {f.file_description.upper(): f for f in timeline_files}
+        # ---------------------------
+
         timeline_list = []
         is_rejected = False
         current_step = 1
@@ -238,16 +248,22 @@ class TimelineService:
                         date_time=dt,
                         description=desc,
                         updated_by=upd_by,
-                        document_url=doc_url,
-                        document_name=doc_name
+                        document_url=f"/api/v1/file_download/{file_map.get(title.upper()).file_id}" if file_map.get(title.upper()) else doc_url,
+                        document_name=file_map.get(title.upper()).file_name if file_map.get(title.upper()) else doc_name
                     )
                 )
         
+        
+
         existing_titles = [t.title.upper() for t in timeline_list]
 
         def add_missing(title_str, is_done=True):
             # Check if an equivalent step already exists
             if not any(title_str.upper() in t or t in title_str.upper() for t in existing_titles):
+                file_obj = file_map.get(title_str.upper())
+                doc_url = f"/api/v1/file_download/{file_obj.file_id}" if file_obj else None
+                doc_name = file_obj.file_name if file_obj else None
+                
                 timeline_list.append(
                     DetailedTimelineStepDTO(
                         step=0,
@@ -256,8 +272,8 @@ class TimelineService:
                         date_time=None,
                         description=f"{title_str} (Recovered)" if is_done else None,
                         updated_by="System" if is_done else None,
-                        document_url=None,
-                        document_name=None
+                        document_url=doc_url,
+                        document_name=doc_name
                     )
                 )
 
@@ -345,3 +361,33 @@ class TimelineService:
             progress_percentage=progress_pct,
             timeline=timeline_list
         )
+
+    @staticmethod
+    def save_timeline_document(identifier: str, payload, username: str, db: Session):
+        from app.models.txn_disbursement_files import TxnDisbursementFiles
+        from app.models.txn_disbursement import TxnDisbursement
+        from fastapi import HTTPException
+        
+        disb = None
+        if identifier.startswith("MDA"):
+            disb = db.query(TxnDisbursement).filter(TxnDisbursement.disbursement_id == identifier).first()
+        else:
+            disb = db.query(TxnDisbursement).filter(TxnDisbursement.disbursement_seq == identifier).first()
+            
+        if not disb:
+            raise HTTPException(status_code=404, detail="Disbursement not found")
+            
+        new_file = TxnDisbursementFiles(
+            disbursement_seq=disb.disbursement_seq,
+            file_name=payload.file_name,
+            file_description=payload.step_title.upper(),
+            complete_file_path=payload.file_path,
+            source_type="TIMELINE_STEP",
+            is_deleted="N",
+            created_by=username,
+            updated_by=username,
+            sync="N"
+        )
+        db.add(new_file)
+        db.commit()
+        return {"status": "success", "message": "Document saved successfully", "file_id": new_file.file_id}

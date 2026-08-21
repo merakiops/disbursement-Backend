@@ -45,3 +45,9 @@ class DetailedDisbursementTimelineResponseDTO(BaseModel):
     current_step: int
     progress_percentage: int
     timeline: List[DetailedTimelineStepDTO]
+
+class TimelineDocumentUploadRequestDTO(BaseModel):
+    step_title: str
+    file_name: str
+    file_path: str
+    file_description: Optional[str] = None
