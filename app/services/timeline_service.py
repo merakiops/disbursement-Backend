@@ -170,6 +170,7 @@ class TimelineService:
         has_pda = False
         pda_is_approved = False
         has_fda = False
+        fda_is_approved = False
         disb = None
         if disb_id:
             disb = db.query(TxnDisbursement).filter(TxnDisbursement.disbursement_id == disb_id).first()
@@ -189,8 +190,12 @@ class TimelineService:
                 # If PDA status is Completed (7), Submitted (3), Requested (5) etc or name indicates approval/completion
                 if pda.status in [2, 3, 4, 5, 6, 7, 8, 9] or (pda.status_name and ("approv" in pda.status_name.lower() or "complet" in pda.status_name.lower())):
                     pda_is_approved = True
-            if db.query(TxnFDA).filter(TxnFDA.disbursement_seq == disb.disbursement_seq).first():
+            
+            fda = db.query(TxnFDA).filter(TxnFDA.disbursement_seq == disb.disbursement_seq).first()
+            if fda:
                 has_fda = True
+                if fda.status in [2, 3, 4, 5, 6, 7, 8, 9] or (fda.status_name and ("approv" in fda.status_name.lower() or "complet" in fda.status_name.lower())):
+                    fda_is_approved = True
 
         entries = TimelineRepository.get_raw_timeline_entries(db, identifier)
         if not entries and disb_id and disb_id != identifier:
@@ -256,13 +261,14 @@ class TimelineService:
                     )
                 )
 
-        # Always show the full lifecycle in the timeline
-        # Completed steps get "COMPLETED", future steps get None (null)
+        # Always show all 6 standard steps
+        # Completed steps get "COMPLETED", future/bypassed steps get None (null)
         add_missing("Client Request Sent", is_done=True)
         add_missing("Port Agent Assigned", is_done=True)
         add_missing("Pda Uploaded", is_done=has_pda)
-        add_missing("Pda Approved", is_done=pda_is_approved or has_fda)
+        add_missing("Pda Approved", is_done=pda_is_approved)
         add_missing("Fda Uploaded", is_done=has_fda)
+        add_missing("Fda Approved", is_done=fda_is_approved)
 
         # Sort timeline: items with dates first, then null dates (legacy injected)
         # But we want legacy injected to be in logical order. The easiest way is to just 
@@ -277,9 +283,10 @@ class TimelineService:
             "UNDER REVIEW": 2,
             "PDA UPLOADED": 3,
             "PDA APPROVED": 4,
-            "APPROVED": 4,
             "FDA UPLOADED": 5,
-            "COMPLETED": 6
+            "FDA APPROVED": 6,
+            "APPROVED": 4,  # Fallback for other approvals
+            "COMPLETED": 7
         }
 
         def get_order(t):
