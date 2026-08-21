@@ -162,8 +162,34 @@ class TimelineService:
             vessel_name, port_name = TimelineService._resolve_names(db, req)
             request_id = req.request_id
             disb_id = req.disbursement_id or f"PDA-{req.request_id}"
+            
+        from app.models.txn_disbursement import TxnDisbursement
+        from app.models.txn_pda import PDAModel
+        from app.models.txn_fda import TxnFDA
+
+        has_pda = False
+        has_fda = False
+        disb = None
+        if disb_id:
+            disb = db.query(TxnDisbursement).filter(TxnDisbursement.disbursement_id == disb_id).first()
+            
+        if not disb and identifier.isdigit():
+            # Fallback: if they just passed '888', check for 'MDA888' or disbursement_seq=888
+            disb = db.query(TxnDisbursement).filter(TxnDisbursement.disbursement_id == f"MDA{identifier}").first()
+            if not disb:
+                disb = db.query(TxnDisbursement).filter(TxnDisbursement.disbursement_seq == int(identifier)).first()
+            if disb:
+                disb_id = disb.disbursement_id
+                
+        if disb:
+            if db.query(PDAModel).filter(PDAModel.disbursement_seq == disb.disbursement_seq).first():
+                has_pda = True
+            if db.query(TxnFDA).filter(TxnFDA.disbursement_seq == disb.disbursement_seq).first():
+                has_fda = True
 
         entries = TimelineRepository.get_raw_timeline_entries(db, identifier)
+        if not entries and disb_id and disb_id != identifier:
+             entries = TimelineRepository.get_raw_timeline_entries(db, disb_id)
         
         timeline_list = []
         is_rejected = False
@@ -207,21 +233,6 @@ class TimelineService:
                     )
                 )
         
-        # Fallback for old missing data based on PDA / FDA presence
-        from app.models.txn_disbursement import TxnDisbursement
-        from app.models.txn_pda import PDAModel
-        from app.models.txn_fda import TxnFDA
-
-        has_pda = False
-        has_fda = False
-        if disb_id:
-            disb = db.query(TxnDisbursement).filter(TxnDisbursement.disbursement_id == disb_id).first()
-            if disb:
-                if db.query(PDAModel).filter(PDAModel.disbursement_seq == disb.disbursement_seq).first():
-                    has_pda = True
-                if db.query(TxnFDA).filter(TxnFDA.disbursement_seq == disb.disbursement_seq).first():
-                    has_fda = True
-
         existing_titles = [t.title.upper() for t in timeline_list]
 
         def add_missing(title_str):
