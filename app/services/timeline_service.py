@@ -168,6 +168,7 @@ class TimelineService:
         from app.models.txn_fda import TxnFDA
 
         has_pda = False
+        pda_is_approved = False
         has_fda = False
         disb = None
         if disb_id:
@@ -182,8 +183,12 @@ class TimelineService:
                 disb_id = disb.disbursement_id
                 
         if disb:
-            if db.query(PDAModel).filter(PDAModel.disbursement_seq == disb.disbursement_seq).first():
+            pda = db.query(PDAModel).filter(PDAModel.disbursement_seq == disb.disbursement_seq).first()
+            if pda:
                 has_pda = True
+                # If PDA status is Completed (7), Submitted (3), Requested (5) etc or name indicates approval/completion
+                if pda.status in [2, 3, 4, 5, 6, 7, 8, 9] or (pda.status_name and ("approv" in pda.status_name.lower() or "complet" in pda.status_name.lower())):
+                    pda_is_approved = True
             if db.query(TxnFDA).filter(TxnFDA.disbursement_seq == disb.disbursement_seq).first():
                 has_fda = True
 
@@ -235,33 +240,29 @@ class TimelineService:
         
         existing_titles = [t.title.upper() for t in timeline_list]
 
-        def add_missing(title_str):
+        def add_missing(title_str, is_done=True):
             # Check if an equivalent step already exists
             if not any(title_str.upper() in t or t in title_str.upper() for t in existing_titles):
                 timeline_list.append(
                     DetailedTimelineStepDTO(
                         step=0,
                         title=title_str,
-                        status="COMPLETED",
+                        status="COMPLETED" if is_done else None,
                         date_time=None,
-                        description=f"{title_str} (Recovered)",
-                        updated_by="System",
+                        description=f"{title_str} (Recovered)" if is_done else None,
+                        updated_by="System" if is_done else None,
                         document_url=None,
                         document_name=None
                     )
                 )
 
-        if has_pda or has_fda:
-            if not timeline_list:
-                add_missing("Client Request Sent")
-            add_missing("Port Agent Assigned")
-            
-        if has_pda:
-            add_missing("Pda Uploaded")
-            add_missing("Pda Approved")
-
-        if has_fda:
-            add_missing("Fda Uploaded")
+        # Always show the full lifecycle in the timeline
+        # Completed steps get "COMPLETED", future steps get None (null)
+        add_missing("Client Request Sent", is_done=True)
+        add_missing("Port Agent Assigned", is_done=True)
+        add_missing("Pda Uploaded", is_done=has_pda)
+        add_missing("Pda Approved", is_done=pda_is_approved or has_fda)
+        add_missing("Fda Uploaded", is_done=has_fda)
 
         # Sort timeline: items with dates first, then null dates (legacy injected)
         # But we want legacy injected to be in logical order. The easiest way is to just 
@@ -291,29 +292,39 @@ class TimelineService:
         timeline_list.sort(key=lambda x: (get_order(x), x.date_time.timestamp() if x.date_time else 0))
 
         # Re-assign sequential steps
+        completed_steps = 0
         for idx, t in enumerate(timeline_list, start=1):
             t.step = idx
+            if t.status:  # count as completed if status is not None
+                completed_steps += 1
+                
+        current_step = completed_steps
 
-        current_step = len(timeline_list) if timeline_list else 1
-
-        # Determine current status based on the last entry
         status_name = "Submitted"
         if timeline_list:
-            last_entry_title = timeline_list[-1].title.upper()
+            # Get the last completed step for status
+            last_completed = [t for t in timeline_list if t.status]
+            if last_completed:
+                last_entry_title = last_completed[-1].title.upper()
+            else:
+                last_entry_title = ""
+
             if is_rejected:
                 status_name = "Rejected"
             elif "COMPLET" in last_entry_title:
                 status_name = "Completed"
-            elif "APPROV" in last_entry_title or has_pda:
+            elif "APPROV" in last_entry_title or pda_is_approved:
                 status_name = "Approved"
-            elif "REVIEW" in last_entry_title or "PORT" in last_entry_title or "INITIATE" in last_entry_title or len(timeline_list) > 1:
+            elif "REVIEW" in last_entry_title or "PORT" in last_entry_title or "INITIATE" in last_entry_title or len(last_completed) > 1 or has_pda:
                 status_name = "Under Review"
                 
         if has_fda:
             status_name = "FDA Uploaded"
 
         # Calculate progress
-        progress_pct = min(100, current_step * 25)
+        total_steps = len(timeline_list) if timeline_list else 4
+        progress_pct = int(min(100, (current_step / total_steps) * 100)) if total_steps > 0 else 0
+        
         if status_name == "Completed" or has_fda:
             progress_pct = 100
 

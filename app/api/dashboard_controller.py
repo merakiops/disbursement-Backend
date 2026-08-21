@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.core.decorators import jwt_required
 from app.dto.dashboard_dto import DashboardRequestDTO, DashboardDataRequest
+from app.dto.savings_insights_dto import SavingsInsightsDTO
 from app.dto.dasboard_response_dto import (
     DashboardResponseDTO, FdaProcessingDetailsResponseDTO, FilterDataDTO, FilterDataRequestDTO
 )
@@ -129,4 +130,21 @@ async def get_dashboard_filter_data(request: Request, filter_request: FilterData
         return result
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
+@DashboardController.post("/api/v1/dashboard/savings-insights", response_model=SavingsInsightsDTO)
+@jwt_required
+async def get_savings_insights(request: Request, payload: DashboardRequestDTO, db: Session = Depends(get_db)):
+    """
+    Get savings insights for a single client using request payload.
+    """
+    try:
+        return dashboard_service.get_savings_insights(payload, db)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
 

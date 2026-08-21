@@ -28,7 +28,7 @@ class DisbursementSummaryListResponseDTO(BaseModel):
 class DetailedTimelineStepDTO(BaseModel):
     step: int
     title: str  # Submitted, Under Review, Approved, Completed, Rejected
-    status: str  # COMPLETED, CURRENT, PENDING, REJECTED
+    status: Optional[str] = None  # COMPLETED, CURRENT, PENDING, REJECTED, or None for fallback
     date_time: Optional[datetime] = None
     description: Optional[str] = None
     updated_by: Optional[str] = None

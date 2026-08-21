@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from sqlalchemy.orm import Session
 from app.dto.dashboard_dto import DashboardRequestDTO
+from app.dto.savings_insights_dto import SavingsInsightsDTO
 from app.dto.dasboard_response_dto import DashboardResponseDTO, FdaProcessingDetailsResponseDTO, FilterDataDTO
 
 
@@ -8,6 +9,10 @@ class DashboardService(ABC):
     
     @abstractmethod
     def get_dashboard_summary(self, payload: DashboardRequestDTO, db: Session) -> DashboardResponseDTO:
+        pass
+        
+    @abstractmethod
+    def get_savings_insights(self, payload: DashboardRequestDTO, db: Session) -> SavingsInsightsDTO:
         pass
     
     @abstractmethod
