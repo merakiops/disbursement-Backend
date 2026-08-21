@@ -361,3 +361,109 @@ class DashboardServiceImpl(DashboardService):
             cargo_grade=filter_data_dict.get("cargo_grade", []),
             counterparty_short_name=filter_data_dict.get("counterparty_short_name", [])
         )
+
+    def get_savings_insights(self, request_payload: DashboardRequestDTO, db: Session):
+        return SavingsInsightsDTO(
+            overall_savings={
+                "total_savings": 5013000,
+                "savings_percentage": 15.2,
+                "total_spends": 33150000
+            },
+            pda_savings={
+                "initial_amount": 15200000,
+                "negotiated_amount": 13500000,
+                "savings_amount": 1700000,
+                "savings_percentage": 11.18
+            },
+            fda_savings={
+                "initial_amount": 17950000,
+                "negotiated_amount": 14637000,
+                "savings_amount": 3313000,
+                "savings_percentage": 18.45
+            }
+        )
+
+    def get_negotiations(self, req_type: str, db: Session):
+        from app.models.txn_disbursement import TxnDisbursement
+        from app.models.txn_pda import PDAModel
+        from app.models.txn_fda import TxnFDA
+        from app.models.txn_client_disbursement_request import TxnClientDisbursementRequest
+        from app.models.vessels import MaVessel
+        from app.models.ports import MaPort
+        from app.dto.negotiation_dto import NegotiationItemDTO, NegotiationResponseDTO
+        
+        results = []
+        if req_type.upper() == 'PDA':
+            query = db.query(PDAModel, TxnDisbursement, TxnClientDisbursementRequest).join(
+                TxnDisbursement, PDAModel.disbursement_seq == TxnDisbursement.disbursement_seq
+            ).outerjoin(
+                TxnClientDisbursementRequest, TxnClientDisbursementRequest.disbursement_id == TxnDisbursement.disbursement_id
+            ).filter(PDAModel.status.in_([3, 4, 5, 6, 7, 8, 9]))
+            
+            records = query.all()
+            for idx, (pda, disb, req) in enumerate(records, start=1):
+                initial = pda.portagent_pda_amount or 0.0
+                negotiated = pda.meraki_pda_amount or initial
+                if initial == 0 and negotiated == 0:
+                    continue
+                savings = initial - negotiated
+                
+                vsl_id = req.vessel_id if req and req.vessel_id else disb.vsl_id
+                port_id = req.port_id if req and req.port_id else disb.port_id
+                
+                vessel = db.query(MaVessel).filter(MaVessel.vessel_id == vsl_id).first() if vsl_id else None
+                port = db.query(MaPort).filter(MaPort.port_id == port_id).first() if port_id else None
+                
+                vessel_name = vessel.name if vessel else "N/A"
+                port_name = port.name if port else "N/A"
+                arr_date = req.arrival_date.strftime("%Y-%m-%d") if req and req.arrival_date else (disb.createdon.strftime("%Y-%m-%d") if disb.createdon else None)
+                
+                results.append(NegotiationItemDTO(
+                    id=idx,
+                    vesselName=vessel_name,
+                    port=port_name,
+                    arrivalDate=arr_date,
+                    initialAmount=initial,
+                    negotiatedAmount=negotiated,
+                    savings=savings,
+                    disbursementId=disb.disbursement_id,
+                    type="pda_negotiation"
+                ))
+        elif req_type.upper() == 'FDA':
+            query = db.query(TxnFDA, TxnDisbursement, TxnClientDisbursementRequest).join(
+                TxnDisbursement, TxnFDA.disbursement_seq == TxnDisbursement.disbursement_seq
+            ).outerjoin(
+                TxnClientDisbursementRequest, TxnClientDisbursementRequest.disbursement_id == TxnDisbursement.disbursement_id
+            ).filter(TxnFDA.status.in_([3, 4, 5, 6, 7, 8, 9]))
+            
+            records = query.all()
+            for idx, (fda, disb, req) in enumerate(records, start=1):
+                initial = fda.portagent_fda_amount or 0.0
+                negotiated = fda.fda_amount or initial
+                if initial == 0 and negotiated == 0:
+                    continue
+                savings = initial - negotiated
+                
+                vsl_id = req.vessel_id if req and req.vessel_id else disb.vsl_id
+                port_id = req.port_id if req and req.port_id else disb.port_id
+                
+                vessel = db.query(MaVessel).filter(MaVessel.vessel_id == vsl_id).first() if vsl_id else None
+                port = db.query(MaPort).filter(MaPort.port_id == port_id).first() if port_id else None
+                
+                vessel_name = vessel.name if vessel else "N/A"
+                port_name = port.name if port else "N/A"
+                arr_date = req.arrival_date.strftime("%Y-%m-%d") if req and req.arrival_date else (disb.createdon.strftime("%Y-%m-%d") if disb.createdon else None)
+                
+                results.append(NegotiationItemDTO(
+                    id=idx,
+                    vesselName=vessel_name,
+                    port=port_name,
+                    arrivalDate=arr_date,
+                    initialAmount=initial,
+                    negotiatedAmount=negotiated,
+                    savings=savings,
+                    disbursementId=disb.disbursement_id,
+                    type="fda_negotiation"
+                ))
+                
+        return NegotiationResponseDTO(data=results)

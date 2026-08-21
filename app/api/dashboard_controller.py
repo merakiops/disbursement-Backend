@@ -148,3 +148,13 @@ async def get_savings_insights(request: Request, payload: DashboardRequestDTO, d
             detail=str(e)
         )
 
+
+from app.dto.negotiation_dto import NegotiationRequestDTO, NegotiationResponseDTO
+
+@DashboardController.post("/api/v1/dashboard/negotiations", response_model=NegotiationResponseDTO)
+@jwt_required
+async def get_negotiations_endpoint(request: Request, payload: NegotiationRequestDTO, db: Session = Depends(get_db)):
+    try:
+        return dashboard_service.get_negotiations(payload.type, db)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
