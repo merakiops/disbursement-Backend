@@ -139,6 +139,21 @@ async def get_savings_insights(request: Request, payload: DashboardRequestDTO, d
     Get savings insights for a single client using request payload.
     """
     try:
+        user_info = getattr(request.state, 'user', {}) or {}
+        user_role = user_info.get('roleId', '')
+        raw_username = str(user_info.get('username') or user_info.get('user') or '').lower()
+        is_meraki_user = ("meraki" in raw_username) or (user_role == 1 or user_role == '1')
+
+        if not payload.clientId and not payload.client_id:
+            if not is_meraki_user:
+                company_id = user_info.get('company')
+                if company_id:
+                    payload.clientId = [company_id]
+                else:
+                    user_id = user_info.get('user_id')
+                    if user_id:
+                        payload.clientId = [user_id]
+
         return dashboard_service.get_savings_insights(payload, db)
     except HTTPException:
         raise
