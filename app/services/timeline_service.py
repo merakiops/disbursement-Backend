@@ -207,6 +207,83 @@ class TimelineService:
                     )
                 )
         
+        # Fallback for old missing data based on PDA / FDA presence
+        from app.models.txn_disbursement import TxnDisbursement
+        from app.models.txn_pda import PDAModel
+        from app.models.txn_fda import TxnFDA
+
+        has_pda = False
+        has_fda = False
+        if disb_id:
+            disb = db.query(TxnDisbursement).filter(TxnDisbursement.disbursement_id == disb_id).first()
+            if disb:
+                if db.query(PDAModel).filter(PDAModel.disbursement_seq == disb.disbursement_seq).first():
+                    has_pda = True
+                if db.query(TxnFDA).filter(TxnFDA.disbursement_seq == disb.disbursement_seq).first():
+                    has_fda = True
+                    has_pda = True # FDA implies PDA was done
+
+        existing_titles = [t.title.upper() for t in timeline_list]
+
+        def add_missing(title_str):
+            # Check if an equivalent step already exists
+            if not any(title_str.upper() in t or t in title_str.upper() for t in existing_titles):
+                timeline_list.append(
+                    DetailedTimelineStepDTO(
+                        step=0,
+                        title=title_str,
+                        status="COMPLETED",
+                        date_time=None,
+                        description=f"{title_str} (Recovered)",
+                        updated_by="System",
+                        document_url=None,
+                        document_name=None
+                    )
+                )
+
+        if has_pda:
+            if not timeline_list:
+                add_missing("Client Request Sent")
+            add_missing("Port Agent Assigned")
+            add_missing("Pda Uploaded")
+            add_missing("Pda Approved")
+
+        if has_fda:
+            add_missing("Fda Uploaded")
+
+        # Sort timeline: items with dates first, then null dates (legacy injected)
+        # But we want legacy injected to be in logical order. The easiest way is to just 
+        # define a fixed chronological order for known steps.
+        order_map = {
+            "CLIENT REQUEST SENT": 1,
+            "SUBMITTED": 1,
+            "CLIENT REQUEST": 1,
+            "PORT AGENT ASSIGNED": 2,
+            "REQUEST SENT TO PORT AGENT": 2,
+            "ASSIGNED TO PORT AGENT": 2,
+            "UNDER REVIEW": 2,
+            "PDA UPLOADED": 3,
+            "PDA APPROVED": 4,
+            "APPROVED": 4,
+            "FDA UPLOADED": 5,
+            "COMPLETED": 6
+        }
+
+        def get_order(t):
+            upper_title = t.title.upper()
+            for key, val in order_map.items():
+                if key in upper_title:
+                    return val
+            return 99
+
+        timeline_list.sort(key=lambda x: (get_order(x), x.date_time.timestamp() if x.date_time else 0))
+
+        # Re-assign sequential steps
+        for idx, t in enumerate(timeline_list, start=1):
+            t.step = idx
+
+        current_step = len(timeline_list) if timeline_list else 1
+
         # Determine current status based on the last entry
         status_name = "Submitted"
         if timeline_list:
@@ -215,14 +292,17 @@ class TimelineService:
                 status_name = "Rejected"
             elif "COMPLET" in last_entry_title:
                 status_name = "Completed"
-            elif "APPROV" in last_entry_title:
+            elif "APPROV" in last_entry_title or has_pda:
                 status_name = "Approved"
             elif "REVIEW" in last_entry_title or "PORT" in last_entry_title or "INITIATE" in last_entry_title or len(timeline_list) > 1:
                 status_name = "Under Review"
+                
+        if has_fda:
+            status_name = "FDA Uploaded"
 
         # Calculate progress
         progress_pct = min(100, current_step * 25)
-        if status_name == "Completed":
+        if status_name == "Completed" or has_fda:
             progress_pct = 100
 
         return DetailedDisbursementTimelineResponseDTO(
