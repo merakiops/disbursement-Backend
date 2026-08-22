@@ -155,6 +155,7 @@ class TimelineService:
 
         vessel_name = "N/A"
         port_name = "N/A"
+        client_name = "Client"
         request_id = None
         disb_id = identifier
 
@@ -162,6 +163,12 @@ class TimelineService:
             vessel_name, port_name = TimelineService._resolve_names(db, req)
             request_id = req.request_id
             disb_id = req.disbursement_id or f"PDA-{req.request_id}"
+            
+            if req.client_id:
+                from app.models.company import MaCompany
+                company = db.query(MaCompany).filter(MaCompany.company_id == req.client_id).first()
+                if company and company.company_name:
+                    client_name = company.company_name
             
         from app.models.txn_disbursement import TxnDisbursement
         from app.models.txn_pda import PDAModel
@@ -237,7 +244,12 @@ class TimelineService:
                 title = (evt.status or "Action").replace("_", " ").title()
                 st_code = "REJECTED" if "REJECT" in st else "COMPLETED"
                 desc = evt.message or title
-                upd_by = evt.action_by_role or evt.action_by_user or "System"
+                
+                if title.upper() in ["CLIENT REQUEST SENT", "PORT AGENT ASSIGNED"]:
+                    upd_by = client_name
+                else:
+                    upd_by = "Meraki"
+                    
                 dt = evt.created_on
 
                 timeline_list.append(
@@ -264,6 +276,13 @@ class TimelineService:
                 doc_url = f"/api/v1/file_download/{file_obj.file_id}" if file_obj else None
                 doc_name = file_obj.file_name if file_obj else None
                 
+                updated_by_name = None
+                if is_done:
+                    if title_str.upper() in ["CLIENT REQUEST SENT", "PORT AGENT ASSIGNED"]:
+                        updated_by_name = client_name
+                    else:
+                        updated_by_name = "Meraki"
+                
                 timeline_list.append(
                     DetailedTimelineStepDTO(
                         step=0,
@@ -271,7 +290,7 @@ class TimelineService:
                         status="COMPLETED" if is_done else None,
                         date_time=None,
                         description=f"{title_str} (Recovered)" if is_done else None,
-                        updated_by="System" if is_done else None,
+                        updated_by=updated_by_name,
                         document_url=doc_url,
                         document_name=doc_name
                     )
