@@ -200,6 +200,9 @@ class DashboardRepository:
 
         # --- Standard + Kamba merged flow ---
         # Expand client_ids to include old/merged prod IDs
+        if client_ids is not None and len(client_ids) == 0:
+            client_ids = None
+            
         expanded_client_ids = client_ids
         if client_ids:
             expanded_client_ids = get_all_prod_ids_for_client_list(client_ids)

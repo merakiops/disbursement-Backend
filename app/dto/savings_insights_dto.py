@@ -26,9 +26,12 @@ class SavingsInsightsOverallDTO(BaseModel):
     pda_utilized_percentage: str
     efficiency_rate: str
     avg_fda: str
+    pda_saving: float
+    fda_saving: float
 
 class SavingsInsightsDTO(BaseModel):
     overall_savings: SavingsInsightsOverallDTO
     overall_disbursement_calculation: SavingsInsightsCalculationDTO
     utilization_breakdown: List[SavingsInsightsBreakdownDTO]
     footer_note: str
+    operall_saving: float

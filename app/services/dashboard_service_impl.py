@@ -130,12 +130,22 @@ class DashboardServiceImpl(DashboardService):
         pda_total = float(result.get("pda_total_amount") or 0.0)
         fda_total = float(result.get("fda_total_amount") or 0.0)
         
-        # Calculate overall savings as absolute difference to always show positive value
         overall_savings = abs(pda_total - fda_total)
         
         # Distribute savings evenly to prevent them from being 0 if overall_savings > 0
-        pda_savings = overall_savings / 2
-        fda_savings = overall_savings - pda_savings
+        fallback_pda_savings = overall_savings / 2
+        fallback_fda_savings = overall_savings - fallback_pda_savings
+        
+        db_pda_savings = float(result.get("pdasavings") or 0.0)
+        db_fda_savings = float(result.get("fdasavings") or 0.0)
+
+        # Use DB savings if they exist and are non-zero, else fallback to distributed absolute difference
+        if db_pda_savings == 0 and db_fda_savings == 0 and overall_savings > 0:
+            real_pda_savings = fallback_pda_savings
+            real_fda_savings = fallback_fda_savings
+        else:
+            real_pda_savings = db_pda_savings
+            real_fda_savings = db_fda_savings
 
         def calc_pct(savings, total):
             if not total or total <= 0:
@@ -165,7 +175,9 @@ class DashboardServiceImpl(DashboardService):
                 total_port_calls=int(ports),
                 pda_utilized_percentage=pda_utilized_percentage,
                 efficiency_rate=f"{pct_overall}%", # Example efficiency mock
-                avg_fda=f"${avg_fda:,.0f}"
+                avg_fda=f"${avg_fda:,.0f}",
+                pda_saving=int(round(real_pda_savings)),
+                fda_saving=int(round(real_fda_savings))
             ),
             overall_disbursement_calculation=SavingsInsightsCalculationDTO(
                 pda_estimated=f"${pda_total:,.2f}",
@@ -182,7 +194,7 @@ class DashboardServiceImpl(DashboardService):
                     description="Where it comes from: Negotiating initial agent pre-advances prior to port entry.",
                     pda_estimated=f"${(pda_total * 0.5):,.0f}" if pda_total else "$37,100", # mock proportionate amount
                     fda_spent=f"${(fda_total * 0.5):,.0f}" if fda_total else "$35,000",
-                    savings_realized=fmt_currency(pda_savings)
+                    savings_realized=fmt_currency(real_pda_savings)
                 ),
                 SavingsInsightsBreakdownDTO(
                     id="02",
@@ -190,10 +202,11 @@ class DashboardServiceImpl(DashboardService):
                     description="Where it comes from: Auditing and negotiating final tugboat, pilot, berth charges against vessel logs.",
                     pda_estimated=f"${(pda_total * 0.5):,.0f}" if pda_total else "$29,200",
                     fda_spent=f"${(fda_total * 0.5):,.0f}" if fda_total else "$28,000",
-                    savings_realized=fmt_currency(fda_savings)
+                    savings_realized=fmt_currency(real_fda_savings)
                 )
             ],
-            footer_note=f"Total Savings (${overall_savings:,.2f}) = Total PDA Estimated (${pda_total:,.2f}) - Total FDA Spent (${fda_total:,.2f})"
+            footer_note=f"Total Savings (${overall_savings:,.2f}) = Total PDA Estimated (${pda_total:,.2f}) - Total FDA Spent (${fda_total:,.2f})",
+            operall_saving=int(round(real_pda_savings + real_fda_savings))
         )
     
     def get_fda_processing_details(self, data_request, user_role: int, db: Session, is_meraki_user: bool = False) -> FdaProcessingDetailsResponseDTO:
