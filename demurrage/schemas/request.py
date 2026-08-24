@@ -28,6 +28,8 @@ class VoyageCreateSchema(BaseModel):
     cp_date: Optional[datetime] = None
     bl_dated: Optional[datetime] = None
     cp_dated: Optional[datetime] = None
+    final_pdf: Optional[bool] = False
+    final_pdf_date: Optional[datetime] = None
 
     @model_validator(mode='before')
     @classmethod
@@ -56,6 +58,12 @@ class VoyageCreateSchema(BaseModel):
             self.cp_date = self.cp_dated
         elif self.cp_date is not None and self.cp_dated is None:
             self.cp_dated = self.cp_date
+
+        if self.final_pdf:
+            self.final_pdf_date = datetime.now()
+        else:
+            self.final_pdf_date = None
+
         return self
 
 

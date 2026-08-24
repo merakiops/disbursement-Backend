@@ -84,6 +84,8 @@ class VoyageResponseSchema(BaseModel):
     cp_date: Optional[datetime] = None
     bl_dated: Optional[datetime] = None
     cp_dated: Optional[datetime] = None
+    final_pdf: Optional[bool] = False
+    final_pdf_date: Optional[datetime] = None
 
 
 class DemurrageCaseResponseSchema(BaseModel):
