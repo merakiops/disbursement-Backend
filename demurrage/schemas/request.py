@@ -47,7 +47,6 @@ class VoyageCreateSchema(BaseModel):
         return data
 
     @model_validator(mode='after')
-
     def sync_dates(self) -> 'VoyageCreateSchema':
         if self.bl_dated is not None and self.bl_date is None:
             self.bl_date = self.bl_dated
@@ -65,24 +64,6 @@ class VoyageCreateSchema(BaseModel):
             self.final_pdf_date = None
 
         return self
-
-
-
-class PortOperationCreateSchema(BaseModel):
-    port: str = Field(..., min_length=1, description="Port name is mandatory")
-    terminal: Optional[str] = None
-    start_time: datetime
-    start_event: Optional[str] = None
-    end_time: datetime
-    end_event: Optional[str] = None
-    comments_clause: Optional[str] = None
-
-    @model_validator(mode='after')
-    def validate_times(self) -> 'PortOperationCreateSchema':
-        if self.end_time <= self.start_time:
-            raise ValueError("End Time must always be greater than Start Time")
-        return self
-
 
 class DeductionEventCreateSchema(BaseModel):
     event_name: str = Field(..., min_length=1, description="Event name is mandatory")
@@ -116,58 +97,48 @@ class DeductionEventCreateSchema(BaseModel):
             raise ValueError("Deduction start_time must be less than deduction end_time")
         return self
 
-
-class DemurrageCaseCreateSchema(BaseModel):
-    id: Optional[int] = None
-    voyage: VoyageCreateSchema
-    load_port: PortOperationCreateSchema
-    load_deductions: List[DeductionEventCreateSchema] = Field(default_factory=list)
-    discharge_port: PortOperationCreateSchema
-    discharge_deductions: List[DeductionEventCreateSchema] = Field(default_factory=list)
+class PortOperationCreateSchema(BaseModel):
+    port: str = Field(..., min_length=1, description="Port name is mandatory")
+    terminal: Optional[str] = None
+    start_time: datetime
+    start_event: Optional[str] = None
+    end_time: datetime
+    end_event: Optional[str] = None
+    comments_clause: Optional[str] = None
+    deductions: List[DeductionEventCreateSchema] = Field(default_factory=list)
 
     @model_validator(mode='before')
     @classmethod
     def filter_empty_deductions(cls, data):
-        if isinstance(data, dict):
-            for field in ['load_deductions', 'discharge_deductions']:
-                if field in data and isinstance(data[field], list):
-                    cleaned = []
-                    for item in data[field]:
-                        if isinstance(item, dict):
-                            # Skip dummy/empty objects where event_name and start_time/end_time are empty
-                            ev = item.get('event_name') or ''
-                            st = item.get('start_time') or ''
-                            et = item.get('end_time') or ''
-                            if not ev.strip() and not st.strip() and not et.strip():
-                                continue
-                        cleaned.append(item)
-                    data[field] = cleaned
+        if isinstance(data, dict) and 'deductions' in data:
+            if isinstance(data['deductions'], list):
+                cleaned = []
+                for item in data['deductions']:
+                    if isinstance(item, dict):
+                        ev = item.get('event_name') or ''
+                        st = item.get('start_time') or ''
+                        et = item.get('end_time') or ''
+                        if not ev.strip() and not st.strip() and not et.strip():
+                            continue
+                    cleaned.append(item)
+                data['deductions'] = cleaned
         return data
 
+    @model_validator(mode='after')
+    def validate_times(self) -> 'PortOperationCreateSchema':
+        if self.end_time <= self.start_time:
+            raise ValueError("End Time must always be greater than Start Time")
+        return self
+
+class DemurrageCaseCreateSchema(BaseModel):
+    id: Optional[int] = None
+    voyage: VoyageCreateSchema
+    load_ports: List[PortOperationCreateSchema] = Field(default_factory=list)
+    discharge_ports: List[PortOperationCreateSchema] = Field(default_factory=list)
 
 class StepSaveRequestSchema(BaseModel):
     voyage_id: Optional[int] = None
     step: str = Field(..., description="Step name: VOYAGE, LOAD_PORT, DISCHARGE_PORT, or CALCULATE")
     voyage: Optional[VoyageCreateSchema] = None
-    load_port: Optional[PortOperationCreateSchema] = None
-    load_deductions: Optional[List[DeductionEventCreateSchema]] = Field(default=None)
-    discharge_port: Optional[PortOperationCreateSchema] = None
-    discharge_deductions: Optional[List[DeductionEventCreateSchema]] = Field(default=None)
-
-    @model_validator(mode='before')
-    @classmethod
-    def filter_empty_deductions(cls, data):
-        if isinstance(data, dict):
-            for field in ['load_deductions', 'discharge_deductions']:
-                if field in data and isinstance(data[field], list):
-                    cleaned = []
-                    for item in data[field]:
-                        if isinstance(item, dict):
-                            ev = item.get('event_name') or ''
-                            st = item.get('start_time') or ''
-                            et = item.get('end_time') or ''
-                            if not ev.strip() and not st.strip() and not et.strip():
-                                continue
-                        cleaned.append(item)
-                    data[field] = cleaned
-        return data
+    load_ports: Optional[List[PortOperationCreateSchema]] = Field(default=None)
+    discharge_ports: Optional[List[PortOperationCreateSchema]] = Field(default=None)

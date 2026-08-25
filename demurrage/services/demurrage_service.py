@@ -108,32 +108,17 @@ class DemurrageService:
                 db.add(db_voyage)
             db.flush()  # Gets db_voyage.id for foreign keys
 
-            # 2. Process Load Port Operation & Dynamic Deductions JSON
-            load_data = payload.load_port
-            load_time_used = calculate_time_used_hours(load_data.start_time, load_data.end_time)
-            
-            load_deductions_list = [ded.model_dump(mode='json') for ded in payload.load_deductions]
-            
-            existing_load = db.query(PortOperation).filter(
-                PortOperation.voyage_id == db_voyage.id,
-                PortOperation.operation_type == "LOAD"
-            ).first()
+            # 2. Process Load Port Operations & Dynamic Deductions JSON
+            db.query(PortOperation).filter(PortOperation.voyage_id == db_voyage.id).delete()
+            db.flush()
 
-            if existing_load:
-                existing_load.port = load_data.port
-                existing_load.terminal = load_data.terminal
-                existing_load.start_time = load_data.start_time
-                existing_load.start_event = load_data.start_event
-                existing_load.end_time = load_data.end_time
-                existing_load.end_event = load_data.end_event
-                existing_load.time_used = load_time_used
-                existing_load.gross_used_laytime = load_time_used
-                existing_load.comments_clause = load_data.comments_clause
-                existing_load.deductions_json = load_deductions_list
-                db_load_port = existing_load
-                # Delete existing deductions
-                db.query(OperationDeduction).filter(OperationDeduction.operation_id == db_load_port.id).delete()
-            else:
+            total_used_laytime = 0.0
+            total_deductions = 0.0
+
+            for load_data in payload.load_ports:
+                load_time_used = calculate_time_used_hours(load_data.start_time, load_data.end_time)
+                load_deductions_list = [ded.model_dump(mode='json') for ded in load_data.deductions]
+                
                 db_load_port = PortOperation(
                     voyage_id=db_voyage.id,
                     operation_type="LOAD",
@@ -149,50 +134,28 @@ class DemurrageService:
                     deductions_json=load_deductions_list
                 )
                 db.add(db_load_port)
-            db.flush()
+                db.flush()
+                
+                total_used_laytime += load_time_used
+                
+                for ded in load_data.deductions:
+                    ded_time = calculate_deduction_time_hours(ded.event_name, ded.start_time, ded.end_time, to_count=ded.to_count)
+                    total_deductions += ded_time
+                    db.add(OperationDeduction(
+                        operation_id=db_load_port.id,
+                        event_name=ded.event_name,
+                        start_time=ded.start_time,
+                        end_time=ded.end_time,
+                        time_used=ded_time,
+                        to_count=ded.to_count,
+                        comments_clause=ded.comments_clause
+                    ))
 
-            # 3. Process Load Deductions Table
-            load_deduction_times = []
-            for ded in payload.load_deductions:
-                ded_time = calculate_deduction_time_hours(ded.event_name, ded.start_time, ded.end_time, to_count=ded.to_count)
-                load_deduction_times.append(ded_time)
-                db_ded = OperationDeduction(
-                    operation_id=db_load_port.id,
-                    event_name=ded.event_name,
-                    start_time=ded.start_time,
-                    end_time=ded.end_time,
-                    time_used=ded_time,
-                    to_count=ded.to_count,
-                    comments_clause=ded.comments_clause
-                )
-                db.add(db_ded)
-
-            # 4. Process Discharge Port Operation & Dynamic Deductions JSON
-            discharge_data = payload.discharge_port
-            discharge_time_used = calculate_time_used_hours(discharge_data.start_time, discharge_data.end_time)
-            
-            discharge_deductions_list = [ded.model_dump(mode='json') for ded in payload.discharge_deductions]
-            
-            existing_discharge = db.query(PortOperation).filter(
-                PortOperation.voyage_id == db_voyage.id,
-                PortOperation.operation_type == "DISCHARGE"
-            ).first()
-
-            if existing_discharge:
-                existing_discharge.port = discharge_data.port
-                existing_discharge.terminal = discharge_data.terminal
-                existing_discharge.start_time = discharge_data.start_time
-                existing_discharge.start_event = discharge_data.start_event
-                existing_discharge.end_time = discharge_data.end_time
-                existing_discharge.end_event = discharge_data.end_event
-                existing_discharge.time_used = discharge_time_used
-                existing_discharge.gross_used_laytime = discharge_time_used
-                existing_discharge.comments_clause = discharge_data.comments_clause
-                existing_discharge.deductions_json = discharge_deductions_list
-                db_discharge_port = existing_discharge
-                # Delete existing deductions
-                db.query(OperationDeduction).filter(OperationDeduction.operation_id == db_discharge_port.id).delete()
-            else:
+            # 4. Process Discharge Port Operations & Dynamic Deductions JSON
+            for discharge_data in payload.discharge_ports:
+                discharge_time_used = calculate_time_used_hours(discharge_data.start_time, discharge_data.end_time)
+                discharge_deductions_list = [ded.model_dump(mode='json') for ded in discharge_data.deductions]
+                
                 db_discharge_port = PortOperation(
                     voyage_id=db_voyage.id,
                     operation_type="DISCHARGE",
@@ -208,30 +171,25 @@ class DemurrageService:
                     deductions_json=discharge_deductions_list
                 )
                 db.add(db_discharge_port)
-            db.flush()
-
-            # 5. Process Discharge Deductions Table
-            discharge_deduction_times = []
-            for ded in payload.discharge_deductions:
-                ded_time = calculate_deduction_time_hours(ded.event_name, ded.start_time, ded.end_time, to_count=ded.to_count)
-                discharge_deduction_times.append(ded_time)
-                db_ded = OperationDeduction(
-                    operation_id=db_discharge_port.id,
-                    event_name=ded.event_name,
-                    start_time=ded.start_time,
-                    end_time=ded.end_time,
-                    time_used=ded_time,
-                    to_count=ded.to_count,
-                    comments_clause=ded.comments_clause
-                )
-                db.add(db_ded)
+                db.flush()
+                
+                total_used_laytime += discharge_time_used
+                
+                for ded in discharge_data.deductions:
+                    ded_time = calculate_deduction_time_hours(ded.event_name, ded.start_time, ded.end_time, to_count=ded.to_count)
+                    total_deductions += ded_time
+                    db.add(OperationDeduction(
+                        operation_id=db_discharge_port.id,
+                        event_name=ded.event_name,
+                        start_time=ded.start_time,
+                        end_time=ded.end_time,
+                        time_used=ded_time,
+                        to_count=ded.to_count,
+                        comments_clause=ded.comments_clause
+                    ))
 
             # 6. Calculate Demurrage Summary Values
-            loading_total_ded = calculate_total_deductions_hours(load_deduction_times)
-            discharging_total_ded = calculate_total_deductions_hours(discharge_deduction_times)
             
-            total_used_laytime = db_load_port.gross_used_laytime + db_discharge_port.gross_used_laytime
-            total_deductions = loading_total_ded + discharging_total_ded
             allowed_laytime = db_voyage.allowed_laytime_hours
 
             additional_laytime_hours = 0.0
@@ -307,15 +265,16 @@ class DemurrageService:
         if not voyage:
             raise DemurrageNotFoundException(f"Demurrage case with Voyage ID {voyage_id} not found.")
 
-        load_port = next((op for op in voyage.port_operations if op.operation_type == "LOAD"), None)
-        discharge_port = next((op for op in voyage.port_operations if op.operation_type == "DISCHARGE"), None)
+        load_ports = [op for op in voyage.port_operations if op.operation_type == "LOAD"]
+        discharge_ports = [op for op in voyage.port_operations if op.operation_type == "DISCHARGE"]
+
+        for port in load_ports + discharge_ports:
+            port.deductions = port.deductions
 
         return {
             "voyage": voyage,
-            "load_port": load_port,
-            "load_deductions": load_port.deductions if load_port else [],
-            "discharge_port": discharge_port,
-            "discharge_deductions": discharge_port.deductions if discharge_port else [],
+            "load_ports": load_ports,
+            "discharge_ports": discharge_ports,
             "summary": voyage.summary,
             "report_s3_url": voyage.report_s3_url
         }
@@ -346,15 +305,16 @@ class DemurrageService:
 
         cases_data = []
         for voyage in voyages:
-            load_port = next((op for op in voyage.port_operations if op.operation_type == "LOAD"), None)
-            discharge_port = next((op for op in voyage.port_operations if op.operation_type == "DISCHARGE"), None)
+            load_ports = [op for op in voyage.port_operations if op.operation_type == "LOAD"]
+            discharge_ports = [op for op in voyage.port_operations if op.operation_type == "DISCHARGE"]
+            
+            for port in load_ports + discharge_ports:
+                port.deductions = port.deductions
 
             cases_data.append({
                 "voyage": voyage,
-                "load_port": load_port,
-                "load_deductions": load_port.deductions if load_port else [],
-                "discharge_port": discharge_port,
-                "discharge_deductions": discharge_port.deductions if discharge_port else [],
+                "load_ports": load_ports,
+                "discharge_ports": discharge_ports,
                 "summary": voyage.summary,
                 "report_s3_url": voyage.report_s3_url
             })
@@ -426,30 +386,14 @@ class DemurrageService:
                 raise DemurrageNotFoundException(f"Voyage with ID {voyage_id} not found.")
 
             # Step 2: LOAD_PORT
-            if step == "LOAD_PORT" and payload.load_port:
-                load_data = payload.load_port
-                load_time_used = calculate_time_used_hours(load_data.start_time, load_data.end_time)
-                load_deductions_list = [ded.model_dump(mode='json') for ded in (payload.load_deductions or [])]
-
-                existing_load = db.query(PortOperation).filter(
-                    PortOperation.voyage_id == db_voyage.id,
-                    PortOperation.operation_type == "LOAD"
-                ).first()
-
-                if existing_load:
-                    existing_load.port = load_data.port
-                    existing_load.terminal = load_data.terminal
-                    existing_load.start_time = load_data.start_time
-                    existing_load.start_event = load_data.start_event
-                    existing_load.end_time = load_data.end_time
-                    existing_load.end_event = load_data.end_event
-                    existing_load.time_used = load_time_used
-                    existing_load.gross_used_laytime = load_time_used
-                    existing_load.comments_clause = load_data.comments_clause
-                    existing_load.deductions_json = load_deductions_list
-                    db_load_port = existing_load
-                    db.query(OperationDeduction).filter(OperationDeduction.operation_id == db_load_port.id).delete()
-                else:
+            if step == "LOAD_PORT" and payload.load_ports is not None:
+                db.query(PortOperation).filter(PortOperation.voyage_id == db_voyage.id, PortOperation.operation_type == "LOAD").delete()
+                db.flush()
+                
+                for load_data in payload.load_ports:
+                    load_time_used = calculate_time_used_hours(load_data.start_time, load_data.end_time)
+                    load_deductions_list = [ded.model_dump(mode='json') for ded in load_data.deductions]
+                    
                     db_load_port = PortOperation(
                         voyage_id=db_voyage.id,
                         operation_type="LOAD",
@@ -465,45 +409,29 @@ class DemurrageService:
                         deductions_json=load_deductions_list
                     )
                     db.add(db_load_port)
-                db.flush()
-
-                for ded in (payload.load_deductions or []):
-                    ded_time = calculate_deduction_time_hours(ded.event_name, ded.start_time, ded.end_time, to_count=ded.to_count)
-                    db.add(OperationDeduction(
-                        operation_id=db_load_port.id,
-                        event_name=ded.event_name,
-                        start_time=ded.start_time,
-                        end_time=ded.end_time,
-                        time_used=ded_time,
-                        to_count=ded.to_count,
-                        comments_clause=ded.comments_clause
-                    ))
+                    db.flush()
+                    
+                    for ded in load_data.deductions:
+                        ded_time = calculate_deduction_time_hours(ded.event_name, ded.start_time, ded.end_time, to_count=ded.to_count)
+                        db.add(OperationDeduction(
+                            operation_id=db_load_port.id,
+                            event_name=ded.event_name,
+                            start_time=ded.start_time,
+                            end_time=ded.end_time,
+                            time_used=ded_time,
+                            to_count=ded.to_count,
+                            comments_clause=ded.comments_clause
+                        ))
 
             # Step 3: DISCHARGE_PORT
-            if step == "DISCHARGE_PORT" and payload.discharge_port:
-                discharge_data = payload.discharge_port
-                discharge_time_used = calculate_time_used_hours(discharge_data.start_time, discharge_data.end_time)
-                discharge_deductions_list = [ded.model_dump(mode='json') for ded in (payload.discharge_deductions or [])]
-
-                existing_discharge = db.query(PortOperation).filter(
-                    PortOperation.voyage_id == db_voyage.id,
-                    PortOperation.operation_type == "DISCHARGE"
-                ).first()
-
-                if existing_discharge:
-                    existing_discharge.port = discharge_data.port
-                    existing_discharge.terminal = discharge_data.terminal
-                    existing_discharge.start_time = discharge_data.start_time
-                    existing_discharge.start_event = discharge_data.start_event
-                    existing_discharge.end_time = discharge_data.end_time
-                    existing_discharge.end_event = discharge_data.end_event
-                    existing_discharge.time_used = discharge_time_used
-                    existing_discharge.gross_used_laytime = discharge_time_used
-                    existing_discharge.comments_clause = discharge_data.comments_clause
-                    existing_discharge.deductions_json = discharge_deductions_list
-                    db_discharge_port = existing_discharge
-                    db.query(OperationDeduction).filter(OperationDeduction.operation_id == db_discharge_port.id).delete()
-                else:
+            if step == "DISCHARGE_PORT" and payload.discharge_ports is not None:
+                db.query(PortOperation).filter(PortOperation.voyage_id == db_voyage.id, PortOperation.operation_type == "DISCHARGE").delete()
+                db.flush()
+                
+                for discharge_data in payload.discharge_ports:
+                    discharge_time_used = calculate_time_used_hours(discharge_data.start_time, discharge_data.end_time)
+                    discharge_deductions_list = [ded.model_dump(mode='json') for ded in discharge_data.deductions]
+                    
                     db_discharge_port = PortOperation(
                         voyage_id=db_voyage.id,
                         operation_type="DISCHARGE",
@@ -519,33 +447,32 @@ class DemurrageService:
                         deductions_json=discharge_deductions_list
                     )
                     db.add(db_discharge_port)
-                db.flush()
-
-                for ded in (payload.discharge_deductions or []):
-                    ded_time = calculate_deduction_time_hours(ded.event_name, ded.start_time, ded.end_time, to_count=ded.to_count)
-                    db.add(OperationDeduction(
-                        operation_id=db_discharge_port.id,
-                        event_name=ded.event_name,
-                        start_time=ded.start_time,
-                        end_time=ded.end_time,
-                        time_used=ded_time,
-                        to_count=ded.to_count,
-                        comments_clause=ded.comments_clause
-                    ))
+                    db.flush()
+                    
+                    for ded in discharge_data.deductions:
+                        ded_time = calculate_deduction_time_hours(ded.event_name, ded.start_time, ded.end_time, to_count=ded.to_count)
+                        db.add(OperationDeduction(
+                            operation_id=db_discharge_port.id,
+                            event_name=ded.event_name,
+                            start_time=ded.start_time,
+                            end_time=ded.end_time,
+                            time_used=ded_time,
+                            to_count=ded.to_count,
+                            comments_clause=ded.comments_clause
+                        ))
 
             # Recalculate if both ports exist
-            load_op = db.query(PortOperation).filter(PortOperation.voyage_id == db_voyage.id, PortOperation.operation_type == "LOAD").first()
-            discharge_op = db.query(PortOperation).filter(PortOperation.voyage_id == db_voyage.id, PortOperation.operation_type == "DISCHARGE").first()
+            load_ops = db.query(PortOperation).filter(PortOperation.voyage_id == db_voyage.id, PortOperation.operation_type == "LOAD").all()
+            discharge_ops = db.query(PortOperation).filter(PortOperation.voyage_id == db_voyage.id, PortOperation.operation_type == "DISCHARGE").all()
 
-            if load_op and discharge_op:
-                load_ded_times = [d.time_used for d in load_op.deductions]
-                discharge_ded_times = [d.time_used for d in discharge_op.deductions]
+            if load_ops and discharge_ops:
+                total_used_laytime = sum(op.gross_used_laytime for op in load_ops + discharge_ops)
+                
+                total_deductions = 0.0
+                for op in load_ops + discharge_ops:
+                    for d in op.deductions:
+                        total_deductions += d.time_used
 
-                loading_total_ded = calculate_total_deductions_hours(load_ded_times)
-                discharging_total_ded = calculate_total_deductions_hours(discharge_ded_times)
-
-                total_used_laytime = load_op.gross_used_laytime + discharge_op.gross_used_laytime
-                total_deductions = loading_total_ded + discharging_total_ded
                 allowed_laytime = db_voyage.allowed_laytime_hours
 
                 additional_laytime_hours = 0.0
