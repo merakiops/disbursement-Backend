@@ -696,7 +696,13 @@ class PDAServiceImpl(PDAService):
         )
 
     def initiate_client_disbursement(self, user: str, request_data: Any, background_tasks: BackgroundTasks, db: Session):
-        response = self.pda_repo.initiate_client_disbursement(user, request_data, db)
+        responses = self.pda_repo.initiate_client_disbursement(user, request_data, db)
+        
+        # We take the first disbursement created to use for the link generation, etc.
+        if not responses:
+            raise ValueError("No disbursements created")
+            
+        response = responses[0]
         
         try:
             email_to_list = request_data.get_email_to_list() if hasattr(request_data, "get_email_to_list") else []
@@ -767,7 +773,7 @@ class PDAServiceImpl(PDAService):
 
                 # Save link entry in PAFormLink table
                 link_entry = PAFormLink(
-                    disbursement_seq=response.request_id,
+                    disbursement_seq=response.disbursement_seq,
                     registration_link=pda_link,
                     pda_token=encrypted_token,
                     email_to=",".join(email_to_list),
@@ -775,7 +781,7 @@ class PDAServiceImpl(PDAService):
                 )
                 PDARepository.add_pda_link(link_entry, db)
 
-                subject = f"Client Disbursement Request - {response.disbursement_id or response.request_id} - {vessel_name.upper()}"
+                subject = f"Client Disbursement Request - {response.disbursement_id or response.disbursement_seq} - {vessel_name.upper()}"
                 
                 signature = getattr(request_data, "email_signature", None)
                 if signature:
@@ -789,7 +795,7 @@ class PDAServiceImpl(PDAService):
                     "eta": eta_str,
                     "operation": operation_name,
                     "pda_disbursement_link": pda_link,
-                    "request_id": response.request_id,
+                    "request_id": response.disbursement_seq,
                     "disbursement_id": response.disbursement_id or "",
                     "email_id": self.meraki_email,
                     "signature": signature
@@ -816,9 +822,44 @@ class PDAServiceImpl(PDAService):
                 action_by_user=user,
                 message="Client submitted disbursement initiation request to Meraki",
                 disbursement_id=response.disbursement_id,
-                request_id=response.request_id
+                request_id=response.disbursement_seq
             )
         except Exception as tle:
             logger.error(f"Failed to log timeline event for client_initiate_disbursement: {tle}")
 
-        return response
+        from app.dto.client_disbursement_request_dto import TxnClientDisbursementRequestResponseDTO
+        res = TxnClientDisbursementRequestResponseDTO(
+            request_id=response.disbursement_seq,
+            disbursement_id=response.disbursement_id,
+            country_id=request_data.country_id,
+            client_id=request_data.client_id,
+            vessel_id=request_data.vessel_id,
+            port_id=request_data.port_id,
+            cargo_id=request_data.cargo_id,
+            draft=request_data.draft,
+            imo_number=request_data.imo_number,
+            vessel=request_data.vessel,
+            nrt=request_data.nrt,
+            grt=request_data.grt,
+            rgrt=request_data.rgrt,
+            loa=request_data.loa,
+            beam=request_data.beam,
+            depth=request_data.depth,
+            dwt=request_data.dwt,
+            type=request_data.type,
+            eta=request_data.eta,
+            etd=request_data.etd,
+            vessel_stay=request_data.vessel_stay,
+            voyage=request_data.voyage,
+            pda_roe=request_data.pda_roe,
+            pda_currency_from=request_data.pda_currency_from,
+            pda_currency_to=request_data.pda_currency_to,
+            invoice_ref_no=request_data.invoice_ref_no,
+            port_agents=[pa.model_dump() if hasattr(pa, 'model_dump') else pa for pa in request_data.portAgents] if request_data.portAgents else [],
+            status="PENDING",
+            created_by=user,
+            updated_by=user,
+            created_on=response.createdon,
+            updated_on=response.updatedon
+        )
+        return res
