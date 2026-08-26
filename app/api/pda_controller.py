@@ -869,4 +869,59 @@ async def payment_instruction_mail(request: Request, dto: PtmInstrMailRequestDTO
         "status": "success",
         "message": "Payment instruction email sent successfully"
     }
+
+from app.dto.client_disbursement_request_dto import ClientCommentRequestDTO
+from app.repo.timeline_repo import TimelineRepository
+from app.core.SendMail import SendMail
+
+@disbursementController.post("/api/v1/client_comment", tags=["Disbursement"])
+@jwt_required
+@role_required(ALLOWED_ROLES_ALL)
+async def send_client_comment(
+    request: Request,
+    body: ClientCommentRequestDTO,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db)
+):
+    try:
+        username = request.state.user.get("username", "Unknown Client")
+        disbursement_email = os.getenv("MERAKI_DISBURSEMENT_EMAIL_ADDRESS", "disbursement@merakishippingservices.com")
         
+        # Determine disbursement_seq if body.disbursement_id is like 'MDA123'
+        seq = None
+        if body.disbursement_id and body.disbursement_id.upper().startswith("MDA"):
+            try:
+                seq = int(body.disbursement_id.upper().replace("MDA", ""))
+            except ValueError:
+                pass
+                
+        # 1. Save Timeline Entry
+        TimelineRepository.add_timeline_entry(
+            db=db,
+            status="Client Comment",
+            action_by_role="Client",
+            action_by_user=username,
+            message=body.comment,
+            disbursement_id=body.disbursement_id,
+            disbursement_seq=seq
+        )
+        
+        # 2. Prepare & Send Email
+        subject = f"New Comment from Client {username} for ID: {body.disbursement_id}"
+        email_body = f"Hello Disbursement Team,\n\nThis client ({username}) is sending this comment for Request/Disbursement ID: {body.disbursement_id}.\n\nComment below:\n{body.comment}\n\nRegards,\nMeraki Shipping Portal"
+        
+        background_tasks.add_task(
+            SendMail.send_email,
+            to_email=[disbursement_email],
+            subject=subject,
+            message=email_body,
+            cc=[]
+        )
+        
+        return {
+            "status": "success",
+            "message": "Comment saved to timeline and email scheduled successfully."
+        }
+    except Exception as e:
+        logger.error(f"Error in client_comment: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))

@@ -1,4 +1,8 @@
 from pydantic import BaseModel, Field
+class ClientCommentRequestDTO(BaseModel):
+    disbursement_id: str = Field(..., description="The disbursement ID (e.g. MDA123)")
+    comment: str = Field(..., description="The comment from the client")
+
 from typing import Optional, List, Dict, Any, Union
 from datetime import datetime
 
