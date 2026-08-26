@@ -231,8 +231,8 @@ def build_pa_disbursement_json(disbursement_id:int,dto: TxnDisbursementInitiateM
         },
         "port": {"port_id": 0, "name": ""},
         "country": {"country_id": 0, "name": ""},
-        "purpose": {"purpose_id": dto.purpose.purpose_id, "name": dto.purpose.name},
-        "cargo": {"cargo_id": dto.cargo.cargo_id, "type": dto.cargo.type},
+        "purpose": {"purpose_id": dto.purpose.purpose_id if dto.purpose else None, "name": dto.purpose.name if dto.purpose else None},
+        "cargo": {"cargo_id": dto.cargo.cargo_id if dto.cargo else None, "type": dto.cargo.type if dto.cargo else None},
         "vessel": {  # keep structure
             "vsl_id": None, "imo_number": None, "name": None,
             "grt": None, "rgrt": None, "nrt": None,

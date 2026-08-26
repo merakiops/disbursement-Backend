@@ -136,9 +136,45 @@ class DemurrageCaseCreateSchema(BaseModel):
     load_ports: List[PortOperationCreateSchema] = Field(default_factory=list)
     discharge_ports: List[PortOperationCreateSchema] = Field(default_factory=list)
 
+    @model_validator(mode='before')
+    @classmethod
+    def filter_empty_ports(cls, data):
+        if isinstance(data, dict):
+            for field in ['load_ports', 'discharge_ports']:
+                if field in data and isinstance(data[field], list):
+                    cleaned = []
+                    for item in data[field]:
+                        if isinstance(item, dict):
+                            port = str(item.get('port') or '')
+                            st = str(item.get('start_time') or '')
+                            et = str(item.get('end_time') or '')
+                            if not port.strip() and not st.strip() and not et.strip():
+                                continue
+                        cleaned.append(item)
+                    data[field] = cleaned
+        return data
+
 class StepSaveRequestSchema(BaseModel):
     voyage_id: Optional[int] = None
     step: str = Field(..., description="Step name: VOYAGE, LOAD_PORT, DISCHARGE_PORT, or CALCULATE")
     voyage: Optional[VoyageCreateSchema] = None
     load_ports: Optional[List[PortOperationCreateSchema]] = Field(default=None)
     discharge_ports: Optional[List[PortOperationCreateSchema]] = Field(default=None)
+
+    @model_validator(mode='before')
+    @classmethod
+    def filter_empty_ports(cls, data):
+        if isinstance(data, dict):
+            for field in ['load_ports', 'discharge_ports']:
+                if field in data and isinstance(data[field], list):
+                    cleaned = []
+                    for item in data[field]:
+                        if isinstance(item, dict):
+                            port = str(item.get('port') or '')
+                            st = str(item.get('start_time') or '')
+                            et = str(item.get('end_time') or '')
+                            if not port.strip() and not st.strip() and not et.strip():
+                                continue
+                        cleaned.append(item)
+                    data[field] = cleaned
+        return data

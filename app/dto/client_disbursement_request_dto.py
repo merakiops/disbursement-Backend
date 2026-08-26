@@ -8,7 +8,9 @@ class PortAgentSelectionDTO(BaseModel):
     CNAPC: Optional[bool] = False
     ONA: Optional[bool] = False
     OPA: Optional[bool] = False
-    purpose_id: Optional[Union[List[int], int]] = None
+    purpose_id: Optional[Union[List[Optional[int]], int]] = None
+    service: Optional[str] = None
+    activities: Optional[Dict[str, Any]] = None
 
 class TxnClientDisbursementInitiateDTO(BaseModel):
     country_id: Optional[int] = None
@@ -35,6 +37,15 @@ class TxnClientDisbursementInitiateDTO(BaseModel):
     pda_currency_from: Optional[str] = None
     pda_currency_to: Optional[str] = None
     invoice_ref_no: Optional[str] = None
+    interface_unique_ref: Optional[str] = None
+    previous_port: Optional[int] = None
+    next_port: Optional[int] = None
+    preferences: Optional[Dict[str, Any]] = None
+    max_port_call: Optional[Dict[str, Any]] = None
+    charterer_time_bar: Optional[Dict[str, Any]] = None
+    legal_entity_id: Optional[str] = None
+    trading_company_id: Optional[str] = None
+    da_request_type: Optional[str] = None
     portAgents: Optional[List[PortAgentSelectionDTO]] = Field(default_factory=list)
     email_to: Optional[Union[str, List[str]]] = None
     email_cc: Optional[Union[str, List[str]]] = None
@@ -82,6 +93,15 @@ class TxnClientDisbursementRequestResponseDTO(BaseModel):
     pda_currency_from: Optional[str] = None
     pda_currency_to: Optional[str] = None
     invoice_ref_no: Optional[str] = None
+    interface_unique_ref: Optional[str] = None
+    previous_port: Optional[int] = None
+    next_port: Optional[int] = None
+    preferences: Optional[Dict[str, Any]] = None
+    max_port_call: Optional[Dict[str, Any]] = None
+    charterer_time_bar: Optional[Dict[str, Any]] = None
+    legal_entity_id: Optional[str] = None
+    trading_company_id: Optional[str] = None
+    da_request_type: Optional[str] = None
     port_agents: Optional[List[Dict[str, Any]]] = None
     others: Optional[Dict[str, Any]] = None
     status: str

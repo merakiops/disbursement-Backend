@@ -193,15 +193,24 @@ class TimelineService:
         if disb:
             pda = db.query(PDAModel).filter(PDAModel.disbursement_seq == disb.disbursement_seq).first()
             if pda:
-                has_pda = True
-                # If PDA status is Completed (7), Submitted (3), Requested (5) etc or name indicates approval/completion
-                if pda.status in [2, 3, 4, 5, 6, 7, 8, 9] or (pda.status_name and ("approv" in pda.status_name.lower() or "complet" in pda.status_name.lower())):
+                # PDA is considered uploaded if status is Submitted(3), Re-Submitted(4), Completed(7), etc.
+                if pda.status in [3, 4, 7, 8, 9] or (pda.status_name and ("submit" in pda.status_name.lower() or "complet" in pda.status_name.lower())):
+                    has_pda = True
+                else:
+                    has_pda = False
+                    
+                # PDA is approved if status is Completed(7) or explicitly says approved/completed
+                if pda.status in [7] or (pda.status_name and ("approv" in pda.status_name.lower() or "complet" in pda.status_name.lower())):
                     pda_is_approved = True
             
             fda = db.query(TxnFDA).filter(TxnFDA.disbursement_seq == disb.disbursement_seq).first()
             if fda:
-                has_fda = True
-                if fda.status in [2, 3, 4, 5, 6, 7, 8, 9] or (fda.status_name and ("approv" in fda.status_name.lower() or "complet" in fda.status_name.lower())):
+                if fda.status in [3, 4, 7, 8, 9] or (fda.status_name and ("submit" in fda.status_name.lower() or "complet" in fda.status_name.lower())):
+                    has_fda = True
+                else:
+                    has_fda = False
+                    
+                if fda.status in [7] or (fda.status_name and ("approv" in fda.status_name.lower() or "complet" in fda.status_name.lower())):
                     fda_is_approved = True
 
         entries = TimelineRepository.get_raw_timeline_entries(db, identifier)

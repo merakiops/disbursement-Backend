@@ -1,6 +1,6 @@
 from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.ext.mutable import MutableList
+from sqlalchemy.ext.mutable import MutableList, MutableDict
 from sqlalchemy.sql import func
 import os
 from app.db import Base
@@ -37,6 +37,15 @@ class TxnClientDisbursementRequest(Base):
     pda_currency_from = Column(String, nullable=True)
     pda_currency_to = Column(String, nullable=True)
     invoice_ref_no = Column(String, nullable=True)
+    interface_unique_ref = Column(String, nullable=True)
+    previous_port = Column(Integer, nullable=True)
+    next_port = Column(Integer, nullable=True)
+    preferences = Column("preferences", MutableDict.as_mutable(JSONB), nullable=True)
+    max_port_call = Column("max_port_call", MutableDict.as_mutable(JSONB), nullable=True)
+    charterer_time_bar = Column("charterer_time_bar", MutableDict.as_mutable(JSONB), nullable=True)
+    legal_entity_id = Column(String, nullable=True)
+    trading_company_id = Column(String, nullable=True)
+    da_request_type = Column(String, nullable=True)
     port_agents = Column("port_agents", MutableList.as_mutable(JSONB), nullable=True)
     status = Column(String, default="PENDING", nullable=False)
     created_on = Column("created_on", DateTime, nullable=False, default=func.now())

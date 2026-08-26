@@ -92,7 +92,7 @@ class PDARepository:
                 tariff_rule = PDARepository._get_tariff_rule(dto.port_id, dto.country_id, db)
                 
                 # Build JSON data for PDA and port agent
-                meraki_pda_data=build_disbursement_json(disbursement_id,dto.vessel_id,dto.client_id,dto.portagent_id,dto.port_id,dto.country_id,dto.purpose.purpose_id,dto.cargo.cargo_id,tariff_rule,dto.vessel_stay,dto.eta,dto.etd,dto.voyage,dto.pda_custom_calculation,dto.pda_currency_from,dto.pda_currency_to,dto.roe,db)
+                meraki_pda_data=build_disbursement_json(disbursement_id,dto.vessel_id,dto.client_id,dto.portagent_id,dto.port_id,dto.country_id,dto.purpose.purpose_id if dto.purpose else None,dto.cargo.cargo_id if dto.cargo else None,tariff_rule,dto.vessel_stay,dto.eta,dto.etd,dto.voyage,dto.pda_custom_calculation,dto.pda_currency_from,dto.pda_currency_to,dto.roe,db)
                 portagent_pda_data = build_pa_disbursement_json(disbursement_id,dto,tariff_rule,db)
                 
                 # Create vessel details
@@ -215,8 +215,8 @@ class PDARepository:
             pda_vsl_id=new_vsl.pda_vsl_id if new_vsl else None,
             voyage=dto.voyage,
             port_id=dto.port_id,
-            purpose_id=dto.purpose.purpose_id,
-            cargo_id=dto.cargo.cargo_id,
+            purpose_id=dto.purpose.purpose_id if dto.purpose else None,
+            cargo_id=dto.cargo.cargo_id if dto.cargo else None,
             eta=dto.eta,
             etd=dto.etd,
             vessel_stay=dto.vessel_stay,
@@ -771,7 +771,7 @@ class PDARepository:
                 else:
                     tariff_rule=tariff_rule.rules
             status = StatusRepository.get_status_details_by_name('UNDER-PROCESS',db)
-            meraki_pda_data=build_disbursement_json(disbursement_id,dto.vessel_id,dto.client_id,dto.portagent_id,dto.port_id,dto.country_id,dto.purpose.purpose_id,dto.cargo.cargo_id,tariff_rule,dto.vessel_stay,dto.eta,dto.etd,dto.voyage,dto.pda_custom_calculation,dto.pda_currency_from,dto.pda_currency_to,dto.roe,db)
+            meraki_pda_data=build_disbursement_json(disbursement_id,dto.vessel_id,dto.client_id,dto.portagent_id,dto.port_id,dto.country_id,dto.purpose.purpose_id if dto.purpose else None,dto.cargo.cargo_id if dto.cargo else None,tariff_rule,dto.vessel_stay,dto.eta,dto.etd,dto.voyage,dto.pda_custom_calculation,dto.pda_currency_from,dto.pda_currency_to,dto.roe,db)
             portagent_pda_data = build_pa_disbursement_json(disbursement_id,dto,tariff_rule,db)
             pda = PDAModel(
                 created_by=user, 
@@ -825,8 +825,8 @@ class PDARepository:
                 pda_vsl_id = new_vsl.pda_vsl_id,
                 voyage  = dto.voyage,
                 port_id =dto.port_id,
-                purpose_id = dto.purpose.purpose_id,
-                cargo_id = dto.cargo.cargo_id,
+                purpose_id = dto.purpose.purpose_id if dto.purpose else None,
+                cargo_id = dto.cargo.cargo_id if dto.cargo else None,
                 eta = dto.eta,
                 etd = dto.etd,
                 vessel_stay = dto.vessel_stay,
