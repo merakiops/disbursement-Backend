@@ -288,6 +288,10 @@ async def reviewValidateOtp(request: Request, background_tasks: BackgroundTasks,
         "vsl_dtls": merged_vsl_dtls,
         "fda_vsl_dtls": vessel_dtls_obj.fda_vsl_dtls if vessel_dtls_obj else None
     }
+    
+    if pda_dto and pda_dto.portagent_pda_data and isinstance(pda_dto.portagent_pda_data, dict):
+        if "vessel" in pda_dto.portagent_pda_data and isinstance(pda_dto.portagent_pda_data["vessel"], dict):
+            pda_dto.portagent_pda_data["vessel"].update(merged_vsl_dtls)
 
     json_template = to_jsonable(json_template)
     json_template = jsonable_encoder(json_template)
