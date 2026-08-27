@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from typing import Optional, Any,List,Dict, Union
 from datetime import datetime
 from uuid import UUID
@@ -412,6 +412,15 @@ class TxnDisbursementInitiateDTo(BaseModel):
     eta:Optional[datetime]=None
     etd:Optional[datetime]=None
     vessel_stay:Optional[int]=None
+
+    @field_validator('vessel_stay', mode='before')
+    @classmethod
+    def parse_vessel_stay(cls, v):
+        if isinstance(v, str):
+            digits = ''.join(filter(str.isdigit, v))
+            return int(digits) if digits else None
+        return v
+
     roe: Optional[float] = None
     pda_currency_to:Optional[str] = None
     pda_currency_from:Optional[str] = None
@@ -448,6 +457,15 @@ class TxnDisbursementInitiateManualDTo(BaseModel):
     eta:datetime
     etd:datetime
     vessel_stay:int
+
+    @field_validator('vessel_stay', mode='before')
+    @classmethod
+    def parse_vessel_stay(cls, v):
+        if isinstance(v, str):
+            digits = ''.join(filter(str.isdigit, v))
+            return int(digits) if digits else None
+        return v
+
     roe: Optional[float] = None
     pda_currency_to:Optional[str] = None
     pda_currency_from:Optional[str] = None
