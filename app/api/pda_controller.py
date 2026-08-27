@@ -296,16 +296,27 @@ async def reviewValidateOtp(request: Request, background_tasks: BackgroundTasks,
     from app.repo.purpose_repo import PurposeRepository
     from app.repo.cargo_repo import CargoRepository
     
-    base_purpose = PurposeRepository.get_purpose_dtl_by_id(disbursement.purpose_id, db) if disbursement.purpose_id else None
-    base_cargo = CargoRepository.get_cargo_info_by_id(disbursement.cargo_id, db) if disbursement.cargo_id else None
+    purpose_id = disbursement.purpose_id
+    cargo_id = disbursement.cargo_id
+    
+    if not purpose_id and pda_dto and pda_dto.meraki_pda_data and isinstance(pda_dto.meraki_pda_data, dict):
+        if "purpose" in pda_dto.meraki_pda_data and isinstance(pda_dto.meraki_pda_data["purpose"], dict):
+            purpose_id = pda_dto.meraki_pda_data["purpose"].get("purpose_id") or purpose_id
+
+    if not cargo_id and pda_dto and pda_dto.meraki_pda_data and isinstance(pda_dto.meraki_pda_data, dict):
+        if "cargo" in pda_dto.meraki_pda_data and isinstance(pda_dto.meraki_pda_data["cargo"], dict):
+            cargo_id = pda_dto.meraki_pda_data["cargo"].get("cargo_id") or cargo_id
+
+    base_purpose = PurposeRepository.get_purpose_dtl_by_id(purpose_id, db) if purpose_id else None
+    base_cargo = CargoRepository.get_cargo_info_by_id(cargo_id, db) if cargo_id else None
 
     purpose_dict = {
-        "purpose_id": base_purpose.purpose_id if base_purpose else disbursement.purpose_id,
+        "purpose_id": purpose_id,
         "name": base_purpose.name if base_purpose else ""
     }
     
     cargo_dict = {
-        "cargo_id": base_cargo.cargo_id if base_cargo else disbursement.cargo_id,
+        "cargo_id": cargo_id,
         "type": base_cargo.type if base_cargo else ""
     }
     
