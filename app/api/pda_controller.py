@@ -258,7 +258,37 @@ async def reviewValidateOtp(request: Request, background_tasks: BackgroundTasks,
     company_details = company_service.get_company_details_by_id(disbursement.portagent_id,db)
     billing_address = company_details.address
     bank_details = bank_service.get_bank_details_by_id(company_details.bank_details_id,db)
-    vessel_dtls=pda_service.get_vessel_details_by_pda_vslid(disbursement.pda_vsl_id, db)
+    
+    vessel_dtls_obj = pda_service.get_vessel_details_by_pda_vslid(disbursement.pda_vsl_id, db)
+    from app.repo.vessel_repo import VesselRepository
+    base_vessel = VesselRepository.get_vessel_info_by_id(disbursement.vsl_id, db)
+    
+    merged_vsl_dtls = {}
+    if base_vessel:
+        merged_vsl_dtls = {
+            "vsl_id": base_vessel.vessel_id,
+            "imo_number": base_vessel.imo_number,
+            "name": base_vessel.name,
+            "grt": base_vessel.grt,
+            "rgrt": base_vessel.rgrt,
+            "nrt": base_vessel.nrt,
+            "loa": base_vessel.loa,
+            "beam": base_vessel.beam,
+            "depth": base_vessel.depth,
+            "dwt": base_vessel.dwt,
+            "type": base_vessel.type
+        }
+        
+    if vessel_dtls_obj and vessel_dtls_obj.vsl_dtls:
+        for k, v in vessel_dtls_obj.vsl_dtls.items():
+            if v is not None and v != "":
+                merged_vsl_dtls[k] = v
+                
+    vessel_dtls = {
+        "vsl_dtls": merged_vsl_dtls,
+        "fda_vsl_dtls": vessel_dtls_obj.fda_vsl_dtls if vessel_dtls_obj else None
+    }
+
     json_template = to_jsonable(json_template)
     json_template = jsonable_encoder(json_template)
     response_dto = OTPValidationResponseDTO(						 
