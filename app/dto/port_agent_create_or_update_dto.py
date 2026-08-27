@@ -31,6 +31,7 @@ class PortAgentCreateUpdateDTO(BaseModel):
     email: List[str]  
     address: Optional[str] = None
     status: Optional[str] = None
+    port_id: Optional[int] = None
     bank_details: Optional[BankDetailsDTO] = None
 
     @field_validator("email", mode="before")
