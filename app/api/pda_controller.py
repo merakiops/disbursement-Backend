@@ -292,6 +292,34 @@ async def reviewValidateOtp(request: Request, background_tasks: BackgroundTasks,
     if pda_dto and pda_dto.portagent_pda_data and isinstance(pda_dto.portagent_pda_data, dict):
         if "vessel" in pda_dto.portagent_pda_data and isinstance(pda_dto.portagent_pda_data["vessel"], dict):
             pda_dto.portagent_pda_data["vessel"].update(merged_vsl_dtls)
+            
+    from app.repo.purpose_repo import PurposeRepository
+    from app.repo.cargo_repo import CargoRepository
+    
+    base_purpose = PurposeRepository.get_purpose_dtl_by_id(disbursement.purpose_id, db) if disbursement.purpose_id else None
+    base_cargo = CargoRepository.get_cargo_info_by_id(disbursement.cargo_id, db) if disbursement.cargo_id else None
+
+    purpose_dict = {
+        "purpose_id": base_purpose.purpose_id if base_purpose else disbursement.purpose_id,
+        "name": base_purpose.name if base_purpose else ""
+    }
+    
+    cargo_dict = {
+        "cargo_id": base_cargo.cargo_id if base_cargo else disbursement.cargo_id,
+        "type": base_cargo.type if base_cargo else ""
+    }
+    
+    if pda_dto and pda_dto.meraki_pda_data and isinstance(pda_dto.meraki_pda_data, dict):
+        if "purpose" in pda_dto.meraki_pda_data and isinstance(pda_dto.meraki_pda_data["purpose"], dict):
+            pda_dto.meraki_pda_data["purpose"].update(purpose_dict)
+        if "cargo" in pda_dto.meraki_pda_data and isinstance(pda_dto.meraki_pda_data["cargo"], dict):
+            pda_dto.meraki_pda_data["cargo"].update(cargo_dict)
+            
+    if pda_dto and pda_dto.portagent_pda_data and isinstance(pda_dto.portagent_pda_data, dict):
+        if "purpose" in pda_dto.portagent_pda_data and isinstance(pda_dto.portagent_pda_data["purpose"], dict):
+            pda_dto.portagent_pda_data["purpose"].update(purpose_dict)
+        if "cargo" in pda_dto.portagent_pda_data and isinstance(pda_dto.portagent_pda_data["cargo"], dict):
+            pda_dto.portagent_pda_data["cargo"].update(cargo_dict)
 
     json_template = to_jsonable(json_template)
     json_template = jsonable_encoder(json_template)
