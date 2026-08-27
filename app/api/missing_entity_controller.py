@@ -18,8 +18,8 @@ ALLOWED_ROLES_ALL = [
 missingEntityController = APIRouter()
 
 _raw_meraki_email = os.getenv("MERAKI_DISBURSEMENT_EMAIL_ADDRESS")
-if not _raw_meraki_email or "configured" in _raw_meraki_email:
-    MERAKI_DISBURSEMENT_EMAIL_ADDRESS = os.getenv("SMTP_USER") or os.getenv("EMAIL_ADDRESS") or "disbursement@merakishippingservices.com"
+if not _raw_meraki_email or "configured" in _raw_meraki_email or "default-email" in _raw_meraki_email:
+    MERAKI_DISBURSEMENT_EMAIL_ADDRESS = "disbursement@merakishippingservices.com"
 else:
     MERAKI_DISBURSEMENT_EMAIL_ADDRESS = _raw_meraki_email
 
