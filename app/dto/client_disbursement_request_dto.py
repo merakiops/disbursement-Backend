@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 class ClientCommentRequestDTO(BaseModel):
     disbursement_id: str = Field(..., description="The disbursement ID (e.g. MDA123)")
     comment: str = Field(..., description="The comment from the client")
@@ -36,6 +36,15 @@ class TxnClientDisbursementInitiateDTO(BaseModel):
     eta: Optional[datetime] = None
     etd: Optional[datetime] = None
     vessel_stay: Optional[int] = None
+
+    @field_validator('vessel_stay', mode='before')
+    @classmethod
+    def parse_vessel_stay(cls, v):
+        if isinstance(v, str):
+            digits = ''.join(filter(str.isdigit, v))
+            return int(digits) if digits else None
+        return v
+
     voyage: Optional[str] = None
     pda_roe: Optional[float] = None
     pda_currency_from: Optional[str] = None
