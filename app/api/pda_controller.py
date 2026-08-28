@@ -610,7 +610,7 @@ async def edit_pda_details(request: Request,background_tasks: BackgroundTasks, p
                         signature = signature.replace("\n", "<br>")
                     context = {
                     "client_name": client_name,
-                    "pda_disbursement_link": link_entry.registration_link,
+                    "pda_disbursement_link": f"{HOST}login",
                     "email_id":MERAKI_DISBURSEMENT_EMAIL_ADDRESS,
                     "signature": signature
                     } 
