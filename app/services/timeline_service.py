@@ -295,7 +295,7 @@ class TimelineService:
 
         existing_titles = [t.title.upper() for t in timeline_list]
 
-        def add_missing(title_str, is_done=True):
+        def add_missing(title_str, is_done=True, default_dt=None):
             # Check if an equivalent step already exists
             if not any(title_str.upper() in t or t in title_str.upper() for t in existing_titles):
                 file_obj = file_map.get(title_str.upper())
@@ -316,7 +316,7 @@ class TimelineService:
                         step=0,
                         title=title_str,
                         status="COMPLETED" if is_done else None,
-                        date_time=None,
+                        date_time=default_dt if is_done else None,
                         description=f"{title_str} (Recovered)" if is_done else None,
                         updated_by=updated_by_name,
                         document_url=doc_url,
@@ -324,14 +324,31 @@ class TimelineService:
                     )
                 )
 
+        req_dt = getattr(req, 'created_on', None) if req else None
+        disb_dt = getattr(disb, 'createdon', None) if disb else None
+        client_req_dt = req_dt or disb_dt
+        pa_assign_dt = disb_dt or req_dt
+
+        pda_up_dt = None
+        pda_appr_dt = None
+        if pda:
+            pda_up_dt = getattr(pda, 'pda_receive_date', None) or getattr(pda, 'created_on', None) or disb_dt
+            pda_appr_dt = getattr(pda, 'updated_on', None) or pda_up_dt
+
+        fda_up_dt = None
+        fda_appr_dt = None
+        if fda:
+            fda_up_dt = getattr(fda, 'fda_receive_date', None) or getattr(fda, 'created_on', None) or pda_appr_dt
+            fda_appr_dt = getattr(fda, 'updated_on', None) or fda_up_dt
+
         # Always show all 6 standard steps
         # Completed steps get "COMPLETED", future/bypassed steps get None (null)
-        add_missing("Client Request Sent", is_done=True)
-        add_missing("Port Agent Assigned", is_done=True)
-        add_missing("Pda Uploaded", is_done=has_pda)
-        add_missing("Pda Approved", is_done=pda_is_approved)
-        add_missing("Fda Uploaded", is_done=has_fda)
-        add_missing("Fda Approved", is_done=fda_is_approved)
+        add_missing("Client Request Sent", is_done=True, default_dt=client_req_dt)
+        add_missing("Port Agent Assigned", is_done=True, default_dt=pa_assign_dt)
+        add_missing("Pda Uploaded", is_done=has_pda, default_dt=pda_up_dt)
+        add_missing("Pda Approved", is_done=pda_is_approved, default_dt=pda_appr_dt)
+        add_missing("Fda Uploaded", is_done=has_fda, default_dt=fda_up_dt)
+        add_missing("Fda Approved", is_done=fda_is_approved, default_dt=fda_appr_dt)
 
         # Sort timeline: items with dates first, then null dates (legacy injected)
         # But we want legacy injected to be in logical order. The easiest way is to just 
