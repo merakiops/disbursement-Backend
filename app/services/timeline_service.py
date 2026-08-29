@@ -213,6 +213,21 @@ class TimelineService:
                 if fda.status in [7] or (fda.status_name and ("approv" in fda.status_name.lower() or "complet" in fda.status_name.lower())):
                     fda_is_approved = True
 
+        portagent_name = "Port Agent"
+        if disb and disb.portagent_id:
+            from app.models.company import MaCompany
+            pa_company = db.query(MaCompany).filter(MaCompany.company_id == disb.portagent_id).first()
+            if pa_company and pa_company.company_name:
+                portagent_name = pa_company.company_name
+
+        if client_name == "Client" and disb:
+            c_id = disb.client_id or disb.comp_id
+            if c_id:
+                from app.models.company import MaCompany
+                c_company = db.query(MaCompany).filter(MaCompany.company_id == c_id).first()
+                if c_company and c_company.company_name:
+                    client_name = c_company.company_name
+
         entries = TimelineRepository.get_raw_timeline_entries(db, identifier)
         if not entries and disb_id and disb_id != identifier:
              entries = TimelineRepository.get_raw_timeline_entries(db, disb_id)
@@ -256,6 +271,8 @@ class TimelineService:
                 
                 if title.upper() in ["CLIENT REQUEST SENT", "PORT AGENT ASSIGNED"]:
                     upd_by = client_name
+                elif title.upper() in ["PORT AGENT SUBMITTED PDA", "PDA SUBMITTED"]:
+                    upd_by = portagent_name
                 else:
                     upd_by = "Meraki"
                     
@@ -289,6 +306,8 @@ class TimelineService:
                 if is_done:
                     if title_str.upper() in ["CLIENT REQUEST SENT", "PORT AGENT ASSIGNED"]:
                         updated_by_name = client_name
+                    elif title_str.upper() in ["PORT AGENT SUBMITTED PDA", "PDA SUBMITTED"]:
+                        updated_by_name = portagent_name
                     else:
                         updated_by_name = "Meraki"
                 
@@ -319,18 +338,20 @@ class TimelineService:
         # define a fixed chronological order for known steps.
         order_map = {
             "CLIENT REQUEST SENT": 1,
-            "SUBMITTED": 1,
             "CLIENT REQUEST": 1,
             "PORT AGENT ASSIGNED": 2,
             "REQUEST SENT TO PORT AGENT": 2,
             "ASSIGNED TO PORT AGENT": 2,
             "UNDER REVIEW": 2,
-            "PDA UPLOADED": 3,
-            "PDA APPROVED": 4,
-            "FDA UPLOADED": 5,
-            "FDA APPROVED": 6,
-            "APPROVED": 4,  # Fallback for other approvals
-            "COMPLETED": 7
+            "PORT AGENT SUBMITTED PDA": 3,
+            "PDA SUBMITTED": 3,
+            "SUBMITTED": 3,
+            "PDA UPLOADED": 4,
+            "PDA APPROVED": 5,
+            "APPROVED": 5,  # Fallback for other approvals
+            "FDA UPLOADED": 6,
+            "FDA APPROVED": 7,
+            "COMPLETED": 8
         }
 
         def get_order(t):

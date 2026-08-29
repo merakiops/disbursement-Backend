@@ -273,7 +273,7 @@ class PortRepository:
 
     @staticmethod
     def get_all_port(db):
-        return db.query(MaPort).join(
+        return db.query(MaPort).outerjoin(
             MaPortTariffRule, MaPort.port_id == MaPortTariffRule.port_id
         ).distinct(MaPort.port_id).all()
 
