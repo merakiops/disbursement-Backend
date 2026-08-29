@@ -211,7 +211,7 @@ class VesselRepository:
         total_count = base_query.count()
 
         # Apply pagination
-        vessels = base_query.offset(offset).limit(request_dto.page_size).all()
+        vessels = base_query.all()
 
         # Return as dictionary
         return {
