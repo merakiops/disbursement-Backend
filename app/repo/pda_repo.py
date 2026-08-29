@@ -1711,6 +1711,13 @@ class PDARepository:
         
         created_disbursements = []
         
+        if not dto.client_id:
+            from app.models.user import User
+            from sqlalchemy import or_
+            db_user = db.query(User).filter(or_(User.username == user, User.email == user)).first()
+            if db_user and db_user.companyid:
+                dto.client_id = db_user.companyid
+                
         if not dto.vessel_id and dto.vessel:
             from app.models.vessels import MaVessel, CompVslAsso
             
