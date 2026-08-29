@@ -404,7 +404,15 @@ class TxnDisbursementInitiateDTo(BaseModel):
     portagent_id :int
     country_id :Optional[int]=None
     port_id :Optional[int]=None
-    vessel_id : Optional[int]=None
+    vessel_id : Optional[Union[int, str]]=None
+    
+    @field_validator('vessel_id', mode='before')
+    @classmethod
+    def parse_vessel_id(cls, v):
+        if v == "others":
+            return None
+        return int(v) if v is not None else None
+
     imo_number: Optional[str]=None
     vessel: Optional[VesselDTO]=None
     cargo: Optional[CargoInitateDTO]=None
@@ -449,7 +457,15 @@ class TxnDisbursementInitiateManualDTo(BaseModel):
     portagent_id :int
     country_id :int
     port_id :int
-    vessel_id : int
+    vessel_id : Union[int, str]
+    
+    @field_validator('vessel_id', mode='before')
+    @classmethod
+    def parse_vessel_id(cls, v):
+        if v == "others":
+            return None
+        return int(v) if v is not None else None
+
     imo_number: str
     vessel: VesselDTO
     cargo: CargoDTO

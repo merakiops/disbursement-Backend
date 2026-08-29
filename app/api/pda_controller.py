@@ -958,7 +958,7 @@ async def send_client_comment(
 ):
     try:
         username = request.state.user.get("username", "Unknown Client")
-        disbursement_email = os.getenv("MERAKI_DISBURSEMENT_EMAIL_ADDRESS", "disbursement@merakishippingservices.com")
+        disbursement_email = MERAKI_DISBURSEMENT_EMAIL_ADDRESS
         
         # Determine disbursement_seq if body.disbursement_id is like 'MDA123'
         seq = None

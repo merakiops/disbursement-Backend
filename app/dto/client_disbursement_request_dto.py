@@ -19,7 +19,15 @@ class PortAgentSelectionDTO(BaseModel):
 class TxnClientDisbursementInitiateDTO(BaseModel):
     country_id: Optional[int] = None
     client_id: Optional[int] = None
-    vessel_id: Optional[int] = None
+    vessel_id: Optional[Union[int, str]] = None
+    
+    @field_validator('vessel_id', mode='before')
+    @classmethod
+    def parse_vessel_id(cls, v):
+        if v == "others":
+            return None
+        return int(v) if v is not None else None
+
     port_id: Optional[int] = None
     cargo_id: Optional[int] = None
     draft: Optional[str] = None
@@ -84,7 +92,7 @@ class TxnClientDisbursementRequestResponseDTO(BaseModel):
     disbursement_id: Optional[str] = None
     country_id: Optional[int] = None
     client_id: Optional[int] = None
-    vessel_id: Optional[int] = None
+    vessel_id: Optional[Union[int, str]] = None
     port_id: Optional[int] = None
     cargo_id: Optional[int] = None
     draft: Optional[str] = None

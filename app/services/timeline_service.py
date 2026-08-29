@@ -361,12 +361,28 @@ class TimelineService:
                     return val
             return 99
 
-        timeline_list.sort(key=lambda x: (get_order(x), x.date_time.timestamp() if x.date_time else 0))
+        for t in timeline_list:
+            t._temp_order = get_order(t)
+
+        anchors = [t for t in timeline_list if t._temp_order != 99 and t.date_time]
+        anchors.sort(key=lambda x: x.date_time.timestamp())
+
+        for t in timeline_list:
+            if t._temp_order == 99 and t.date_time:
+                assigned_order = 1
+                for a in anchors:
+                    if a.date_time <= t.date_time:
+                        assigned_order = a._temp_order
+                t._temp_order = assigned_order
+
+        timeline_list.sort(key=lambda x: (x._temp_order, x.date_time.timestamp() if x.date_time else 0))
 
         # Re-assign sequential steps
         completed_steps = 0
         for idx, t in enumerate(timeline_list, start=1):
             t.step = idx
+            if hasattr(t, '_temp_order'):
+                delattr(t, '_temp_order')
             if t.status:  # count as completed if status is not None
                 completed_steps += 1
                 

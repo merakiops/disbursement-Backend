@@ -55,6 +55,50 @@ async def notify_missing_entities(
 
         recipient = MERAKI_DISBURSEMENT_EMAIL_ADDRESS.strip()
         
+        # Save vessel to database if present
+        if request_data.vessel and request_data.vessel.name:
+            from app.models.vessels import MaVessel, CompVslAsso
+            existing_vsl = None
+            if request_data.vessel.imo_number:
+                existing_vsl = db.query(MaVessel).filter(MaVessel.imo_number == request_data.vessel.imo_number).first()
+            if not existing_vsl:
+                existing_vsl = db.query(MaVessel).filter(MaVessel.name.ilike(request_data.vessel.name)).first()
+            
+            if not existing_vsl:
+                new_vsl = MaVessel(
+                    name=request_data.vessel.name,
+                    imo_number=request_data.vessel.imo_number,
+                    grt=0.0,
+                    nrt=0.0,
+                    loa=0.0,
+                    beam=0.0,
+                    depth=0.0,
+                    dwt=0.0,
+                    type="Other",
+                    status="Y",
+                    created_by=user_name
+                )
+                db.add(new_vsl)
+                db.flush() # Flush to get new_vsl.vessel_id
+                
+                # Assign to client
+                client_id = request_data.client_id
+                if not client_id and hasattr(request.state, "user"):
+                    client_id = request.state.user.get("company_id")
+                    if not client_id:
+                        client_id = request.state.user.get("client_id")
+                        
+                if client_id:
+                    vsl_asso = CompVslAsso(
+                        company_id=client_id,
+                        vsl_id=new_vsl.vessel_id,
+                        status="Y"
+                    )
+                    db.add(vsl_asso)
+                    
+                db.commit()
+                logger.info(f"Saved new missing vessel to database: {request_data.vessel.name} and assigned to client_id {client_id}")
+
         background_tasks.add_task(
             SendMail.send_template_email,
             to_email=[recipient],
