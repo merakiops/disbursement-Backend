@@ -87,6 +87,8 @@ async def notify_missing_entities(
                     client_id = request.state.user.get("company_id")
                     if not client_id:
                         client_id = request.state.user.get("client_id")
+                    if not client_id:
+                        client_id = request.state.user.get("company")
                         
                 if client_id:
                     vsl_asso = CompVslAsso(
