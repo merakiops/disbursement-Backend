@@ -291,6 +291,8 @@ class VesselRepository:
     
     @staticmethod
     def get_vessel_info_by_id(vsl_id:int,db:Session):
+        if not vsl_id:
+            return None
         vsl_info = db.query(MaVessel).filter(MaVessel.vessel_id == vsl_id).first()
         return vsl_info
 

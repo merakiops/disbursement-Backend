@@ -262,9 +262,10 @@ def build_pa_disbursement_json(disbursement_id:int,dto: TxnDisbursementInitiateM
                 "name":country_dtls.name
             })
         
-    vessel_data = dto.vessel.model_dump()
-    vessel_data = {k: (v if v != "" else None) for k, v in vessel_data.items()}
-    disbursement_data["vessel"].update(vessel_data)
+    if dto.vessel:
+        vessel_data = dto.vessel.model_dump()
+        vessel_data = {k: (v if v != "" else None) for k, v in vessel_data.items()}
+        disbursement_data["vessel"].update(vessel_data)
     port_agent_info = CompanyRepo.get_company_details_by_id(dto.portagent_id,db)
     
     port_agent_bank_dtls = BankRepository.get_bank_details_by_id(port_agent_info.bank_details_id,db)
