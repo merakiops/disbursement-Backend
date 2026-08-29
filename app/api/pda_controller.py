@@ -610,7 +610,7 @@ async def edit_pda_details(request: Request,background_tasks: BackgroundTasks, p
                         signature = signature.replace("\n", "<br>")
                     context = {
                     "client_name": client_name,
-                    "pda_disbursement_link": f"{HOST}login",
+                    "pda_disbursement_link": link_entry.registration_link,
                     "email_id":MERAKI_DISBURSEMENT_EMAIL_ADDRESS,
                     "signature": signature
                     } 
@@ -713,9 +713,9 @@ async def client_request(request: Request, background_tasks: BackgroundTasks,req
     
 
     # Generate secure token + link
-    # raw_token = uuid.uuid4().hex + uuid.uuid4().hex
-    # encrypted_token = encrypt_token(raw_token)
-    pda_disbursement_link=f"{HOST}/login"
+    raw_token = uuid.uuid4().hex + uuid.uuid4().hex
+    encrypted_token = encrypt_token(raw_token)
+    pda_disbursement_link = f"{HOST}pda-disburesement/{encrypted_token}"
     disbursement_dtl = pda_service.get_disbursement_by_disbursment_seq(request_dto.disbursement_seq, db) 
 
     print(f"request_dto.email_to  {request_dto.email_to }")
