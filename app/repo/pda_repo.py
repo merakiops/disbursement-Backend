@@ -1711,6 +1711,40 @@ class PDARepository:
         
         created_disbursements = []
         
+        if not dto.vessel_id and dto.vessel:
+            from app.models.vessels import MaVessel, CompVslAsso
+            
+            new_vsl = MaVessel(
+                name=dto.vessel,
+                imo_number=dto.imo_number,
+                grt=dto.grt if dto.grt is not None else 0.0,
+                rgrt=dto.rgrt if dto.rgrt is not None else 0.0,
+                nrt=dto.nrt if dto.nrt is not None else 0.0,
+                loa=dto.loa if dto.loa is not None else 0.0,
+                beam=dto.beam if dto.beam is not None else 0.0,
+                depth=dto.depth if dto.depth is not None else 0.0,
+                dwt=dto.dwt if dto.dwt is not None else 0.0,
+                type=dto.type if dto.type is not None else "Unknown",
+                status='Y',
+                is_manual='Y',
+                display_flag='Y',
+                created_by=user
+            )
+            db.add(new_vsl)
+            db.flush()
+            
+            dto.vessel_id = new_vsl.vessel_id
+            
+            if dto.client_id:
+                new_asso = CompVslAsso(
+                    company_id=dto.client_id,
+                    vsl_id=dto.vessel_id,
+                    status='Y'
+                )
+                db.add(new_asso)
+                db.flush()
+
+        
         if dto.portAgents:
             for pa in dto.portAgents:
                 pa_purpose_id = pa.purpose_id if hasattr(pa, "purpose_id") else (pa.get("purpose_id") if isinstance(pa, dict) else None)
