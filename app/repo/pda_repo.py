@@ -229,15 +229,12 @@ class PDARepository:
     def _get_tariff_rule(port_id: Optional[int], country_id: Optional[int], db: Session) -> Dict[str, Any]:
         """Get tariff rule for port and country"""
         if not port_id or not country_id:
-            return []
+            return None
         
         try:
             tariff_rule = TariffRepo.get_tariff_rule_by_port_and_country(port_id, country_id, db)
             if not tariff_rule or not tariff_rule.rules:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"No tariff rule found for port_id={port_id} and country_id={country_id}"
-                )
+                return None
             return tariff_rule.rules
         except SQLAlchemyError as e:
             logger.error(f"Database error fetching tariff rule: {e}")
@@ -599,10 +596,10 @@ class PDARepository:
             tariff_rule = request_body.port_tariff_rule
             if tariff_rule is None:
                 tariff_rule=TariffRepo.get_tariff_rule_by_port_and_country(request_body.port_id,request_body.country_id,db)
-                if tariff_rule is None:
-                    raise HTTPException(status_code=400,detail=f"No tariff rule found for port_id={request_body.port_id} and country_id={request_body.country_id}")
-                else:
+                if tariff_rule is not None:
                     tariff_rule=tariff_rule.rules
+                else:
+                    tariff_rule = None
             if not disbursement_dtl:
                 raise HTTPException(
                     status_code=404,
@@ -766,10 +763,10 @@ class PDARepository:
             tariff_rule = dto.port_tariff_rule 
             if tariff_rule is None:
                 tariff_rule=TariffRepo.get_tariff_rule_by_port_and_country(dto.port_id,dto.country_id,db)
-                if tariff_rule is None:
-                    raise HTTPException(status_code=400,detail=f"No tariff rule found for port_id={dto.port_id} and country_id={dto.country_id}")
-                else:
+                if tariff_rule is not None:
                     tariff_rule=tariff_rule.rules
+                else:
+                    tariff_rule = None
             status = StatusRepository.get_status_details_by_name('UNDER-PROCESS',db)
             meraki_pda_data=build_disbursement_json(disbursement_id,dto.vessel_id,dto.client_id,dto.portagent_id,dto.port_id,dto.country_id,dto.purpose.purpose_id if dto.purpose else None,dto.cargo.cargo_id if dto.cargo else None,tariff_rule,dto.vessel_stay,dto.eta,dto.etd,dto.voyage,dto.pda_custom_calculation,dto.pda_currency_from,dto.pda_currency_to,dto.roe,db)
             portagent_pda_data = build_pa_disbursement_json(disbursement_id,dto,tariff_rule,db)
