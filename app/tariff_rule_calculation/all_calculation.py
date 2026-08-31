@@ -172,16 +172,16 @@ def safe_eval(expr: str) -> float:
             
             if mul_pos != -1 and (div_pos == -1 or mul_pos < div_pos):
                 # Process multiplication
-                left, right = extract_operands(expr, mul_pos)
+                left, right, left_start, right_end = extract_operands(expr, mul_pos)
                 result = left * right
-                expr = replace_operation(expr, mul_pos, left, right, result)
+                expr = expr[:left_start] + str(result) + expr[right_end:]
             else:
                 # Process division
-                left, right = extract_operands(expr, div_pos)
+                left, right, left_start, right_end = extract_operands(expr, div_pos)
                 if right == 0:
                     right = 1  # Avoid division by zero
                 result = left / right
-                expr = replace_operation(expr, div_pos, left, right, result)
+                expr = expr[:left_start] + str(result) + expr[right_end:]
         
         # Handle addition and subtraction
         while '+' in expr or ('-' in expr and expr.find('-') > 0):  # Skip first character if it's negative
@@ -190,19 +190,23 @@ def safe_eval(expr: str) -> float:
             sub_pos = -1
             for i in range(1, len(expr)):  # Start from 1 to skip negative sign at beginning
                 if expr[i] == '-':
+                    if expr[i-1] in '+-*/':
+                        continue
                     sub_pos = i
                     break
             
             if add_pos != -1 and (sub_pos == -1 or add_pos < sub_pos):
                 # Process addition
-                left, right = extract_operands(expr, add_pos)
+                left, right, left_start, right_end = extract_operands(expr, add_pos)
                 result = left + right
-                expr = replace_operation(expr, add_pos, left, right, result)
-            else:
+                expr = expr[:left_start] + str(result) + expr[right_end:]
+            elif sub_pos != -1:
                 # Process subtraction
-                left, right = extract_operands(expr, sub_pos)
+                left, right, left_start, right_end = extract_operands(expr, sub_pos)
                 result = left - right
-                expr = replace_operation(expr, sub_pos, left, right, result)
+                expr = expr[:left_start] + str(result) + expr[right_end:]
+            else:
+                break
         
         return float(expr)
     
@@ -217,7 +221,7 @@ def extract_operands(expr: str, op_pos: int) -> tuple:
     left_end = op_pos
     left_start = left_end - 1
     while left_start >= 0 and (expr[left_start].isdigit() or expr[left_start] == '.' or 
-                              (expr[left_start] == '-' and (left_start == 0 or expr[left_start-1] in '+-*/'))):
+                              (expr[left_start] == '-' and (left_start == 0 or expr[left_start-1] in '+-*/('))):
         left_start -= 1
     left_start += 1
     left_operand = float(expr[left_start:left_end])
@@ -230,21 +234,7 @@ def extract_operands(expr: str, op_pos: int) -> tuple:
         right_end += 1
     right_operand = float(expr[right_start:right_end])
     
-    return left_operand, right_operand
-
-
-def replace_operation(expr: str, op_pos: int, left: float, right: float, result: float) -> str:
-    """Replace an operation with its result in the expression"""
-    # Find the actual substring to replace
-    left_start = op_pos - len(str(left).replace('-', ''))  # Handle negative numbers
-    if left < 0 and left_start > 0 and expr[left_start-1] == '-':
-        left_start -= 1
-    
-    right_end = op_pos + 1 + len(str(right).replace('-', ''))
-    if right < 0 and op_pos + 1 < len(expr) and expr[op_pos+1] == '-':
-        right_end += 1
-    
-    return expr[:left_start] + str(result) + expr[right_end:]
+    return left_operand, right_operand, left_start, right_end
 
 
 def safe_float(val, default=1.0):
