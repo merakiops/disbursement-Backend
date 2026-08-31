@@ -316,16 +316,30 @@ class DemurrageService:
             load_ports = [op for op in voyage.port_operations if op.operation_type == "LOAD"]
             discharge_ports = [op for op in voyage.port_operations if op.operation_type == "DISCHARGE"]
             
-            for port in load_ports + discharge_ports:
-                port.deductions = port.deductions
+            flat_case = {
+                "ID": voyage.id,
+                "Vessel": voyage.vessel,
+                "IMO": voyage.vessel_imo,
+                "Voyage": voyage.voyage_no,
+                "Charterparty Terms": voyage.charterparty_terms,
+                "Charterers Name": voyage.charteres_name,
+                "BL Dated": voyage.bl_dated,
+                "CP Dated": voyage.cp_dated,
+                "Gross Demurrage": voyage.summary.gross_demurrage_cost if voyage.summary else 0.0,
+                "Undisputed Demurrage Received": voyage.summary.undisputed_demurrage_paid if voyage.summary else 0.0,
+                "Address Commission": voyage.summary.add_commission if voyage.summary else 0.0,
+                "Net Demurrage": voyage.summary.net_demurrage if voyage.summary else 0.0,
+                "Report Sent Date": voyage.final_pdf_date,
+                "Revised Date": voyage.updated_at,
+                "Action": voyage.report_s3_url
+            }
+            
+            for i, port in enumerate(load_ports, 1):
+                flat_case[f"Load Port {i}"] = port.port
+            for i, port in enumerate(discharge_ports, 1):
+                flat_case[f"Discharge Port {i}"] = port.port
 
-            cases_data.append({
-                "voyage": voyage,
-                "load_ports": load_ports,
-                "discharge_ports": discharge_ports,
-                "summary": voyage.summary,
-                "report_s3_url": voyage.report_s3_url
-            })
+            cases_data.append(flat_case)
 
         return {
             "total_count": total_count,

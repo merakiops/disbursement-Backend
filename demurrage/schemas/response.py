@@ -96,10 +96,13 @@ class DemurrageCaseResponseSchema(BaseModel):
     report_s3_url: Optional[str] = None
 
 
+class FlatDemurrageCaseSchema(BaseModel):
+    model_config = ConfigDict(extra='allow')
+
 class DemurrageCaseListResponseSchema(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     total_count: int
     page: int
     page_size: int
-    data: List[DemurrageCaseResponseSchema]
+    data: List[FlatDemurrageCaseSchema]
