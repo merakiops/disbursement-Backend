@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Request, File, Form, UploadFile
+from typing import Optional
 from sqlalchemy.orm import Session
 from app.db import get_db
 from app.dto.timeline_dto import (
@@ -8,6 +9,9 @@ from app.dto.timeline_dto import (
 from app.services.timeline_service import TimelineService
 from app.core.decorators import jwt_required, role_required
 import logging
+import os
+import uuid
+from app.repo.file_upload import FileUploadRepository
 
 logger = logging.getLogger("app_logger")
 
@@ -89,13 +93,38 @@ from app.dto.timeline_dto import TimelineDocumentUploadRequestDTO
 @jwt_required
 async def upload_timeline_document(
     identifier: str,
-    payload: TimelineDocumentUploadRequestDTO,
     request: Request,
+    step_title: str = Form(...),
+    file: UploadFile = File(...),
+    file_name: Optional[str] = Form(None),
     db: Session = Depends(get_db)
 ):
     try:
         user_info = getattr(request.state, "user", {}) or {}
         username = user_info.get("username", "System")
+        
+        s3_client = FileUploadRepository.get_s3_client()
+        file_ext = file.filename.split('.')[-1] if '.' in file.filename else ''
+        file_path = f"timeline_docs/{identifier}/{uuid.uuid4()}.{file_ext}"
+        content_type = file.content_type
+        
+        try:
+            s3_client.put_object(
+                Bucket=os.getenv("BUCKET_NAME"),
+                Key=file_path,
+                Body=file.file,
+                ContentType=content_type
+            )
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to upload to S3: {e}")
+
+        # Create a mock payload to pass to TimelineService
+        class MockPayload:
+            pass
+        payload = MockPayload()
+        payload.step_title = step_title
+        payload.file_name = file_name if file_name else file.filename
+        payload.file_path = file_path
         
         response = TimelineService.save_timeline_document(identifier, payload, username, db)
         return response
