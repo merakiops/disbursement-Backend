@@ -16,6 +16,37 @@ from app.core.constants import CountryName
 import logging
 from decimal import Decimal, ROUND_HALF_UP
 
+def cached_fetchone(db, query, params):
+    try:
+        cache_key = f"fetchone_{query}_{sorted(params.items())}"
+        if not hasattr(db, 'info'):
+            return db.execute(text(query), params).fetchone()
+        if 'query_cache' not in db.info:
+            db.info['query_cache'] = {}
+        if cache_key in db.info['query_cache']:
+            return db.info['query_cache'][cache_key]
+        res = db.execute(text(query), params).fetchone()
+        db.info['query_cache'][cache_key] = res
+        return res
+    except Exception:
+        return db.execute(text(query), params).fetchone()
+
+def cached_fetchall(db, query, params):
+    try:
+        cache_key = f"fetchall_{query}_{sorted(params.items())}"
+        if not hasattr(db, 'info'):
+            return db.execute(text(query), params).fetchall()
+        if 'query_cache' not in db.info:
+            db.info['query_cache'] = {}
+        if cache_key in db.info['query_cache']:
+            return db.info['query_cache'][cache_key]
+        res = cached_fetchall(db, query, params)
+        db.info['query_cache'][cache_key] = res
+        return res
+    except Exception:
+        return db.execute(text(query), params).fetchall()
+
+
 SCHEMA_NAME=Config.SCHEMA_NAME
 logger = logging.getLogger("app_logger")
 
@@ -277,7 +308,7 @@ def range_calculation(db: Session,vsl_attr: str,service_name: str,vessel: Any,re
         """
 
         logger.info(f"Executing query for table '{table_name}' with value: {vessel_val_float}")
-        result = db.execute(text(query), {"val": vessel_val_float, "port_id":port_id}).fetchone()
+        result = cached_fetchone(db, query, {"val": vessel_val_float, "port_id":port_id})
         logger.info(f"Query result: {result},{resultant_col},{table_name},{country_id}")
 
         if result and result[0] is not None:
@@ -293,7 +324,7 @@ def range_calculation(db: Session,vsl_attr: str,service_name: str,vessel: Any,re
             """
 
             logger.info(f"Executing query for table '{table_name}' with value: {vessel_val_float}")
-            result = db.execute(text(query), {"val": vessel_val_float, "country_id":country_id}).fetchone()
+            result = cached_fetchone(db, query, {"val": vessel_val_float, "country_id":country_id})
             logger.info(f"Query result: {result},{resultant_col},{table_name},{country_id}")
             if result is not None and result[0] is not None:
                 value = result[0]
@@ -387,7 +418,7 @@ def bracket_calculation(db: Session,cargo_qty: str,service_name: str,vessel: Any
             """
 
         logger.info(f"Executing query: {query}")
-        rows = db.execute(text(query),{"port_id":port_id}).fetchall()
+        rows = cached_fetchall(db, query, {"port_id":port_id})
         logger.info(f"Found {len(rows)} brackets")
         if not rows:
             if has_formula:
@@ -406,7 +437,7 @@ def bracket_calculation(db: Session,cargo_qty: str,service_name: str,vessel: Any
             """
 
             logger.info(f"Executing query: {query}")
-            rows = db.execute(text(query),{"country_id":country_id}).fetchall()
+            rows = cached_fetchall(db, query, {"country_id":country_id})
 
         breakdown: List[Dict[str, Any]] = []
         cursor = 1
@@ -1271,7 +1302,7 @@ def tonnage_due_rate_by_etd(db: Session,etd: datetime,month: int,val: float,sub,
         """
 
         logger.info(f"Executing query with val={val}, tariff_type={tariff_type}")
-        result = db.execute(text(query), {"val": val, "tariff_type": tariff_type,"country_id":country_id,"month":month}).fetchone()
+        result = cached_fetchone(db, query, {"val": val, "tariff_type": tariff_type,"country_id":country_id,"month":month})
         logger.info(f"Query result: {result},{val},{country_id}")
 
         if result and result[0] is not None:
@@ -2197,7 +2228,7 @@ def range_calculation_india(db: Session,vsl_attr: str,service_name: str,vessel: 
         # 5. Execute safely
         result = None
         try:
-            result = db.execute(text(query), params).fetchall()
+            result = cached_fetchall(db, query, params)
         except Exception as e:
             logger.error("Error during range calculation:", e)
         if result is None:
@@ -2536,7 +2567,7 @@ def movement_bracket_calculation(db: Session, movement_value: float, service_nam
             WHERE port = :port_id
             ORDER BY COALESCE(min_range, 0)
         """
-        rows = db.execute(text(query), {"port_id": port_id}).fetchall()
+        rows = cached_fetchall(db, query, {"port_id": port_id})
         logger.info(f"Found {len(rows)} brackets for service '{service_name}'")
         if not rows:
             query = f"""
@@ -2545,7 +2576,7 @@ def movement_bracket_calculation(db: Session, movement_value: float, service_nam
             WHERE country = :country_id
             ORDER BY COALESCE(min_range, 0)
             """
-            rows = db.execute(text(query), {"country_id": country_id}).fetchall()
+            rows = cached_fetchall(db, query, {"country_id": country_id})
 
         total_value = 0.0
         cursor = 1
@@ -3150,7 +3181,16 @@ def extract_vsl_property(*expressions):
     return vsl_property
 
 def get_country_obj_by_id(db,country_id: int):
-    return  db.query(MaCountry).filter(MaCountry.country_id == country_id).first()
+    cache_key = f"country_obj_{country_id}"
+    if not hasattr(db, 'info'):
+        return db.query(MaCountry).filter(MaCountry.country_id == country_id).first()
+    if 'query_cache' not in db.info:
+        db.info['query_cache'] = {}
+    if cache_key in db.info['query_cache']:
+        return db.info['query_cache'][cache_key]
+    res = db.query(MaCountry).filter(MaCountry.country_id == country_id).first()
+    db.info['query_cache'][cache_key] = res
+    return res
         
 
 def evaluate_date_condition(sub,condition_str, vessel, dto):
@@ -3599,7 +3639,7 @@ def discrete_value_calculation(db: Session, vsl_attr: str, service_name: str, ve
         """
 
         logger.info(f"Executing port-level query with val={vessel_val_float}, port_id={port_id}")
-        result = db.execute(text(query), {"val": vessel_val_float, "port_id": port_id}).fetchone()
+        result = cached_fetchone(db, query, {"val": vessel_val_float, "port_id": port_id})
 
         if result and result[0] is not None:
             value = result[0]
@@ -3623,7 +3663,7 @@ def discrete_value_calculation(db: Session, vsl_attr: str, service_name: str, ve
                 LIMIT 1;
             """
             logger.info(f"Executing country-level query with val={vessel_val_float}, country_id={country_id}")
-            result = db.execute(text(query), {"val": vessel_val_float, "country_id": country_id}).fetchone()
+            result = cached_fetchone(db, query, {"val": vessel_val_float, "country_id": country_id})
             value = result[0] if result and result[0] is not None else 0.0
             logger.info(f"Country level result: {value}")
             
