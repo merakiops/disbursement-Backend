@@ -468,7 +468,9 @@ class TimelineService:
             is_deleted="N",
             created_by=username,
             updated_by=username,
-            sync="N"
+            sync="N",
+            md5_file=getattr(payload, 'md5_file', 'N/A'),
+            pda_fda_flag=getattr(payload, 'pda_fda_flag', 'PDA')
         )
         db.add(new_file)
         db.commit()

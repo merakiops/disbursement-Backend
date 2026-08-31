@@ -11,6 +11,7 @@ from app.core.decorators import jwt_required, role_required
 import logging
 import os
 import uuid
+import hashlib
 from app.repo.file_upload import FileUploadRepository
 
 logger = logging.getLogger("app_logger")
@@ -108,6 +109,10 @@ async def upload_timeline_document(
         file_path = f"timeline_docs/{identifier}/{uuid.uuid4()}.{file_ext}"
         content_type = file.content_type
         
+        file_content = await file.read()
+        md5_hash = hashlib.md5(file_content).hexdigest()
+        await file.seek(0)
+        
         try:
             s3_client.put_object(
                 Bucket=os.getenv("BUCKET_NAME"),
@@ -125,6 +130,7 @@ async def upload_timeline_document(
         payload.step_title = step_title
         payload.file_name = file_name if file_name else file.filename
         payload.file_path = file_path
+        payload.md5_file = md5_hash
         
         response = TimelineService.save_timeline_document(identifier, payload, username, db)
         return response
