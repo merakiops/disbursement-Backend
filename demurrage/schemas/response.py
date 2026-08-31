@@ -89,7 +89,7 @@ class VoyageResponseSchema(BaseModel):
 
 
 class DemurrageCaseResponseSchema(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, extra='allow')
 
     voyage: VoyageResponseSchema
     load_ports: List[PortOperationResponseSchema] = []

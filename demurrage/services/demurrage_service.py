@@ -271,13 +271,23 @@ class DemurrageService:
         for port in load_ports + discharge_ports:
             port.deductions = port.deductions
 
-        return {
+        from demurrage.schemas.response import PortOperationResponseSchema
+
+        response = {
             "voyage": voyage,
             "load_ports": load_ports,
             "discharge_ports": discharge_ports,
             "summary": voyage.summary,
             "report_s3_url": voyage.report_s3_url
         }
+
+        for i, port in enumerate(load_ports, 1):
+            response[f"Load Port {i}"] = PortOperationResponseSchema.model_validate(port).model_dump()
+            
+        for i, port in enumerate(discharge_ports, 1):
+            response[f"Discharge Port {i}"] = PortOperationResponseSchema.model_validate(port).model_dump()
+
+        return response
 
     @staticmethod
     def get_all_demurrage_cases(db: Session, page: int = 1, page_size: int = 10, query: str = None) -> dict:
