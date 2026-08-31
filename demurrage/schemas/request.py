@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import List, Optional, Union
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, model_validator, ConfigDict
 
 class VoyageCreateSchema(BaseModel):
     id: Optional[int] = None
@@ -136,10 +136,23 @@ class DemurrageCaseCreateSchema(BaseModel):
     load_ports: List[PortOperationCreateSchema] = Field(default_factory=list)
     discharge_ports: List[PortOperationCreateSchema] = Field(default_factory=list)
 
+    model_config = ConfigDict(extra='allow')
+
     @model_validator(mode='before')
     @classmethod
     def filter_empty_ports(cls, data):
         if isinstance(data, dict):
+            if 'load_ports' not in data:
+                data['load_ports'] = []
+            if 'discharge_ports' not in data:
+                data['discharge_ports'] = []
+
+            for key in list(data.keys()):
+                if key.startswith('Load Port '):
+                    data['load_ports'].append(data.pop(key))
+                elif key.startswith('Discharge Port '):
+                    data['discharge_ports'].append(data.pop(key))
+
             for field in ['load_ports', 'discharge_ports']:
                 if field in data and isinstance(data[field], list):
                     cleaned = []
@@ -161,10 +174,23 @@ class StepSaveRequestSchema(BaseModel):
     load_ports: Optional[List[PortOperationCreateSchema]] = Field(default=None)
     discharge_ports: Optional[List[PortOperationCreateSchema]] = Field(default=None)
 
+    model_config = ConfigDict(extra='allow')
+
     @model_validator(mode='before')
     @classmethod
     def filter_empty_ports(cls, data):
         if isinstance(data, dict):
+            if 'load_ports' not in data:
+                data['load_ports'] = []
+            if 'discharge_ports' not in data:
+                data['discharge_ports'] = []
+
+            for key in list(data.keys()):
+                if key.startswith('Load Port '):
+                    data['load_ports'].append(data.pop(key))
+                elif key.startswith('Discharge Port '):
+                    data['discharge_ports'].append(data.pop(key))
+
             for field in ['load_ports', 'discharge_ports']:
                 if field in data and isinstance(data[field], list):
                     cleaned = []
