@@ -275,8 +275,6 @@ class DemurrageService:
 
         response = {
             "voyage": voyage,
-            "load_ports": load_ports,
-            "discharge_ports": discharge_ports,
             "summary": voyage.summary,
             "report_s3_url": voyage.report_s3_url
         }

@@ -92,8 +92,6 @@ class DemurrageCaseResponseSchema(BaseModel):
     model_config = ConfigDict(from_attributes=True, extra='allow')
 
     voyage: VoyageResponseSchema
-    load_ports: List[PortOperationResponseSchema] = []
-    discharge_ports: List[PortOperationResponseSchema] = []
     summary: Optional[DemurrageSummaryResponseSchema] = None
     report_s3_url: Optional[str] = None
 
