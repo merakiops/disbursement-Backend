@@ -329,7 +329,7 @@ class DemurrageService:
                 "Undisputed Demurrage Received": voyage.summary.undisputed_demurrage_paid if voyage.summary else 0.0,
                 "Address Commission": voyage.summary.add_commission if voyage.summary else 0.0,
                 "Net Demurrage": voyage.summary.net_demurrage if voyage.summary else 0.0,
-                "Report Sent Date": voyage.final_pdf_date,
+                "Report Sent Date": voyage.final_pdf_date if voyage.final_pdf_date else voyage.updated_at,
                 "Revised Date": voyage.updated_at,
                 "Action": voyage.report_s3_url
             }
