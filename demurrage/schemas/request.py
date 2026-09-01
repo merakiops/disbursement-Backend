@@ -44,6 +44,10 @@ class VoyageCreateSchema(BaseModel):
             for date_field in ['bl_date', 'cp_date', 'bl_dated', 'cp_dated']:
                 if date_field in data and (data[date_field] == "" or data[date_field] is None):
                     data[date_field] = None
+                    
+            if data.get('allowed_laytime_hours') is None:
+                data['allowed_laytime_hours'] = 0.0
+                
         return data
 
     @model_validator(mode='after')
