@@ -109,13 +109,29 @@ def get_port_by_id(port_id: int, db: Session = Depends(get_db)):
         vessel_fields=vessel_field_dtos
     )
 
-@portController.get("/api/v1/allports", response_model=List[PortResponseDTO], tags=["Port Management"])
-def get_all_ports(db: Session = Depends(get_db)):
+@portController.get("/api/v1/allports", tags=["Port Management"])
+def get_all_ports(fields: Optional[str] = None, db: Session = Depends(get_db)):
     """
-    Get a simple list of all ports with port_id, name, country_id, and country_name.
+    Get a simple list of all ports.
+    If fields=port is passed, returns a drastically reduced payload.
     """
-    ports = port_service.get_all_port(db)
     response_data = []
+    
+    if fields == "port":
+        from app.repo.port_repo import PortRepository
+        minimal_ports = PortRepository.get_minimal_ports(db)
+        for port in minimal_ports:
+            response_data.append({
+                "port_id": port.port_id,
+                "country_id": port.country_id,
+                "name": port.name,
+                "country_name": port.country_name
+            })
+        return response_data
+
+    # Fallback to fetching all complex objects
+    ports = port_service.get_all_port(db)
+    
     for port in ports:
         vessel_fields = port.vessel_fields or []
         vessel_field_dtos = [

@@ -273,9 +273,21 @@ class PortRepository:
 
     @staticmethod
     def get_all_port(db):
-        return db.query(MaPort).outerjoin(
-            MaPortTariffRule, MaPort.port_id == MaPortTariffRule.port_id
-        ).distinct(MaPort.port_id).all()
+         return db.query(MaPort).outerjoin(
+             MaPortTariffRule, MaPort.port_id == MaPortTariffRule.port_id
+         ).distinct(MaPort.port_id).all()
+         
+    @staticmethod
+    def get_minimal_ports(db: Session):
+        from app.models.country import MaCountry
+        return db.query(
+            MaPort.port_id,
+            MaPort.country_id,
+            MaPort.name,
+            MaCountry.name.label("country_name")
+        ).outerjoin(
+            MaCountry, MaPort.country_id == MaCountry.country_id
+        ).all()
 
          
 
