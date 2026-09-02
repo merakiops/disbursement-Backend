@@ -34,6 +34,10 @@ class DetailedTimelineStepDTO(BaseModel):
     updated_by: Optional[str] = None
     document_url: Optional[str] = None
     document_name: Optional[str] = None
+    file_id: Optional[int] = None
+    complete_file_path: Optional[str] = None
+    sync: Optional[str] = None
+    source_type: Optional[str] = None
 
 class DetailedDisbursementTimelineResponseDTO(BaseModel):
     request_id: Optional[int] = None

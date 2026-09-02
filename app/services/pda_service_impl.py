@@ -872,3 +872,91 @@ class PDAServiceImpl(PDAService):
             updated_on=response.updatedon
         )
         return res
+        
+    def get_client_disbursement_detail_by_id(self, disbursement_id: str, db: Session):
+        from app.models.txn_client_disbursement_request import TxnClientDisbursementRequest
+        req = db.query(TxnClientDisbursementRequest).filter(TxnClientDisbursementRequest.disbursement_id == disbursement_id).first()
+        from app.dto.client_disbursement_request_dto import TxnClientDisbursementInitiateDTO
+        
+        if req:
+            return TxnClientDisbursementInitiateDTO(
+                country_id=req.country_id,
+                client_id=req.client_id,
+                vessel_id=req.vessel_id,
+                port_id=req.port_id,
+                cargo_id=req.cargo_id,
+                draft=req.draft,
+                imo_number=req.imo_number,
+                vessel=req.vessel,
+                nrt=req.nrt,
+                grt=req.grt,
+                rgrt=req.rgrt,
+                loa=req.loa,
+                beam=req.beam,
+                depth=req.depth,
+                dwt=req.dwt,
+                type=req.type,
+                eta=req.eta,
+                etd=req.etd,
+                vessel_stay=req.vessel_stay,
+                voyage=req.voyage,
+                pda_roe=req.pda_roe,
+                pda_currency_from=req.pda_currency_from,
+                pda_currency_to=req.pda_currency_to,
+                invoice_ref_no=req.invoice_ref_no,
+                interface_unique_ref=req.interface_unique_ref,
+                previous_port=req.previous_port,
+                next_port=req.next_port,
+                preferences=req.preferences,
+                max_port_call=req.max_port_call,
+                charterer_time_bar=req.charterer_time_bar,
+                legal_entity_id=req.legal_entity_id,
+                trading_company_id=req.trading_company_id,
+                da_request_type=req.da_request_type,
+                portAgents=req.port_agents
+            )
+
+        # Fallback to TxnDisbursement
+        from app.models.txn_disbursement import TxnDisbursement
+        from app.models.vessels import MaVessel
+        from app.models.txn_pda import PDAModel
+        
+        disb = db.query(TxnDisbursement).filter(TxnDisbursement.disbursement_id == disbursement_id).first()
+        if not disb:
+            return None
+            
+        vessel_obj = db.query(MaVessel).filter(MaVessel.vessel_id == disb.vsl_id).first() if disb.vsl_id else None
+        pda_obj = db.query(PDAModel).filter(PDAModel.disbursement_seq == disb.disbursement_seq).first()
+        
+        return TxnClientDisbursementInitiateDTO(
+            country_id=disb.country_id,
+            client_id=disb.client_id,
+            vessel_id=disb.vsl_id,
+            port_id=disb.port_id,
+            cargo_id=disb.cargo_id,
+            draft=None,
+            imo_number=vessel_obj.imo_number if vessel_obj else None,
+            vessel=vessel_obj.name if vessel_obj else None,
+            nrt=vessel_obj.nrt if vessel_obj else None,
+            grt=vessel_obj.grt if vessel_obj else None,
+            rgrt=vessel_obj.rgrt if vessel_obj else None,
+            loa=vessel_obj.loa if vessel_obj else None,
+            beam=vessel_obj.beam if vessel_obj else None,
+            depth=vessel_obj.depth if vessel_obj else None,
+            dwt=vessel_obj.dwt if vessel_obj else None,
+            type=vessel_obj.type if vessel_obj else None,
+            eta=disb.eta,
+            etd=disb.etd,
+            vessel_stay=disb.vessel_stay,
+            voyage=disb.voyage,
+            pda_roe=pda_obj.pda_roe if pda_obj else None,
+            pda_currency_from=pda_obj.pda_currency_from if pda_obj else None,
+            pda_currency_to=pda_obj.pda_currency_to if pda_obj else None,
+            invoice_ref_no=pda_obj.invoice_ref_no if pda_obj else None,
+            email_to=pda_obj.email_to if pda_obj else None,
+            email_cc=pda_obj.email_cc if pda_obj else None,
+            portAgents=[{
+                "portagent_id": disb.portagent_id,
+                "purpose_id": [disb.purpose_id] if disb.purpose_id else []
+            }] if disb.portagent_id else []
+        )

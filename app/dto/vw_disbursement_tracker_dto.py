@@ -1,6 +1,7 @@
 from pydantic import BaseModel
 from typing import Optional, List, Any, Dict, Union
 from datetime import datetime, date
+from pydantic import model_validator
 
 class DisbursementTrackerDTO(BaseModel):
     disbursement_seq: Optional[Union[int, str]]
@@ -50,6 +51,25 @@ class DisbursementTrackerDTO(BaseModel):
     model_config = {
         "from_attributes": True
     }
+
+    @model_validator(mode='after')
+    def apply_status_rules(self) -> 'DisbursementTrackerDTO':
+        fda = (self.fda_status or "").lower()
+        pda = (self.pda_status or "").lower()
+        
+        if fda == "completed":
+            self.pda_status = "NA"
+            # Optional: adjust background colors for NA
+            self.pda_status_background_color = "#70757d"
+            self.pda_status_text_color = "#ffffff"
+        elif pda == "completed":
+            if not fda or fda == "na":
+                self.fda_status = "Pending"
+                # Optional: adjust background colors for Pending
+                self.fda_status_background_color = "#f59e0b" # typical pending color
+                self.fda_status_text_color = "#ffffff"
+                
+        return self
 
 class UpdateDisbursementTrackerCellDTO(BaseModel):
     disbursement_seq: Union[int, str]

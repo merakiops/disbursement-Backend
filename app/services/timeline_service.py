@@ -4,6 +4,7 @@ from app.repo.timeline_repo import TimelineRepository
 from app.models.ports import MaPort
 from app.models.vessels import MaVessel
 from app.models.txn_client_disbursement_request import TxnClientDisbursementRequest
+from app.repo.file_upload import FileUploadRepository
 
 from app.dto.timeline_dto import (
     DisbursementSummaryItemDTO,
@@ -278,6 +279,9 @@ class TimelineService:
                     
                 dt = evt.created_on
 
+                f_obj = file_map.get(title.upper())
+                presigned = FileUploadRepository.get_file_download_url(f_obj.file_id, db) if f_obj else None
+                
                 timeline_list.append(
                     DetailedTimelineStepDTO(
                         step=s,
@@ -286,8 +290,12 @@ class TimelineService:
                         date_time=dt,
                         description=desc,
                         updated_by=upd_by,
-                        document_url=f"/api/v1/file_download/{file_map.get(title.upper()).file_id}" if file_map.get(title.upper()) else doc_url,
-                        document_name=file_map.get(title.upper()).file_name if file_map.get(title.upper()) else doc_name
+                        document_url=presigned if presigned else doc_url,
+                        document_name=f_obj.file_name if f_obj else doc_name,
+                        file_id=f_obj.file_id if f_obj else None,
+                        complete_file_path=f_obj.complete_file_path if f_obj else None,
+                        sync=f_obj.sync if f_obj else None,
+                        source_type=f_obj.source_type if f_obj else None
                     )
                 )
         
@@ -299,7 +307,8 @@ class TimelineService:
             # Check if an equivalent step already exists
             if not any(title_str.upper() in t or t in title_str.upper() for t in existing_titles):
                 file_obj = file_map.get(title_str.upper())
-                doc_url = f"/api/v1/file_download/{file_obj.file_id}" if file_obj else None
+                presigned = FileUploadRepository.get_file_download_url(file_obj.file_id, db) if file_obj else None
+                doc_url = presigned if presigned else None
                 doc_name = file_obj.file_name if file_obj else None
                 
                 updated_by_name = None
@@ -320,7 +329,11 @@ class TimelineService:
                         description=f"{title_str} (Recovered)" if is_done else None,
                         updated_by=updated_by_name,
                         document_url=doc_url,
-                        document_name=doc_name
+                        document_name=doc_name,
+                        file_id=file_obj.file_id if file_obj else None,
+                        complete_file_path=file_obj.complete_file_path if file_obj else None,
+                        sync=file_obj.sync if file_obj else None,
+                        source_type=file_obj.source_type if file_obj else None
                     )
                 )
 
@@ -365,9 +378,9 @@ class TimelineService:
             "SUBMITTED": 3,
             "PDA UPLOADED": 4,
             "PDA APPROVED": 5,
-            "APPROVED": 5,  # Fallback for other approvals
             "FDA UPLOADED": 6,
             "FDA APPROVED": 7,
+            "APPROVED": 5,  # Fallback for other approvals
             "COMPLETED": 8
         }
 

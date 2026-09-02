@@ -126,3 +126,7 @@ class PDAService(ABC):
     @abstractmethod
     def initiate_client_disbursement(self, user: str, request_data: Any, background_tasks: BackgroundTasks, db: Session):
         pass
+        
+    @abstractmethod
+    def get_client_disbursement_detail_by_id(self, disbursement_id: str, db: Session):
+        pass

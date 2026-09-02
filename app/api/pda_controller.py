@@ -107,6 +107,27 @@ async def client_initiate_disbursement(request: Request, background_tasks: Backg
             detail="Failed to initiate client disbursement"
         )
 
+@disbursementController.get("/api/v1/client_initiate_disbursement_detail/{disbursement_id}", tags=["Disbursement"], response_model=TxnClientDisbursementInitiateDTO)
+@jwt_required
+@role_required(ALLOWED_ROLES_ALL)
+async def get_client_initiate_disbursement_detail(request: Request, disbursement_id: str, db: Session = Depends(get_db)):
+    try:
+        response = pda_service.get_client_disbursement_detail_by_id(disbursement_id, db)
+        if not response:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Client disbursement request not found for id {disbursement_id}"
+            )
+        return response
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error in get_client_initiate_disbursement_detail: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to fetch client disbursement detail"
+        )
+
 @disbursementController.post("/api/v1/initiate_disbursement", tags=["Disbursement"],response_model=TxnDisbursementDto)
 @jwt_required
 @role_required(ALLOWED_ROLES_ALL)
