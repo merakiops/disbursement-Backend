@@ -89,7 +89,7 @@ class DisbursementRepository:
                     d.status AS final_status,
                     d.pda_status,
                     d.fda_status,
-                    d.pda_amount, d.fda_amount,
+                    d.pda_total AS pda_amount, d.fda_total AS fda_amount,
                     d.created_at
                 FROM kamba_data_prod.disbursements d
                 LEFT JOIN kamba_data_prod.vessels v ON d.vessels_id = v.id
