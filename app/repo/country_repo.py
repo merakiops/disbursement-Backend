@@ -5,7 +5,7 @@ from app.models.country import MaCountry
 from app.dto.coutry_create_or_update import CountryCreateUpdateDTO, CountryListRequestDTO
 import logging
 from typing import List
-from sqlalchemy import distinct
+from sqlalchemy import distinct, text
 from app.models.port_tariff_rule import MaPortTariffRule
 
 
@@ -110,6 +110,25 @@ class CountryRepository:
         try:
             logger.info("Fetching all countries")
             countries = db.query(MaCountry).order_by(MaCountry.name.asc()).all()
+            
+            kamba_sql = "SELECT id, country as name, currency, active FROM kamba_data_prod.countries"
+            kamba_rows = db.execute(text(kamba_sql)).mappings().all()
+            
+            existing_names = {c.name.lower() for c in countries if c.name}
+            for k in kamba_rows:
+                if k['name'] and k['name'].lower() not in existing_names:
+                    k_country = MaCountry(
+                        country_id=-k['id'] if k['id'] else None,
+                        name=k['name'],
+                        currency=k['currency'],
+                        status='Y' if k['active'] == 1 else 'N'
+                    )
+                    countries.append(k_country)
+                    existing_names.add(k_country.name.lower())
+            
+            # Optionally sort combined
+            countries.sort(key=lambda x: x.name)
+            
             logger.info("Fetched %d countries", len(countries))
             return countries
         except Exception as e:
@@ -148,12 +167,36 @@ class CountryRepository:
         total_count = base_query.count()
 
         # Apply pagination
-        countries = base_query.offset(offset).limit(request_dto.page_size).all()
+        countries = base_query.all()
+        
+        kamba_sql = "SELECT id, country as name, currency, active FROM kamba_data_prod.countries"
+        params = {}
+        if request_dto.query:
+            kamba_sql += " WHERE country ILIKE :q OR currency ILIKE :q"
+            params["q"] = search_pattern
+            
+        kamba_rows = db.execute(text(kamba_sql), params).mappings().all()
+        existing_names = {c.name.lower() for c in countries if c.name}
+        
+        for k in kamba_rows:
+            if k['name'] and k['name'].lower() not in existing_names:
+                k_country = MaCountry(
+                    country_id=-k['id'] if k['id'] else None,
+                    name=k['name'],
+                    currency=k['currency'],
+                    status='Y' if k['active'] == 1 else 'N'
+                )
+                countries.append(k_country)
+                existing_names.add(k_country.name.lower())
+                
+        countries.sort(key=lambda x: x.name)
+        total_count = len(countries)
+        paginated_data = countries[offset:offset + request_dto.page_size]
 
         # Return as dictionary
         return {
             "total_count": total_count,
-            "data": countries
+            "data": paginated_data
         }
 
     @staticmethod

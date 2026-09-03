@@ -103,13 +103,25 @@ class DisbursementRepository:
             '''
             rows = db.execute(text(data_sql), params).mappings().all()
 
+            def parse_amount(val):
+                if not val: return 0.0
+                val = str(val).replace(',', '.')
+                parts = val.rsplit('.', 1)
+                if len(parts) > 1:
+                    val = parts[0].replace('.', '') + '.' + parts[1]
+                else:
+                    val = val.replace('.', '')
+                try: return abs(float(val))
+                except: return 0.0
+
             for r in rows:
-                pda_amt = abs(float(r["pda_amount"])) if r["pda_amount"] is not None else 0.0
-                fda_amt = abs(float(r["fda_amount"])) if r["fda_amount"] is not None else 0.0
+                pda_amt = parse_amount(r["pda_amount"])
+                fda_amt = parse_amount(r["fda_amount"])
                 
                 kamba_records.append(DisbursementTrackerDTO(
                     disbursement_seq=f"Kamba{r['disbursement_seq']}",
                     disbursement_id=r["disbursement_id"],
+                    source="Kamba",
                     pic=r["pic"],
                     client_name=r["client_name"],
                     vessel_name=r["vessel_name"],
@@ -142,6 +154,122 @@ class DisbursementRepository:
         except Exception as e:
             print("Error in Kamba tracker records:", e)
             return [], 0
+
+    @staticmethod
+    def _get_kamba_disbursement_details(kamba_id: int, db: Session):
+        try:
+            sql = """
+                SELECT d.*, 
+                       v.vessel as vessel_name, v.imo_number, 
+                       p.port as port_name,
+                       c_comp.company as client_name,
+                       pa.portagent as port_agent_name,
+                       co.country as country_name,
+                       u.name as pic_name
+                FROM kamba_data_prod.disbursements d
+                LEFT JOIN kamba_data_prod.vessels v ON d.vessels_id = v.id
+                LEFT JOIN kamba_data_prod.ports p ON d.ports_id = p.id
+                LEFT JOIN kamba_data_prod.companies c_comp ON d.companies_id = c_comp.id
+                LEFT JOIN kamba_data_prod.portagents pa ON d.portagents_id = pa.id
+                LEFT JOIN kamba_data_prod.countries co ON d.countries_id = co.id
+                LEFT JOIN kamba_data_prod.users u ON d.users_id = u.id
+                WHERE d.id = :kid
+            """
+            d = db.execute(text(sql), {"kid": kamba_id}).mappings().first()
+            if not d:
+                return None
+                
+            pda_expenses_raw = db.execute(text("SELECT description, amount FROM kamba_data_prod.pdadetails WHERE disbursements_id = :kid"), {"kid": kamba_id}).mappings().all()
+            fda_expenses_raw = db.execute(text("SELECT description, amount FROM kamba_data_prod.fdadetails WHERE disbursements_id = :kid"), {"kid": kamba_id}).mappings().all()
+            
+            pda_expenses = []
+            for idx, e in enumerate(pda_expenses_raw, 1):
+                amount = float(e['amount']) if e['amount'] else 0.0
+                pda_expenses.append({
+                    "S. No": idx,
+                    "Description": e['description'],
+                    "Meraki Amount": amount,
+                    "Agent Amount": amount
+                })
+                
+            fda_expenses = []
+            for idx, e in enumerate(fda_expenses_raw, 1):
+                amount = float(e['amount']) if e['amount'] else 0.0
+                fda_expenses.append({
+                    "S. No": idx,
+                    "Description": e['description'],
+                    "Meraki Amount": amount,
+                    "Agent Amount": amount
+                })
+                
+            return {
+                "disbursement_seq": f"Kamba{d['id']}",
+                "disbursement_id": d.get('pda_number') or f"MDA{d['id']}",
+                "pda_expenses": pda_expenses,
+                "fda_expenses": fda_expenses,
+                "pic": d.get('pic_name'),
+                "client_name": d.get('client_name'),
+                "port_agent_name": d.get('port_agent_name'),
+                "ops_pic": None,
+                "agency_nomination_date": None,
+                "invoice_number": "-",
+                "pda_id": d.get('pda') or None,
+                "pda_received_ops_agent": None,
+                "pda_processing_date": d.get('pda_create_date'),
+                "pda_status": "Completed" if d.get('pda_status') == 1 else "Pending",
+                "pda_state": "A",
+                "portagent_pda_amount": d.get('pda_amount'),
+                "pda_remittance": d.get('pda_total'),
+                "pda_remark": None,
+                "fda_id": d.get('fda') or None,
+                "fda_received_ops_agent": None,
+                "fda_processing_date": d.get('fda_create_date'),
+                "portagent_fda_amount": d.get('fda_amount'),
+                "fda_status": d.get('fda_status'),
+                "fda_state": None,
+                "fda_remark": None,
+                "days_outstanding": d.get('days_outstanding'),
+                "vessel_name": d.get('vessel_name'),
+                "voyage": d.get('voyage'),
+                "port": d.get('port_name'),
+                "country": d.get('country_name'),
+                "purpose": d.get('purpose'),
+                "cargo": d.get('cargo'),
+                "eta": d.get('eta'),
+                "etd": d.get('etd'),
+                "sm_estimated_amount": d.get('sm_estimate'),
+                "sm_detailed_entry": None,
+                "sm_ws_chart_ac": None,
+                "owners_item_rejected": None,
+                "towage_agency_agrement": None,
+                "roe_agent": d.get('roe'),
+                "roe_actual_oanda": None,
+                "roe_loss": None,
+                "loss_prevention_pda": None,
+                "loss_prevention_fda": None,
+                "total_loss_prevented": None,
+                "loss_prevented_reason": None,
+                "fda_receive_date": d.get('fda_received_date'),
+                "pda_receive_date": d.get('pda_received_date'),
+                "final_status": None,
+                "advance_percentage": d.get('advance_percentage'),
+                "pda_ptm_curr_to": None,
+                "fda_ptm_curr_to": None,
+                "actual_pda_amount": d.get('pda_total'),
+                "actual_fda_amount": d.get('fda_total'),
+                "manual_pda_amount": d.get('pda_total'),
+                "manual_fda_amount": d.get('fda_total'),
+                "advance_amount_remitted": d.get('advance_amount'),
+                "outstanding_balance": d.get('balance'),
+                "remark": d.get('remarks'),
+                "vessel_imo": d.get('imo_number'),
+                "bank_details": None,
+                "presigned_url": None,
+                "pdf_name": None
+            }
+        except Exception as e:
+            print("Error fetching Kamba details:", e)
+            return None
     
     @staticmethod
     def get_disbursement_list(request_dto: DisbursementTrackerRequestDTO, db: Session):
@@ -392,7 +520,11 @@ class DisbursementRepository:
             kamba_records, kamba_count = DisbursementRepository._get_kamba_tracker_records(request_dto, kamba_company_ids, db)
             
             # Map standard records to DTO
-            standard_dtos = [DisbursementTrackerDTO.model_validate(r) for r in standard_records]
+            standard_dtos = []
+            for r in standard_records:
+                dto = DisbursementTrackerDTO.model_validate(r)
+                dto.source = "Prod"
+                standard_dtos.append(dto)
             
             # Combine all records
             all_records = standard_dtos + kamba_records
@@ -425,7 +557,11 @@ class DisbursementRepository:
                 .limit(request_dto.page_size)
                 .all()
             )
-            data_dtos = [DisbursementTrackerDTO.model_validate(r) for r in data]
+            data_dtos = []
+            for r in data:
+                dto = DisbursementTrackerDTO.model_validate(r)
+                dto.source = "Prod"
+                data_dtos.append(dto)
             return {
                 "total_count": total_count,
                 "data": data_dtos
@@ -534,8 +670,12 @@ class DisbursementRepository:
             
     
     @staticmethod
-    def get_disbursement_details(disbursement_seq: int, db: Session):
-        base_query = db.query(DisbursementTrackerDetails).filter(disbursement_seq == DisbursementTrackerDetails.disbursement_seq).first()
+    def get_disbursement_details(disbursement_seq: str, db: Session):
+        if str(disbursement_seq).startswith("Kamba"):
+            kamba_id = int(str(disbursement_seq).replace("Kamba", ""))
+            return DisbursementRepository._get_kamba_disbursement_details(kamba_id, db)
+            
+        base_query = db.query(DisbursementTrackerDetails).filter(int(disbursement_seq) == DisbursementTrackerDetails.disbursement_seq).first()
         if base_query:
             pda_expenses = []
 

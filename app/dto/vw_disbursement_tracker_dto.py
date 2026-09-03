@@ -6,6 +6,7 @@ from pydantic import model_validator
 class DisbursementTrackerDTO(BaseModel):
     disbursement_seq: Optional[Union[int, str]]
     disbursement_id: Optional[str]
+    source: Optional[str] = None
     pic: Optional[str]
     client_name: Optional[str]
     vessel_name: Optional[str]
