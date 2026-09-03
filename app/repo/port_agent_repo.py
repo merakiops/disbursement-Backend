@@ -6,9 +6,9 @@ from fastapi import HTTPException, status
 from sqlalchemy.exc import SQLAlchemyError
 from app.dto.port_agent_create_or_update_dto import PortAgentCreateUpdateDTO, PortAgentListRequestDTO
 import logging
-from sqlalchemy import or_, func
+from sqlalchemy import or_
+from sqlalchemy import func 
 from typing import List
-from sqlalchemy import text
 from app.core.generic_update_function import generic_update
 
 logger = logging.getLogger("app_logger")
@@ -270,34 +270,9 @@ class PortAgentRepository:
         for port_agent in port_agents:
             port_agent.email = convert_email_to_list(port_agent.email)
 
-        kamba_sql = "SELECT id, portagent as name, active FROM kamba_data_prod.portagents"
-        params = {}
-        if request_dto.query:
-            kamba_sql += " WHERE portagent ILIKE :q"
-            params["q"] = f"%{request_dto.query.strip()}%"
-            
-        kamba_rows = db.execute(text(kamba_sql), params).mappings().all()
-        existing_names = {c.company_name.lower() for c in port_agents if c.company_name}
-        
-        for k in kamba_rows:
-            if k['name'] and k['name'].lower() not in existing_names:
-                k_agent = MaCompany(
-                    company_id=-k['id'] if k['id'] else None,
-                    company_name=k['name'],
-                    status='Y' if k['active'] == 1 else 'N',
-                    company_type_id=port_agent_type.company_type_id,
-                    email=None
-                )
-                port_agents.append(k_agent)
-                existing_names.add(k_agent.company_name.lower())
-                
-        port_agents.sort(key=lambda x: x.company_name)
-        total_count = len(port_agents)
-        paginated_data = port_agents[offset:offset + request_dto.page_size]
-
         return {
             "total_count": total_count,
-            "data": paginated_data
+            "data": port_agents
         }
     @staticmethod
     def get_all_port_agents(db: Session) -> List[MaCompany]:
@@ -325,24 +300,6 @@ class PortAgentRepository:
             # Convert email strings to lists for DTO compatibility
             for port_agent in port_agents:
                 port_agent.email = convert_email_to_list(port_agent.email)
-                
-            kamba_sql = "SELECT id, portagent as name, active FROM kamba_data_prod.portagents WHERE active = 1"
-            kamba_rows = db.execute(text(kamba_sql)).mappings().all()
-            existing_names = {c.company_name.lower() for c in port_agents if c.company_name}
-            
-            for k in kamba_rows:
-                if k['name'] and k['name'].lower() not in existing_names:
-                    k_agent = MaCompany(
-                        company_id=-k['id'] if k['id'] else None,
-                        company_name=k['name'],
-                        status='Y',
-                        company_type_id=port_agent_type_id,
-                        email=None
-                    )
-                    port_agents.append(k_agent)
-                    existing_names.add(k_agent.company_name.lower())
-                    
-            port_agents.sort(key=lambda x: x.company_name)
 
             logger.info("Fetched %d port agents", len(port_agents))
             return port_agents

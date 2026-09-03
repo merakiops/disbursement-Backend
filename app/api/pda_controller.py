@@ -491,7 +491,7 @@ async def get_disbursement_list(request: Request,request_dto: DisbursementTracke
 															
 @disbursementController.get("/api/v1/disbursement_tracker_detail/{disbursement_seq}",tags=["Disbursement"],response_model=DisbursementTrackerDetailsDTO,status_code=status.HTTP_200_OK)
 @jwt_required
-async def get_disbursement_details(request: Request,disbursement_seq:str,db: Session = Depends(get_db)):
+async def get_disbursement_details(request: Request,disbursement_seq:int,db: Session = Depends(get_db)):
     disbursement = disbursement_service.get_disbursement_details(disbursement_seq, db)
     if not disbursement:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Disbursement with seq {disbursement_seq} not found")

@@ -11,7 +11,7 @@ class DisbursementListServiceImpl(DisbursementListService):
     def get_disbursement_list(self,disbursement_data:DisbursementTrackerRequestDTO,db:Session):
         return DisbursementRepository.get_disbursement_list(disbursement_data,db)
     
-    def get_disbursement_details(self,disbursement_seq:str,db:Session):
+    def get_disbursement_details(self,disbursement_seq:int,db:Session):
         return DisbursementRepository.get_disbursement_details(disbursement_seq,db)
     
     def disbursement_details_edit(self,user: str, dto: DisbursementTrackerDetailsDTO,db: Session):

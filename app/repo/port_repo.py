@@ -13,7 +13,6 @@ from app.models.port_service_sub_type import MaPortSubServiceType
 from app.models.tariff_service import MaTariffService
 from typing import List
 from app.models.port_tariff_rule import MaPortTariffRule
-from sqlalchemy import text
 
 logger = logging.getLogger("app_logger")
 
@@ -183,48 +182,9 @@ class PortRepository:
                 vessel_fields=vessel_field_dtos
             ))
 
-        # Add kamba ports
-        kamba_sql = """
-            SELECT p.id, p.countries_id, p.port as name, p.active, c.country as country_name 
-            FROM kamba_data_prod.ports p
-            LEFT JOIN kamba_data_prod.countries c ON p.countries_id = c.id
-        """
-        params = {}
-        if query_str:
-            kamba_sql += " WHERE (p.port ILIKE :q OR c.country ILIKE :q)"
-            params["q"] = search_pattern
-            
-        kamba_rows = db.execute(text(kamba_sql), params).mappings().all()
-        
-        existing_names = {r.name.lower() for r in response_data if r.name}
-        
-        for k in kamba_rows:
-            if k['name'] and k['name'].lower() not in existing_names:
-                response_data.append(PortResponseDTO(
-                    port_id=-k['id'] if k['id'] else None,
-                    country_id=-k['countries_id'] if k['countries_id'] else None,
-                    name=k['name'],
-                    status='Y' if k['active'] == 1 else 'N',
-                    country_name=k['country_name'],
-                    vessel_fields=[]
-                ))
-                existing_names.add(k['name'].lower())
-        
-        # Paginate the combined response since we appended after initial pagination
-        # Or better yet, we just combined them. 
-        # But wait, original code paginated `query` and then we appended all Kamba.
-        # To be perfectly correct with pagination, we should sort and paginate the combined list.
-        # However, to avoid complexity, let's just paginate the final combined list if needed.
-        # Since `total_count` was original total_count, let's update it.
-        # Since we might exceed page limits if we don't paginate properly, let's re-paginate.
-        all_combined = sorted(response_data, key=lambda x: x.name)
-        total_count = len(all_combined)
-        # Note: Since the DB query was already limited to `page_size`, this is slightly imperfect for full table pagination,
-        # but works as a simple combine step as requested.
-
         return {
             "total_count": total_count,
-            "data": all_combined
+            "data": response_data
         }
     
     @staticmethod
@@ -268,43 +228,6 @@ class PortRepository:
                 country_name=port.country.name if port.country else None,
                 vessel_fields=vessel_field_dtos
             ))
-            
-        # Combine kamba ports for this country if country_id is negative (meaning kamba country) or just match by name
-        # Actually country_id is passed from frontend. If it's negative, it's definitely a Kamba country.
-        k_country_id = abs(country_id) if country_id < 0 else None
-        # Let's just fetch kamba ports where countries_id matches, or if we need to map prod to kamba country.
-        # To be safe, let's query kamba ports by mapping if it's a prod country.
-        # But this function doesn't easily know the kamba_country_id from prod_country_id unless we use name.
-        kamba_sql = """
-            SELECT p.id, p.countries_id, p.port as name, p.active, c.country as country_name 
-            FROM kamba_data_prod.ports p
-            JOIN kamba_data_prod.countries c ON p.countries_id = c.id
-        """
-        
-        # If the country_id was negative, it means it's a direct kamba request.
-        if country_id < 0:
-            kamba_sql += f" WHERE p.countries_id = {-country_id}"
-        else:
-            # Maybe the country name matches?
-            # We can find country name from MaCountry
-            country_obj = db.query(MaCountry).filter(MaCountry.country_id == country_id).first()
-            if country_obj:
-                kamba_sql += f" WHERE c.country ILIKE '{country_obj.name}'"
-                
-        kamba_rows = db.execute(text(kamba_sql)).mappings().all()
-        existing_names = {r.name.lower() for r in response_data if r.name}
-        
-        for k in kamba_rows:
-            if k['name'] and k['name'].lower() not in existing_names:
-                response_data.append(PortResponseDTO(
-                    port_id=-k['id'] if k['id'] else None,
-                    country_id=-k['countries_id'] if k['countries_id'] else None,
-                    name=k['name'],
-                    status='Y' if k['active'] == 1 else 'N',
-                    country_name=k['country_name'],
-                    vessel_fields=[]
-                ))
-                existing_names.add(k['name'].lower())
 
         return response_data
 
@@ -357,7 +280,7 @@ class PortRepository:
     @staticmethod
     def get_minimal_ports(db: Session):
         from app.models.country import MaCountry
-        prod_ports = db.query(
+        return db.query(
             MaPort.port_id,
             MaPort.country_id,
             MaPort.name,
@@ -365,38 +288,6 @@ class PortRepository:
         ).outerjoin(
             MaCountry, MaPort.country_id == MaCountry.country_id
         ).all()
-        
-        # Convert to list of dicts for easy combining
-        results = [
-            {
-                "port_id": p.port_id,
-                "country_id": p.country_id,
-                "name": p.name,
-                "country_name": p.country_name
-            }
-            for p in prod_ports
-        ]
-        
-        kamba_sql = """
-            SELECT p.id, p.countries_id, p.port as name, c.country as country_name 
-            FROM kamba_data_prod.ports p
-            LEFT JOIN kamba_data_prod.countries c ON p.countries_id = c.id
-            WHERE p.active = 1
-        """
-        kamba_rows = db.execute(text(kamba_sql)).mappings().all()
-        existing_names = {r["name"].lower() for r in results if r["name"]}
-        
-        for k in kamba_rows:
-            if k['name'] and k['name'].lower() not in existing_names:
-                results.append({
-                    "port_id": -k['id'] if k['id'] else None,
-                    "country_id": -k['countries_id'] if k['countries_id'] else None,
-                    "name": k['name'],
-                    "country_name": k['country_name']
-                })
-                existing_names.add(k['name'].lower())
-                
-        return results
 
          
 

@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Optional, List, Dict, Any, Union
+from typing import Optional, List, Dict, Any
 from datetime import datetime
 
 class PortExpenseItemDTO(BaseModel):
@@ -13,7 +13,7 @@ class PortExpenseItemDTO(BaseModel):
     }
 
 class DisbursementTrackerDetailsDTO(BaseModel):
-    disbursement_seq: Optional[Union[int, str]]
+    disbursement_seq: Optional[int]
     disbursement_id: Optional[str]
     pda_expenses: Optional[List[Dict[str, Any]]] = None
     fda_expenses: Optional[List[Dict[str, Any]]] = None

@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import or_, text
+from sqlalchemy import  or_
 
 from app.models.company import MaCompany, MaCompanyType
 
@@ -15,24 +15,6 @@ class CompanyRepo:
                 )\
             .filter(MaCompany.app_owning_company_id==owning_company_id)\
             .all()
-            
-            kamba_sql = "SELECT id, company as name, active FROM kamba_data_prod.companies"
-            kamba_rows = db.execute(text(kamba_sql)).mappings().all()
-            existing_names = {c.company_name.lower() for c in companies if c.company_name}
-            
-            for k in kamba_rows:
-                if k['name'] and k['name'].lower() not in existing_names:
-                    k_company = MaCompany(
-                        company_id=-k['id'] if k['id'] else None,
-                        company_name=k['name'],
-                        status='Y' if k['active'] == 1 else 'N',
-                        app_owning_company_id=owning_company_id,
-                        company_type_id=None
-                    )
-                    companies.append(k_company)
-                    existing_names.add(k_company.company_name.lower())
-                    
-            companies.sort(key=lambda x: x.company_name)
             
             return companies
         except Exception as e:

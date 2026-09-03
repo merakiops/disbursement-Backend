@@ -10,9 +10,6 @@ from app.dto.vessel_response_dto import GetVesselByImoNumberRequestDTO
 from app.core.generic_update_function import generic_update
 from sqlalchemy.inspection import inspect
 import re
-from sqlalchemy import text
-from app.client_kamba_mapping import get_kamba_company_id
-
 EMAIL_REGEX = re.compile(r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$")
 
 logger = logging.getLogger("app_logger")
@@ -175,42 +172,6 @@ class VesselRepository:
             .all()
         )
 
-        kamba_id = get_kamba_company_id(company_id)
-        if kamba_id:
-            kamba_sql = text("""
-                SELECT DISTINCT v.id, v.vessel as name, v.vessel_type as type,
-                       v.grt, v.rgrt, v.nrt, v.loa, v.beam, v.depth,
-                       v.dead_weight as dwt, v.imo_number, v.active
-                FROM kamba_data_prod.disbursements d
-                JOIN kamba_data_prod.vessels v ON d.vessels_id = v.id
-                WHERE d.companies_id = :k_id
-            """)
-            kamba_recs = db.execute(kamba_sql, {"k_id": kamba_id}).mappings().all()
-            
-            existing_names = {v.name for v in vessels if v.name}
-            
-            for k in kamba_recs:
-                k_status = 'Y' if k['active'] == 1 else 'N'
-                if k_status != status:
-                    continue
-                if k['name'] and k['name'] not in existing_names:
-                    k_vessel = MaVessel(
-                        vessel_id=-k['id'] if k['id'] else None,
-                        imo_number=k['imo_number'],
-                        name=k['name'],
-                        type=k['type'],
-                        grt=k['grt'],
-                        rgrt=k['rgrt'],
-                        nrt=k['nrt'],
-                        loa=k['loa'],
-                        beam=k['beam'],
-                        depth=k['depth'],
-                        dwt=k['dwt'],
-                        status=k_status
-                    )
-                    vessels.append(k_vessel)
-                    existing_names.add(k_vessel.name)
-
         return vessels
     
     @staticmethod
@@ -253,60 +214,9 @@ class VesselRepository:
         vessels = base_query.all()
 
         # Return as dictionary
-        
-        # Merge kamba data if no strict company filter (or handling globally mapped kamba vessels if needed)
-        # Assuming get_vessel_list is for listing vessels, not specific to a single company if it relies on base_query.
-        # But wait, it receives company_id as an argument. Let's merge if company_id maps to kamba.
-        # Actually, get_vessel_list's base_query is not filtering by company_id, it is listing ALL vessels.
-        # But maybe we should include all kamba vessels here if they are not already listed.
-        kamba_sql_str = """
-            SELECT DISTINCT id, vessel as name, vessel_type as type,
-                   grt, rgrt, nrt, loa, beam, depth,
-                   dead_weight as dwt, imo_number, active
-            FROM kamba_data_prod.vessels
-            WHERE active = 1
-        """
-        params = {}
-        if request_dto.query:
-            kamba_sql_str += " AND (vessel ILIKE :q OR imo_number ILIKE :q OR vessel_type ILIKE :q)"
-            params['q'] = f"%{request_dto.query.strip()}%"
-            
-        kamba_recs = db.execute(text(kamba_sql_str), params).mappings().all()
-        
-        existing_names = {v.name for v in vessels if v.name}
-        merged_vessels = list(vessels)
-        
-        for k in kamba_recs:
-            if k['name'] and k['name'] not in existing_names:
-                k_vessel = MaVessel(
-                    vessel_id=-k['id'] if k['id'] else None,
-                    imo_number=k['imo_number'],
-                    name=k['name'],
-                    type=k['type'],
-                    grt=k['grt'],
-                    rgrt=k['rgrt'],
-                    nrt=k['nrt'],
-                    loa=k['loa'],
-                    beam=k['beam'],
-                    depth=k['depth'],
-                    dwt=k['dwt'],
-                    status='Y'
-                )
-                merged_vessels.append(k_vessel)
-                existing_names.add(k_vessel.name)
-                
-        # Re-sort after merge if needed
-        merged_vessels.sort(key=lambda x: x.name or "")
-                
-        # We need to manually slice for pagination if we've combined in-memory
-        # Because we already fetched `base_query.all()`, let's just paginate the merged list.
-        # However, total_count was before.
-        total_count = len(merged_vessels)
-        paginated_vessels = merged_vessels[offset:offset + request_dto.page_size]
-
         return {
             "total_count": total_count,
-            "data": paginated_vessels
+            "data": vessels
         }
     
     @staticmethod
@@ -332,36 +242,6 @@ class VesselRepository:
                 .all()
             )
             
-            kamba_id = get_kamba_company_id(company_id)
-            if kamba_id:
-                kamba_sql = text("""
-                    SELECT DISTINCT v.id, v.vessel as name, v.vessel_type as type,
-                           v.grt, v.rgrt, v.nrt, v.loa, v.beam, v.depth,
-                           v.dead_weight as dwt, v.imo_number, v.active
-                    FROM kamba_data_prod.disbursements d
-                    JOIN kamba_data_prod.vessels v ON d.vessels_id = v.id
-                    WHERE d.companies_id = :k_id AND v.active = 1
-                """)
-                kamba_recs = db.execute(kamba_sql, {"k_id": kamba_id}).mappings().all()
-                existing_names = {v.name for v in assigned_vessels if v.name}
-                for k in kamba_recs:
-                    if k['name'] and k['name'] not in existing_names:
-                        k_vessel = MaVessel(
-                            vessel_id=-k['id'] if k['id'] else None,
-                            imo_number=k['imo_number'],
-                            name=k['name'],
-                            type=k['type'],
-                            grt=k['grt'],
-                            rgrt=k['rgrt'],
-                            nrt=k['nrt'],
-                            loa=k['loa'],
-                            beam=k['beam'],
-                            depth=k['depth'],
-                            dwt=k['dwt'],
-                            status='Y'
-                        )
-                        assigned_vessels.append(k_vessel)
-                        existing_names.add(k_vessel.name)
 
         # Unassigned vessels
             unassigned_vessels = (
@@ -371,36 +251,6 @@ class VesselRepository:
                 ).order_by(MaVessel.name.asc())
                 .all()
             )
-            
-            existing_unassigned_names = {v.name for v in unassigned_vessels if v.name}
-            existing_assigned_names = {v.name for v in assigned_vessels if v.name} if company_id else set()
-            
-            kamba_unassigned_sql = text("""
-                SELECT DISTINCT id, vessel as name, vessel_type as type,
-                       grt, rgrt, nrt, loa, beam, depth,
-                       dead_weight as dwt, imo_number, active
-                FROM kamba_data_prod.vessels
-                WHERE active = 1
-            """)
-            all_kamba_recs = db.execute(kamba_unassigned_sql).mappings().all()
-            for k in all_kamba_recs:
-                if k['name'] and k['name'] not in existing_unassigned_names and k['name'] not in existing_assigned_names:
-                    k_vessel = MaVessel(
-                        vessel_id=-k['id'] if k['id'] else None,
-                        imo_number=k['imo_number'],
-                        name=k['name'],
-                        type=k['type'],
-                        grt=k['grt'],
-                        rgrt=k['rgrt'],
-                        nrt=k['nrt'],
-                        loa=k['loa'],
-                        beam=k['beam'],
-                        depth=k['depth'],
-                        dwt=k['dwt'],
-                        status='Y'
-                    )
-                    unassigned_vessels.append(k_vessel)
-                    existing_unassigned_names.add(k_vessel.name)
 
             return {
                 "assigned_vessels": assigned_vessels,
@@ -416,35 +266,6 @@ class VesselRepository:
                 ).order_by(MaVessel.name.asc())
                 .all()
             )
-            
-            existing_unassigned_names = {v.name for v in unassigned_vessels if v.name}
-            
-            kamba_unassigned_sql = text("""
-                SELECT DISTINCT id, vessel as name, vessel_type as type,
-                       grt, rgrt, nrt, loa, beam, depth,
-                       dead_weight as dwt, imo_number, active
-                FROM kamba_data_prod.vessels
-                WHERE active = 1
-            """)
-            all_kamba_recs = db.execute(kamba_unassigned_sql).mappings().all()
-            for k in all_kamba_recs:
-                if k['name'] and k['name'] not in existing_unassigned_names:
-                    k_vessel = MaVessel(
-                        vessel_id=-k['id'] if k['id'] else None,
-                        imo_number=k['imo_number'],
-                        name=k['name'],
-                        type=k['type'],
-                        grt=k['grt'],
-                        rgrt=k['rgrt'],
-                        nrt=k['nrt'],
-                        loa=k['loa'],
-                        beam=k['beam'],
-                        depth=k['depth'],
-                        dwt=k['dwt'],
-                        status='Y'
-                    )
-                    unassigned_vessels.append(k_vessel)
-                    existing_unassigned_names.add(k_vessel.name)
 
             return {
             "unassigned_vessels": unassigned_vessels

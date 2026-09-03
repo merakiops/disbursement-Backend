@@ -11,7 +11,7 @@ class DisbursementListService(ABC):
         pass
     
     @abstractmethod
-    def get_disbursement_details(self,disbursement_seq:str,db:Session):
+    def get_disbursement_details(self,disbursement_seq:int,db:Session):
         pass
 
     @abstractmethod
