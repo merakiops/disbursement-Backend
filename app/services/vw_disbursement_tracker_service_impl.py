@@ -8,8 +8,8 @@ from app.dto.vw_disbursement_tracker_dtls_dto import DisbursementTrackerDetailsD
 
 class DisbursementListServiceImpl(DisbursementListService):
     
-    def get_disbursement_list(self,disbursement_data:DisbursementTrackerRequestDTO,db:Session):
-        return DisbursementRepository.get_disbursement_list(disbursement_data,db)
+    def get_disbursement_list(self,user:str,disbursement_data:DisbursementTrackerRequestDTO,db:Session):
+        return DisbursementRepository.get_disbursement_list(user, disbursement_data,db)
     
     def get_disbursement_details(self,disbursement_seq:int,db:Session):
         return DisbursementRepository.get_disbursement_details(disbursement_seq,db)

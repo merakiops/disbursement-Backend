@@ -477,7 +477,8 @@ async def get_disbursement_list(request: Request,request_dto: DisbursementTracke
     """
     Get paginated and optionally filtered list of disbursement via POST request.
     """
-    disbursement = disbursement_service.get_disbursement_list(request_dto, db)
+    username = request.state.user["username"]
+    disbursement = disbursement_service.get_disbursement_list(username, request_dto, db)
 
     dto_disbursement = [DisbursementTrackerDTO.model_validate(d) for d in disbursement["data"]]
 
@@ -491,7 +492,7 @@ async def get_disbursement_list(request: Request,request_dto: DisbursementTracke
 															
 @disbursementController.get("/api/v1/disbursement_tracker_detail/{disbursement_seq}",tags=["Disbursement"],response_model=DisbursementTrackerDetailsDTO,status_code=status.HTTP_200_OK)
 @jwt_required
-async def get_disbursement_details(request: Request,disbursement_seq:int,db: Session = Depends(get_db)):
+async def get_disbursement_details(request: Request,disbursement_seq:str,db: Session = Depends(get_db)):
     disbursement = disbursement_service.get_disbursement_details(disbursement_seq, db)
     if not disbursement:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Disbursement with seq {disbursement_seq} not found")

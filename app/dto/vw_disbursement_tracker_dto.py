@@ -4,8 +4,9 @@ from datetime import datetime, date
 from pydantic import model_validator
 
 class DisbursementTrackerDTO(BaseModel):
-    disbursement_seq: Optional[Union[int, str]]
+    disbursement_seq: Union[int, str]
     disbursement_id: Optional[str]
+    source: Optional[str] = None
     pic: Optional[str]
     client_name: Optional[str]
     vessel_name: Optional[str]
@@ -54,6 +55,9 @@ class DisbursementTrackerDTO(BaseModel):
 
     @model_validator(mode='after')
     def apply_status_rules(self) -> 'DisbursementTrackerDTO':
+        if self.source == "Ankkumam":
+            return self
+            
         fda = (self.fda_status or "").lower()
         pda = (self.pda_status or "").lower()
         

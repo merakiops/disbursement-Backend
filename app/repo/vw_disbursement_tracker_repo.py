@@ -17,41 +17,89 @@ from app.repo.status_repo import StatusRepository
 import logging
 from app.models import User
 from app.models import MaCompany
-from app.client_kamba_mapping import PROD_TO_KAMBA_MAPPING
 from sqlalchemy import text
+
+PROD_TO_ANKKUMAM_MAPPING = {
+    83: "ESDMCC",
+    14: "NWL"
+}
+
+def _get_status_color(status):
+    if not status or str(status).strip().upper() == "NA":
+        return "#70757d", "#ffffff"
+    s = str(status).strip().lower()
+    if "completed" in s:
+        return "#109716", "#ffffff"
+    if "pending" in s:
+        return "#f59e0b", "#ffffff"
+    if "under-process" in s or "under process" in s:
+        return "#3b72b9", "#ffffff"
+    if "requested" in s:
+        return "#ca8a04", "#ffffff"
+    if "rejected" in s:
+        return "#ef4444", "#ffffff"
+    return "#70757d", "#ffffff"
 
 logger = logging.getLogger("app_logger")
 
 class DisbursementRepository:
 
     @staticmethod
-    def _get_kamba_tracker_records(request_dto: DisbursementTrackerRequestDTO, kamba_company_ids, db: Session):
-        kamba_records = []
+    def _get_ankkumam_tracker_records(request_dto: DisbursementTrackerRequestDTO, ankkumam_clients, db: Session):
+        ankkumam_records = []
         try:
-            ids_str = ",".join(str(i) for i in kamba_company_ids)
-            where_clauses = [f"d.companies_id IN ({ids_str})"]
+            if not ankkumam_clients:
+                return [], 0
+                
+            clients_str = ",".join(f"'{c}'" for c in ankkumam_clients)
+            where_clauses = [f"d.client IN ({clients_str})"]
             params = {}
 
             if request_dto.query:
                 search = f"%{request_dto.query.strip()}%"
-                where_clauses.append("(c_comp.company ILIKE :search OR v.vessel ILIKE :search OR p.port ILIKE :search OR pa.portagent ILIKE :search OR d.pda_number ILIKE :search)")
+                where_clauses.append("(d.client ILIKE :search OR d.vessel ILIKE :search OR d.port ILIKE :search OR d.port_agent ILIKE :search)")
                 params["search"] = search
 
             f = request_dto.filter
             if f:
                 if f.vessel:
-                    where_clauses.append("v.vessel IN :vessels")
+                    where_clauses.append("d.vessel IN :vessels")
                     params["vessels"] = tuple(f.vessel)
                 if f.port:
-                    where_clauses.append("p.port IN :ports")
+                    where_clauses.append("d.port IN :ports")
                     params["ports"] = tuple(f.port)
                 if f.country:
-                    where_clauses.append("co.country IN :countries")
+                    where_clauses.append("d.country IN :countries")
                     params["countries"] = tuple(f.country)
                 if f.voyage:
                     where_clauses.append("d.voyage IN :voyages")
                     params["voyages"] = tuple(f.voyage)
-                # status filtering for kamba might be complex, simplified or ignored for now since fields differ
+                # status filtering
+                if f.status:
+                    status_list = [s.lower() for s in f.status]
+                    status_filters = []
+                    if "final status" in status_list:
+                        status_filters.append("d.final_status = 'Completed'")
+                    
+                    normal_statuses = [s for s in f.status if s.lower() != "final status"]
+                    if normal_statuses:
+                        pda_statuses = tuple([s.split(" ", 1)[1] for s in normal_statuses if s.lower().startswith("pda")])
+                        fda_statuses = tuple([s.split(" ", 1)[1] for s in normal_statuses if s.lower().startswith("fda")])
+                        
+                        or_status = []
+                        if pda_statuses:
+                            or_status.append("d.pda_status IN :pda_statuses")
+                            params["pda_statuses"] = pda_statuses
+                        if fda_statuses:
+                            or_status.append("d.fda_status IN :fda_statuses")
+                            params["fda_statuses"] = fda_statuses
+                            
+                        if or_status:
+                            status_filters.append("(" + " OR ".join(or_status) + ")")
+                            
+                    if status_filters:
+                        where_clauses.append("(" + " OR ".join(status_filters) + ")")
+                
                 # ETA/ETD
                 if f.eta_etd:
                     if f.eta_etd.from_date:
@@ -64,87 +112,100 @@ class DisbursementRepository:
             where_sql = " AND ".join(where_clauses)
             
             count_sql = f'''
-                SELECT COUNT(*) FROM kamba_data_prod.disbursements d 
-                LEFT JOIN kamba_data_prod.vessels v ON d.vessels_id=v.id 
-                LEFT JOIN kamba_data_prod.ports p ON d.ports_id=p.id 
-                LEFT JOIN kamba_data_prod.countries co ON d.countries_id=co.id 
-                LEFT JOIN kamba_data_prod.companies c_comp ON d.companies_id=c_comp.id 
-                LEFT JOIN kamba_data_prod.portagents pa ON d.portagents_id=pa.id
+                SELECT COUNT(*) FROM ankkumam_data_excel.data d 
                 WHERE {where_sql}
             '''
-            kamba_count = db.execute(text(count_sql), params).scalar() or 0
+            ankkumam_count = db.execute(text(count_sql), params).scalar() or 0
 
             data_sql = f'''
                 SELECT 
-                    d.id AS disbursement_seq,
-                    d.pda_number AS disbursement_id,
-                    u.name AS pic,
-                    c_comp.company AS client_name,
-                    v.vessel AS vessel_name,
-                    pa.portagent AS port_agent,
-                    p.port AS port,
-                    co.country AS country,
+                    d.mda_id AS disbursement_seq,
+                    d.column_1 AS pic,
+                    d.client AS client_name,
+                    d.vessel AS vessel_name,
+                    d.port_agent AS port_agent,
+                    d.port AS port,
+                    d.country AS country,
                     d.voyage AS voyage,
                     d.eta, d.etd,
-                    d.status AS final_status,
+                    d.final_status AS final_status,
                     d.pda_status,
                     d.fda_status,
-                    d.pda_amount, d.fda_amount,
-                    d.created_at
-                FROM kamba_data_prod.disbursements d
-                LEFT JOIN kamba_data_prod.vessels v ON d.vessels_id = v.id
-                LEFT JOIN kamba_data_prod.countries co ON d.countries_id = co.id
-                LEFT JOIN kamba_data_prod.ports p ON d.ports_id = p.id
-                LEFT JOIN kamba_data_prod.companies c_comp ON d.companies_id = c_comp.id
-                LEFT JOIN kamba_data_prod.portagents pa ON d.portagents_id = pa.id
-                LEFT JOIN kamba_data_prod.users u ON d.users_id = u.id
+                    d.pda_amount, 
+                    d.fda_amount_usd,
+                    d.savings_at_pda_usd,
+                    d.savings_at_fda_usd,
+                    d.purpose,
+                    d.reason,
+                    d.loaded_at
+                FROM ankkumam_data_excel.data d
                 WHERE {where_sql}
-                ORDER BY d.id DESC
+                ORDER BY d.excel_row ASC
             '''
             rows = db.execute(text(data_sql), params).mappings().all()
 
             for r in rows:
-                pda_amt = abs(float(r["pda_amount"])) if r["pda_amount"] is not None else 0.0
-                fda_amt = abs(float(r["fda_amount"])) if r["fda_amount"] is not None else 0.0
+                try:
+                    pda_amt = abs(float(str(r["pda_amount"]).replace(",", ""))) if r["pda_amount"] is not None else 0.0
+                except:
+                    pda_amt = 0.0
+                    
+                fda_amt = abs(float(r["fda_amount_usd"])) if r["fda_amount_usd"] is not None else 0.0
+
+                try:
+                    pda_savings = abs(float(str(r["savings_at_pda_usd"]).replace(",", ""))) if r["savings_at_pda_usd"] is not None else None
+                except:
+                    pda_savings = None
+
+                try:
+                    fda_savings = abs(float(str(r["savings_at_fda_usd"]).replace(",", ""))) if r["savings_at_fda_usd"] is not None else None
+                except:
+                    fda_savings = None
+
+                status_bg, status_text = _get_status_color(r["final_status"])
+                final_bg, final_text = _get_status_color(r["final_status"])
+                pda_bg, pda_text = _get_status_color(r["pda_status"])
+                fda_bg, fda_text = _get_status_color(r["fda_status"])
                 
-                kamba_records.append(DisbursementTrackerDTO(
-                    disbursement_seq=f"Kamba{r['disbursement_seq']}",
-                    disbursement_id=r["disbursement_id"],
-                    pic=r["pic"],
+                ankkumam_records.append(DisbursementTrackerDTO(
+                    disbursement_seq=r['disbursement_seq'],
+                    disbursement_id=r['disbursement_seq'],
+                    source="Ankkumam",
+                    pic=None,
                     client_name=r["client_name"],
                     vessel_name=r["vessel_name"],
                     port_agent=r["port_agent"],
                     port=r["port"],
                     country=r["country"],
-                    voyage=r["voyage"],
+                    voyage=str(r["voyage"]) if r["voyage"] is not None else None,
                     eta=r["eta"],
                     etd=r["etd"],
-                    status=r["final_status"] or "Completed",
-                    status_background_color="#E0E0E0",
-                    status_text_color="#000000",
-                    due_date=None, due_days=None, due_comment=None, due_flag=None, due_color=None,
-                    pda_state="Completed" if r["pda_status"] else None,
-                    fda_state="Completed" if r["fda_status"] else None,
+                    status=r["final_status"],
+                    status_background_color=status_bg,
+                    status_text_color=status_text,
+                    due_date=None, due_days=None, due_comment="NA", due_flag="NA", due_color="",
+                    pda_state="Y",
+                    fda_state=None,
                     fda_id=None, pda_id=None,
                     fda_amount=fda_amt, pda_amount=pda_amt,
-                    pda_savings=None, fda_savings=None,
+                    pda_savings=pda_savings, fda_savings=fda_savings,
                     final_status=r["final_status"],
-                    purpose=None,
+                    purpose=r["purpose"],
                     pda_status=r["pda_status"], fda_status=r["fda_status"],
-                    fda_status_background_color="#E0E0E0", fda_status_text_color="#000",
-                    pda_status_background_color="#E0E0E0", pda_status_text_color="#000",
-                    final_status_background_color="#E0E0E0", final_status_text_color="#000",
+                    fda_status_background_color=fda_bg, fda_status_text_color=fda_text,
+                    pda_status_background_color=pda_bg, pda_status_text_color=pda_text,
+                    final_status_background_color=final_bg, final_status_text_color=final_text,
                     manual_fda_amount=None, manual_pda_amount=None,
-                    loss_prevented_reason=None, advance_amount_remitted=None, outstanding_balance=None, remark=None
+                    loss_prevented_reason=None, advance_amount_remitted=None, outstanding_balance=None, remark=r["reason"]
                 ))
 
-            return kamba_records, kamba_count
+            return ankkumam_records, ankkumam_count
         except Exception as e:
-            print("Error in Kamba tracker records:", e)
+            print("Error in Ankkumam tracker records:", e)
             return [], 0
     
     @staticmethod
-    def get_disbursement_list(request_dto: DisbursementTrackerRequestDTO, db: Session):
+    def get_disbursement_list(user: str, request_dto: DisbursementTrackerRequestDTO, db: Session):
         """
         Fetch paginated list of disbursement.
         Supports filtering with query string across useful fields.
@@ -371,45 +432,45 @@ class DisbursementRepository:
         total_count = base_query.count()
 
         # Execute standard prod query WITHOUT pagination to memory if merging
-        should_merge_kamba = False
-        kamba_company_ids = []
+        should_merge_ankkumam = False
+        ankkumam_clients = []
+        
         if request_dto.filter and request_dto.filter.client:
-            client_ids_objs = db.query(MaCompany.company_id).filter(MaCompany.company_name.in_(request_dto.filter.client)).all()
-            client_ids = [c[0] for c in client_ids_objs]
-            kamba_ids = []
-            for cid in client_ids:
-                if cid in PROD_TO_KAMBA_MAPPING:
-                    kamba_ids.append(PROD_TO_KAMBA_MAPPING[cid])
-            if kamba_ids:
-                should_merge_kamba = True
-                kamba_company_ids = kamba_ids
-        else:
-            should_merge_kamba = True
-            kamba_company_ids = list(PROD_TO_KAMBA_MAPPING.values())
-
-        if should_merge_kamba:
+            requested_clients = request_dto.filter.client
+            for req_client in requested_clients:
+                if req_client == "Eiger Shipping DMCC":
+                    ankkumam_clients.append("ESDMCC")
+                    should_merge_ankkumam = True
+                elif req_client == "N W L":
+                    ankkumam_clients.append("NWL")
+                    should_merge_ankkumam = True
+        elif user and user.lower() in ["meraki", "admin"]:
+            ankkumam_clients = list(PROD_TO_ANKKUMAM_MAPPING.values())
+            should_merge_ankkumam = True
+        
+        if should_merge_ankkumam:
             standard_records = base_query.all()
-            kamba_records, kamba_count = DisbursementRepository._get_kamba_tracker_records(request_dto, kamba_company_ids, db)
+            ankkumam_records, ankkumam_count = DisbursementRepository._get_ankkumam_tracker_records(request_dto, ankkumam_clients, db)
             
             # Map standard records to DTO
             standard_dtos = [DisbursementTrackerDTO.model_validate(r) for r in standard_records]
             
             # Combine all records
-            all_records = standard_dtos + kamba_records
+            all_records = standard_dtos + ankkumam_records
             
             # Sort combined by internal ID desc
             def sort_key(dto):
                 seq = dto.disbursement_seq
-                if isinstance(seq, str) and seq.startswith("Kamba"):
+                if isinstance(seq, str) and seq.startswith("MDA"):
                     try:
-                        return int(seq.replace("Kamba", ""))
+                        return int(seq.split("_")[1])
                     except:
                         return 0
                 return seq or 0
                 
             all_records.sort(key=sort_key, reverse=True)
             
-            total_count = len(standard_records) + kamba_count
+            total_count = len(standard_records) + ankkumam_count
             
             # Apply pagination
             paginated_data = all_records[offset:offset + request_dto.page_size]
@@ -534,7 +595,134 @@ class DisbursementRepository:
             
     
     @staticmethod
-    def get_disbursement_details(disbursement_seq: int, db: Session):
+    def _get_ankkumam_disbursement_details(disbursement_seq: str, db: Session):
+        data_sql = f'''
+            SELECT 
+                d.mda_id AS disbursement_seq,
+                d.column_1 AS pic,
+                d.client AS client_name,
+                d.vessel AS vessel_name,
+                d.port_agent AS port_agent,
+                d.port AS port,
+                d.country AS country,
+                d.voyage AS voyage,
+                d.eta, d.etd,
+                d.final_status AS final_status,
+                d.pda_status,
+                d.fda_status,
+                d.pda_amount, 
+                d.fda_amount_usd,
+                d.savings_at_pda_usd,
+                d.savings_at_fda_usd,
+                d.total_savings_usd,
+                d.purpose,
+                d.reason,
+                d.loaded_at
+            FROM ankkumam_data_excel.data d
+            WHERE d.mda_id = :seq
+        '''
+        r = db.execute(text(data_sql), {"seq": disbursement_seq}).mappings().first()
+        if not r:
+            return None
+
+        try:
+            pda_amt = abs(float(str(r["pda_amount"]).replace(",", ""))) if r["pda_amount"] is not None else 0.0
+        except:
+            pda_amt = 0.0
+            
+        fda_amt = abs(float(r["fda_amount_usd"])) if r["fda_amount_usd"] is not None else 0.0
+
+        try:
+            pda_savings = abs(float(str(r["savings_at_pda_usd"]).replace(",", ""))) if r["savings_at_pda_usd"] is not None else None
+        except:
+            pda_savings = None
+
+        try:
+            fda_savings = abs(float(str(r["savings_at_fda_usd"]).replace(",", ""))) if r["savings_at_fda_usd"] is not None else None
+        except:
+            fda_savings = None
+            
+        try:
+            total_savings = abs(float(str(r["total_savings_usd"]).replace(",", ""))) if r["total_savings_usd"] is not None else None
+        except:
+            total_savings = None
+
+        return DisbursementTrackerDetailsDTO(
+            disbursement_seq=r['disbursement_seq'],
+            disbursement_id=r['disbursement_seq'],
+            pda_expenses=[],
+            fda_expenses=[],
+            pic=None,
+            client_name=r["client_name"],
+            port_agent_name=r["port_agent"],
+            ops_pic=None,
+            agency_nomination_date=None,
+            invoice_number="-",
+            pda_id=None,
+            pda_received_ops_agent=None,
+            pda_processing_date=None,
+            pda_status=r["pda_status"],
+            pda_state="Y",
+            portagent_pda_amount=pda_amt,
+            pda_remittance=None,
+            pda_remark=None,
+            fda_id=None,
+            fda_received_ops_agent=None,
+            fda_processing_date=None,
+            portagent_fda_amount=fda_amt,
+            fda_status=r["fda_status"],
+            fda_state=None,
+            fda_remark=None,
+            days_outstanding=None,
+            vessel_name=r["vessel_name"],
+            voyage=str(r["voyage"]) if r["voyage"] is not None else None,
+            port=r["port"],
+            country=r["country"],
+            purpose=r["purpose"],
+            cargo=None,
+            eta=r["eta"],
+            etd=r["etd"],
+            sm_estimated_amount=0.0,
+            sm_detailed_entry="NA",
+            sm_ws_chart_ac="NA",
+            owners_item_rejected="NA",
+            towage_agency_agrement="NA",
+            roe_agent=None,
+            roe_actual_oanda=None,
+            roe_loss=None,
+            loss_prevention_pda=pda_savings,
+            loss_prevention_fda=fda_savings,
+            total_loss_prevented=total_savings,
+            loss_prevented_reason=r["reason"],
+            fda_receive_date=None,
+            pda_receive_date=None,
+            final_status=r["final_status"],
+            advance_percentage=None,
+            pda_ptm_curr_to="USD",
+            fda_ptm_curr_to=None,
+            actual_pda_amount=pda_amt,
+            actual_fda_amount=fda_amt,
+            manual_pda_amount=None,
+            manual_fda_amount=None,
+            advance_amount_remitted=None,
+            outstanding_balance=None,
+            remark=r["reason"],
+            vessel_imo=None,
+            bank_details=None,
+            presigned_url=None,
+            pdf_name=None
+        )
+
+    @staticmethod
+    def get_disbursement_details(disbursement_seq: str, db: Session):
+        if str(disbursement_seq).startswith("MDA"):
+            return DisbursementRepository._get_ankkumam_disbursement_details(disbursement_seq, db)
+            
+        try:
+            disbursement_seq = int(disbursement_seq)
+        except ValueError:
+            return None
+
         base_query = db.query(DisbursementTrackerDetails).filter(disbursement_seq == DisbursementTrackerDetails.disbursement_seq).first()
         if base_query:
             pda_expenses = []
