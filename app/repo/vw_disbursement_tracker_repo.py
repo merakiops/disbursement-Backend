@@ -526,29 +526,34 @@ class DisbursementRepository:
                 dto.source = "Prod"
                 standard_dtos.append(dto)
             
-            # Combine all records
-            all_records = standard_dtos + kamba_records
+            # Combine all records, avoiding duplicates by disbursement_id
+            all_records = list(standard_dtos)
+            existing_ids = {d.disbursement_id for d in standard_dtos if d.disbursement_id}
+            
+            for kr in kamba_records:
+                if kr.disbursement_id not in existing_ids:
+                    all_records.append(kr)
+                    existing_ids.add(kr.disbursement_id)
             
             # Sort combined by internal ID desc
             def sort_key(dto):
                 seq = dto.disbursement_seq
                 if isinstance(seq, str) and seq.startswith("Kamba"):
-                    try:
                         return int(seq.replace("Kamba", ""))
-                    except:
-                        return 0
-                return seq or 0
-                
+                return int(seq)
+            
             all_records.sort(key=sort_key, reverse=True)
             
-            total_count = len(standard_records) + kamba_count
+            # Re-paginate
+            offset = (request_dto.page - 1) * request_dto.page_size
+            paginated = all_records[offset:offset + request_dto.page_size]
             
-            # Apply pagination
-            paginated_data = all_records[offset:offset + request_dto.page_size]
-            
+            # Re-calculate total count since we deduplicated
+            total_count = len(all_records)
+
             return {
                 "total_count": total_count,
-                "data": paginated_data
+                "data": paginated
             }
         else:
             data = (
