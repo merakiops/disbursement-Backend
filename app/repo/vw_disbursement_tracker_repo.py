@@ -132,8 +132,8 @@ class DisbursementRepository:
                     eta=r["eta"],
                     etd=r["etd"],
                     status=r["final_status"] or "Completed",
-                    status_background_color="#E0E0E0",
-                    status_text_color="#000000",
+                    status_background_color="#70757d",
+                    status_text_color="#ffffff",
                     due_date=None, due_days=None, due_comment=None, due_flag=None, due_color=None,
                     pda_state="Completed" if r["pda_status"] else None,
                     fda_state="Completed" if r["fda_status"] else None,
@@ -143,9 +143,9 @@ class DisbursementRepository:
                     final_status=r["final_status"],
                     purpose=None,
                     pda_status=r["pda_status"], fda_status=r["fda_status"],
-                    fda_status_background_color="#E0E0E0", fda_status_text_color="#000",
-                    pda_status_background_color="#E0E0E0", pda_status_text_color="#000",
-                    final_status_background_color="#E0E0E0", final_status_text_color="#000",
+                    fda_status_background_color="#70757d", fda_status_text_color="#ffffff",
+                    pda_status_background_color="#ca8a04", pda_status_text_color="#ffffff",
+                    final_status_background_color="#70757d", final_status_text_color="#ffffff",
                     manual_fda_amount=None, manual_pda_amount=None,
                     loss_prevented_reason=None, advance_amount_remitted=None, outstanding_balance=None, remark=None
                 ))
