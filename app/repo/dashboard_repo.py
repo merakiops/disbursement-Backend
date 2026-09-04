@@ -108,6 +108,71 @@ class DashboardRepository:
             return None
 
     @staticmethod
+    def _get_ankkumam_summary_for_companies(ankkumam_clients, db):
+        try:
+            if not ankkumam_clients:
+                return None
+            
+            clients_str = ",".join(f"'{c}'" for c in ankkumam_clients)
+            where_sql = f"d.client IN ({clients_str})"
+            
+            v_list = db.execute(text(f"SELECT DISTINCT d.vessel FROM ankkumam_data_excel.data d WHERE {where_sql} AND d.vessel IS NOT NULL")).scalars().all()
+            c_list = db.execute(text(f"SELECT DISTINCT d.country FROM ankkumam_data_excel.data d WHERE {where_sql} AND d.country IS NOT NULL")).scalars().all()
+            p_list = db.execute(text(f"SELECT DISTINCT d.port FROM ankkumam_data_excel.data d WHERE {where_sql} AND d.port IS NOT NULL")).scalars().all()
+            
+            v_cnt = len(v_list)
+            c_cnt = len(c_list)
+            p_cnt = len(p_list)
+            tot_disb = db.execute(text(f"SELECT COUNT(*) FROM ankkumam_data_excel.data d WHERE {where_sql}")).scalar() or 0
+            
+            amt_sql = f"""
+                SELECT 
+                    SUM(CAST(COALESCE(NULLIF(regexp_replace(CAST(d.pda_amount AS TEXT), '[^0-9.]', '', 'g'), ''), '0') AS NUMERIC)) as pda_tot,
+                    SUM(CAST(COALESCE(NULLIF(regexp_replace(CAST(d.fda_amount_usd AS TEXT), '[^0-9.]', '', 'g'), ''), '0') AS NUMERIC)) as fda_tot,
+                    SUM(CAST(COALESCE(NULLIF(regexp_replace(CAST(d.savings_at_pda_usd AS TEXT), '[^0-9.]', '', 'g'), ''), '0') AS NUMERIC)) as pda_sav,
+                    SUM(CAST(COALESCE(NULLIF(regexp_replace(CAST(d.savings_at_fda_usd AS TEXT), '[^0-9.]', '', 'g'), ''), '0') AS NUMERIC)) as fda_sav,
+                    SUM(CAST(COALESCE(NULLIF(regexp_replace(CAST(d.total_savings_usd AS TEXT), '[^0-9.]', '', 'g'), ''), '0') AS NUMERIC)) as tot_sav
+                FROM ankkumam_data_excel.data d
+                WHERE {where_sql}
+            """
+            amts = db.execute(text(amt_sql)).mappings().first()
+            
+            pda_total = float(amts.get('pda_tot') or 0.0)
+            fda_total = float(amts.get('fda_tot') or 0.0)
+            pda_sav = float(amts.get('pda_sav') or 0.0)
+            fda_sav = float(amts.get('fda_sav') or 0.0)
+            tot_sav = float(amts.get('tot_sav') or 0.0)
+            
+            return {
+                "country_list": [str(c).strip().upper() for c in c_list if c],
+                "port_list": [str(p).strip().upper() for p in p_list if p],
+                "vessel_list": [str(v).strip().upper() for v in v_list if v],
+                "countries": c_cnt,
+                "ports": p_cnt,
+                "vessels": v_cnt,
+                "total_pda": tot_disb,
+                "completed_pda": tot_disb,
+                "under_process_pda": 0,
+                "total_fda": tot_disb,
+                "completed_fda": tot_disb,
+                "under_process_fda": 0,
+                "yet_to_process": 0,
+                "pdasavings": pda_sav,
+                "fdasavings": fda_sav,
+                "overallsavingsamount": tot_sav,
+                "fda_total_amount": fda_total,
+                "pda_total_amount": pda_total,
+                "percentage_savings": round((tot_sav / fda_total * 100), 2) if fda_total > 0 else 0.0,
+                "percentage_savings_fda": round((tot_sav / fda_total * 100), 2) if fda_total > 0 else 0.0,
+                "percentage_savings_pda": round((tot_sav / pda_total * 100), 2) if pda_total > 0 else 0.0,
+                "pda_completed_no_fda": 0
+            }
+        except Exception as e:
+            db.rollback()
+            print(f"Error querying ankkumam_data_excel summary: {e}")
+            return None
+
+    @staticmethod
     def _merge_summaries(prod_summary, kamba_summary):
         """Merge prod and kamba summary dicts by adding counts together."""
         if not kamba_summary:
@@ -116,8 +181,24 @@ class DashboardRepository:
             return kamba_summary
 
         merged = dict(prod_summary)
+        
+        # Get true unique counts by merging lists as sets
+        if "country_list" in prod_summary and "country_list" in kamba_summary:
+            merged["countries"] = len(set(prod_summary["country_list"] + kamba_summary["country_list"]))
+        else:
+            merged["countries"] = float(prod_summary.get("countries") or 0) + float(kamba_summary.get("countries") or 0)
+            
+        if "port_list" in prod_summary and "port_list" in kamba_summary:
+            merged["ports"] = len(set(prod_summary["port_list"] + kamba_summary["port_list"]))
+        else:
+            merged["ports"] = float(prod_summary.get("ports") or 0) + float(kamba_summary.get("ports") or 0)
+            
+        if "vessel_list" in prod_summary and "vessel_list" in kamba_summary:
+            merged["vessels"] = len(set(prod_summary["vessel_list"] + kamba_summary["vessel_list"]))
+        else:
+            merged["vessels"] = float(prod_summary.get("vessels") or 0) + float(kamba_summary.get("vessels") or 0)
+
         additive_keys = [
-            "countries", "ports", "vessels",
             "total_pda", "completed_pda", "under_process_pda",
             "total_fda", "completed_fda", "under_process_fda", "yet_to_process",
             "pdasavings", "fdasavings", "overallsavingsamount",
@@ -224,17 +305,50 @@ class DashboardRepository:
         
         prod_summary = dict(result) if result else {}
 
-        # Check if selected clients have kamba data and merge
-        kamba_company_ids = []
+        # Fetch Ankkumam data instead of Kamba
+        ankkumam_clients = []
         if client_ids:
-            kamba_company_ids = get_kamba_ids_for_client_list(client_ids)
+            for cid in client_ids:
+                if str(cid) == '83':
+                    ankkumam_clients.append("ESDMCC")
+                elif str(cid) == '14':
+                    ankkumam_clients.append("NWL")
         else:
-            # No specific client selected = all clients, get all kamba IDs
-            kamba_company_ids = list(PROD_TO_KAMBA_MAPPING.values())
+            ankkumam_clients = ["ESDMCC", "NWL"]
 
-        if kamba_company_ids:
-            kamba_summary = DashboardRepository._get_kamba_summary_for_companies(kamba_company_ids, db)
-            return DashboardRepository._merge_summaries(prod_summary, kamba_summary)
+        if ankkumam_clients:
+            ankkumam_summary = DashboardRepository._get_ankkumam_summary_for_companies(ankkumam_clients, db)
+            
+            # Fetch actual unique lists for primary data to merge properly
+            prod_where = ["1=1"]
+            prod_params = {}
+            if expanded_client_ids:
+                try:
+                    int_cids = [int(x) for x in expanded_client_ids if str(x).isdigit()]
+                except:
+                    int_cids = list(expanded_client_ids)
+                if int_cids:
+                    prod_where.append("client_id = ANY(:cids)")
+                    prod_params["cids"] = int_cids
+                    
+            if from_date:
+                prod_where.append("etd::date >= :from_date::date")
+                prod_params["from_date"] = from_date
+            if to_date:
+                prod_where.append("etd::date <= :to_date::date")
+                prod_params["to_date"] = to_date
+                
+            prod_where_sql = " AND ".join(prod_where)
+            
+            prod_vessels = db.execute(text(f"SELECT DISTINCT vessel_name FROM {SCHEMA_NAME}.vw_dashboard_data WHERE {prod_where_sql} AND vessel_name IS NOT NULL"), prod_params).scalars().all()
+            prod_countries = db.execute(text(f"SELECT DISTINCT country_name FROM {SCHEMA_NAME}.vw_dashboard_data WHERE {prod_where_sql} AND country_name IS NOT NULL"), prod_params).scalars().all()
+            prod_ports = db.execute(text(f"SELECT DISTINCT port_name FROM {SCHEMA_NAME}.vw_dashboard_data WHERE {prod_where_sql} AND port_name IS NOT NULL"), prod_params).scalars().all()
+            
+            prod_summary["country_list"] = [str(c).strip().upper() for c in prod_countries if c]
+            prod_summary["port_list"] = [str(p).strip().upper() for p in prod_ports if p]
+            prod_summary["vessel_list"] = [str(v).strip().upper() for v in prod_vessels if v]
+            
+            return DashboardRepository._merge_summaries(prod_summary, ankkumam_summary)
 
         return prod_summary
     
@@ -266,134 +380,131 @@ class DashboardRepository:
         
         return query.first()
     @staticmethod
-    def _get_kamba_records(kamba_company_ids, data_request, is_meraki_user, is_all_records, offset, db):
-        """
-        Fetch kamba_data_prod records filtered by company IDs, with table filters and year range.
-        Returns (records_list, total_count).
-        """
-        kamba_records = []
+    def _get_ankkumam_records(ankkumam_company_ids, data_request, is_meraki_user, is_all_records, offset, db):
+        ankkumam_records = []
         try:
-            ids_str = ",".join(str(i) for i in kamba_company_ids)
-            where_clauses = [f"d.companies_id IN ({ids_str})"]
+            ids_str = ",".join(f"'{c}'" for c in ankkumam_company_ids)
+            where_clauses = [f"d.client IN ({ids_str})"]
             params = {}
 
             if data_request.tableFilter:
                 tf = data_request.tableFilter
                 if tf.vessel and len(tf.vessel) > 0:
-                    where_clauses.append("v.vessel IN :vessels")
+                    where_clauses.append("d.vessel IN :vessels")
                     params["vessels"] = tuple(tf.vessel)
                 if tf.country and len(tf.country) > 0:
-                    where_clauses.append("c.country IN :countries")
+                    where_clauses.append("d.country IN :countries")
                     params["countries"] = tuple(tf.country)
                 if tf.port and len(tf.port) > 0:
-                    where_clauses.append("p.port IN :ports")
+                    where_clauses.append("d.port IN :ports")
                     params["ports"] = tuple(tf.port)
 
             current_year = datetime.now().year
             has_year_filter = False
             if getattr(data_request, 'yearRange', None):
                 if data_request.yearRange.from_year:
-                    where_clauses.append("EXTRACT(YEAR FROM d.etd) >= :k_from_year")
-                    params["k_from_year"] = int(data_request.yearRange.from_year)
+                    where_clauses.append("EXTRACT(YEAR FROM d.etd) >= :from_year")
+                    params["from_year"] = int(data_request.yearRange.from_year)
                     has_year_filter = True
                 if data_request.yearRange.to_year:
-                    where_clauses.append("EXTRACT(YEAR FROM d.etd) <= :k_to_year")
-                    params["k_to_year"] = int(data_request.yearRange.to_year)
+                    where_clauses.append("EXTRACT(YEAR FROM d.etd) <= :to_year")
+                    params["to_year"] = int(data_request.yearRange.to_year)
                     has_year_filter = True
             if not has_year_filter and not is_meraki_user:
-                where_clauses.append("EXTRACT(YEAR FROM d.etd) >= :k_default_year")
-                params["k_default_year"] = current_year
+                where_clauses.append("EXTRACT(YEAR FROM d.etd) >= :default_year")
+                params["default_year"] = current_year
+
+            if getattr(data_request, 'monthRange', None):
+                if data_request.monthRange.from_date:
+                    where_clauses.append("d.etd >= :m_from_date")
+                    params["m_from_date"] = data_request.monthRange.from_date
+                if data_request.monthRange.to_date:
+                    where_clauses.append("d.etd <= :m_to_date")
+                    params["m_to_date"] = data_request.monthRange.to_date
 
             where_sql = " AND ".join(where_clauses)
-            count_sql = f"""SELECT COUNT(*) FROM kamba_data_prod.disbursements d 
-                LEFT JOIN kamba_data_prod.vessels v ON d.vessels_id=v.id 
-                LEFT JOIN kamba_data_prod.countries c ON d.countries_id=c.id 
-                LEFT JOIN kamba_data_prod.ports p ON d.ports_id=p.id 
-                WHERE {where_sql}"""
-            kamba_count = db.execute(text(count_sql), params).scalar() or 0
+            
+            count_sql = f"SELECT COUNT(*) FROM ankkumam_data_excel.data d WHERE {where_sql}"
+            ankkumam_count = db.execute(text(count_sql), params).scalar() or 0
 
             data_sql = f"""
                 SELECT 
-                    d.id AS disbursement_seq,
-                    v.vessel AS vessel_name,
-                    c.country AS country_name,
-                    p.port AS port_name,
-                    v.loa, v.grt, v.rgrt, v.nrt,
-                    d.pda_number,
+                    d.mda_id AS disbursement_seq,
+                    d.vessel AS vessel_name,
+                    d.country AS country_name,
+                    d.port AS port_name,
                     d.etd AS etd,
-                    COALESCE(pda_sum.pda_amount, 0.0) AS pda_amount,
-                    COALESCE(fda_sum.fda_amount, 0.0) AS fda_amount
-                FROM kamba_data_prod.disbursements d
-                LEFT JOIN kamba_data_prod.vessels v ON d.vessels_id = v.id
-                LEFT JOIN kamba_data_prod.countries c ON d.countries_id = c.id
-                LEFT JOIN kamba_data_prod.ports p ON d.ports_id = p.id
-                LEFT JOIN (
-                    SELECT disbursements_id, SUM(CASE WHEN amount ~ '^[0-9]+(\\.[0-9]+)?$' THEN amount::DECIMAL(15,2) ELSE 0.0 END) AS pda_amount
-                    FROM kamba_data_prod.pdadetails
-                    GROUP BY disbursements_id
-                ) pda_sum ON d.id = pda_sum.disbursements_id
-                LEFT JOIN (
-                    SELECT disbursements_id, SUM(CASE WHEN amount ~ '^[0-9]+(\\.[0-9]+)?$' THEN amount::DECIMAL(15,2) ELSE 0.0 END) AS fda_amount
-                    FROM kamba_data_prod.fdadetails
-                    GROUP BY disbursements_id
-                ) fda_sum ON d.id = fda_sum.disbursements_id
+                    d.pda_amount,
+                    d.fda_amount_usd,
+                    d.voyage,
+                    d.pda_status, d.fda_status,
+                    d.reason, d.savings_at_pda_usd, d.savings_at_fda_usd, d.total_savings_usd,
+                    d.client
+                FROM ankkumam_data_excel.data d
                 WHERE {where_sql}
-                ORDER BY d.id DESC
+                ORDER BY d.etd DESC NULLS LAST
             """
+            
             if not is_all_records:
-                data_sql += " LIMIT :k_limit OFFSET :k_offset"
-                params["k_limit"] = data_request.pageSize
-                params["k_offset"] = offset
+                data_sql += " LIMIT :limit OFFSET :offset"
+                params["limit"] = data_request.pageSize
+                params["offset"] = offset
 
             rows = db.execute(text(data_sql), params).mappings().all()
             for r in rows:
                 etd_val = r.get("etd")
                 etd_str = etd_val.isoformat() if hasattr(etd_val, 'isoformat') else str(etd_val or "")
-                pda_amt = abs(float(r["pda_amount"])) if r["pda_amount"] is not None else 0.0
-                fda_amt = abs(float(r["fda_amount"])) if r["fda_amount"] is not None else 0.0
-                kamba_records.append({
-                    "disbursement_seq": f"Kamba{r['disbursement_seq']}",
-                    "client_id": 85,
+                
+                try: pda_amt = abs(float(str(r["pda_amount"]).replace(",", ""))) if r["pda_amount"] is not None else 0.0
+                except: pda_amt = 0.0
+                
+                try: fda_amt = abs(float(str(r["fda_amount_usd"]).replace(",", ""))) if r["fda_amount_usd"] is not None else 0.0
+                except: fda_amt = 0.0
+                
+                try: lp_pda = abs(float(str(r["savings_at_pda_usd"]).replace(",", ""))) if r["savings_at_pda_usd"] is not None else 0.0
+                except: lp_pda = 0.0
+                
+                try: lp_fda = abs(float(str(r["savings_at_fda_usd"]).replace(",", ""))) if r["savings_at_fda_usd"] is not None else 0.0
+                except: lp_fda = 0.0
+                
+                try: tot_lp = abs(float(str(r["total_savings_usd"]).replace(",", ""))) if r["total_savings_usd"] is not None else 0.0
+                except: tot_lp = 0.0
+
+                c_id = 83 if str(r.get("client")) == "ESDMCC" else (14 if str(r.get("client")) == "NWL" else 85)
+
+                ankkumam_records.append({
+                    "disbursement_seq": r['disbursement_seq'],
+                    "client_id": c_id,
                     "etd": etd_str,
                     "vessel_name": r["vessel_name"] or f"Vessel-{r['disbursement_seq']}",
                     "country_id": None,
                     "country_name": r["country_name"] or "N/A",
                     "port_id": None,
                     "port_name": r["port_name"] or "N/A",
-                    "loa": float(r["loa"]) if r["loa"] is not None else None,
-                    "grt": float(r["grt"]) if r["grt"] is not None else None,
-                    "rgrt": float(r["rgrt"]) if r["rgrt"] is not None else None,
-                    "nrt": float(r["nrt"]) if r["nrt"] is not None else None,
-                    "loss_prevention_pda": None,
-                    "loss_prevention_fda": None,
-                    "total_loss_prevented": None,
-                    "loss_prevented_reason": None,
+                    "loa": "-", "grt": "-", "rgrt": "-", "nrt": "-",
+                    "loss_prevention_pda": lp_pda,
+                    "loss_prevention_fda": lp_fda,
+                    "total_loss_prevented": tot_lp,
+                    "loss_prevented_reason": r.get("reason"),
                     "fda_amount": fda_amt,
                     "pda_amount": pda_amt,
-                    "manual_fda_amount": f"USD {fda_amt:.2f}" if fda_amt > 0 else None,
-                    "manual_pda_amount": f"USD {pda_amt:.2f}" if pda_amt > 0 else None,
-                    "voyage_no": None,
-                    "vessel_type": None,
-                    "port_func": None,
-                    "arrival_local": etd_str,
-                    "departure_local": None,
-                    "port_days": None,
-                    "agent": None,
-                    "cargo_grade": None,
-                    "counterparty_short_name": None,
-                    "imo_no": None,
-                    "advance_amt": pda_amt if pda_amt > 0 else None,
-                    "final_amt": fda_amt if fda_amt > 0 else None,
-                    "advance_amount_remitted": None,
-                    "outstanding_balance": None,
-                    "remark": None,
-                    "data_source": "kamba"
+                    "manual_fda_amount": "-",
+                    "manual_pda_amount": "-",
+                    "voyage_no": r.get("voyage") or "-",
+                    "vessel_type": "-", "port_func": "-",
+                    "arrival_local": etd_str or "-", "departure_local": "-",
+                    "port_days": "-", "agent": "-", "cargo_grade": "-", "counterparty_short_name": "-", "imo_no": "-",
+                    "advance_amt": pda_amt if pda_amt > 0 else "-",
+                    "final_amt": fda_amt if fda_amt > 0 else "-",
+                    "advance_amount_remitted": "-",
+                    "outstanding_balance": "-",
+                    "remark": "-",
+                    "data_source": "ankkumam"
                 })
-            return kamba_records, kamba_count
+            return ankkumam_records, ankkumam_count
         except Exception as e:
-            import traceback
-            traceback.print_exc()
-            print(f"DEBUG ERROR IN KAMBA POSTGRES: {type(e).__name__} - {e}")
+            db.rollback()
+            print(f"Error querying ankkumam_data_excel records: {e}")
             return [], 0
 
     @staticmethod
@@ -426,9 +537,9 @@ class DashboardRepository:
                 else:
                     has_other = True
 
-        # Backward compatibility: client_id=85 only → kamba only
+        # Backward compatibility
         if has_kamba_client and not has_other and not has_excel_client:
-            ds = "kamba"
+            ds = "ankkumam"
         elif has_excel_client and not has_other and not has_kamba_client:
             ds = "excel"
         else:
@@ -436,10 +547,9 @@ class DashboardRepository:
 
         offset = 0 if is_all_records else (data_request.page - 1) * data_request.pageSize
 
-        # Backward compatibility: client_id=85 (Kamba) → all kamba data
-        if ds in ["kamba", "mysql"]:
-            return DashboardRepository._get_kamba_records(
-                None, data_request, is_meraki_user, is_all_records, offset, db
+        if ds in ["ankkumam", "kamba", "mysql"]:
+            return DashboardRepository._get_ankkumam_records(
+                ["ESDMCC", "NWL"], data_request, is_meraki_user, is_all_records, offset, db
             )
 
         if ds == "excel":
@@ -695,28 +805,31 @@ class DashboardRepository:
             ORDER BY vw.etd DESC NULLS LAST
         """
 
-        # Determine if we need to also fetch kamba data
-        kamba_company_ids = []
+        # Determine if we need to also fetch ankkumam data
+        ankkumam_clients = []
         if client_ids_list:
-            kamba_company_ids = get_kamba_ids_for_client_list(client_ids_list)
+            for cid in client_ids_list:
+                if str(cid) == '83':
+                    ankkumam_clients.append("ESDMCC")
+                elif str(cid) == '14':
+                    ankkumam_clients.append("NWL")
         else:
-            # No client selected = all, fetch all kamba data
-            kamba_company_ids = list(PROD_TO_KAMBA_MAPPING.values())
+            ankkumam_clients = ["ESDMCC", "NWL"]
 
-        if kamba_company_ids:
+        if ankkumam_clients:
             # Fetch ALL records from both sources (no per-source pagination)
             # then combine and paginate the merged result
             data_query_all = text(data_query_str)
             raw_std = list(db.execute(data_query_all, params).mappings().all())
             standard_records = [dict(r, data_source="standard") for r in raw_std]
 
-            kamba_records, kamba_count = DashboardRepository._get_kamba_records(
-                kamba_company_ids, data_request, is_meraki_user, True, 0, db
+            ankkumam_records, ankkumam_count = DashboardRepository._get_ankkumam_records(
+                ankkumam_clients, data_request, is_meraki_user, True, 0, db
             )
 
-            # Merge both record sets
-            all_records = standard_records + kamba_records
-            total_count = standard_count + kamba_count
+            # Merge both record sets (Prod first, then Ankkumam)
+            all_records = standard_records + ankkumam_records
+            total_count = standard_count + ankkumam_count
 
             # Apply pagination on merged data
             if not is_all_records:
@@ -724,7 +837,7 @@ class DashboardRepository:
 
             return all_records, total_count
         else:
-            # No kamba mapping, standard flow only
+            # No ankkumam mapping, standard flow only
             if not is_all_records:
                 data_query_str += " OFFSET :offset LIMIT :limit"
 

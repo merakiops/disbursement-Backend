@@ -270,7 +270,7 @@ class TimelineService:
                 st_code = "REJECTED" if "REJECT" in st else "COMPLETED"
                 desc = evt.message or title
                 
-                if title.upper() in ["CLIENT REQUEST SENT", "PORT AGENT ASSIGNED"]:
+                if title.upper() in ["CLIENT REQUEST RECEIVED", "PORT AGENT ASSIGNED"]:
                     upd_by = client_name
                 elif title.upper() in ["PORT AGENT SUBMITTED PDA", "PDA SUBMITTED"]:
                     upd_by = portagent_name
@@ -313,7 +313,7 @@ class TimelineService:
                 
                 updated_by_name = None
                 if is_done:
-                    if title_str.upper() in ["CLIENT REQUEST SENT", "PORT AGENT ASSIGNED"]:
+                    if title_str.upper() in ["CLIENT REQUEST RECEIVED", "PORT AGENT ASSIGNED"]:
                         updated_by_name = client_name
                     elif title_str.upper() in ["PORT AGENT SUBMITTED PDA", "PDA SUBMITTED"]:
                         updated_by_name = portagent_name
@@ -356,7 +356,7 @@ class TimelineService:
 
         # Always show all 6 standard steps
         # Completed steps get "COMPLETED", future/bypassed steps get None (null)
-        add_missing("Client Request Sent", is_done=True, default_dt=client_req_dt)
+        add_missing("Client request received", is_done=True, default_dt=client_req_dt)
         add_missing("Port Agent Assigned", is_done=True, default_dt=pa_assign_dt)
         add_missing("Pda Uploaded", is_done=has_pda, default_dt=pda_up_dt)
         add_missing("Pda Approved", is_done=pda_is_approved, default_dt=pda_appr_dt)
@@ -367,7 +367,7 @@ class TimelineService:
         # But we want legacy injected to be in logical order. The easiest way is to just 
         # define a fixed chronological order for known steps.
         order_map = {
-            "CLIENT REQUEST SENT": 1,
+            "CLIENT REQUEST RECEIVED": 1,
             "CLIENT REQUEST": 1,
             "PORT AGENT ASSIGNED": 2,
             "REQUEST SENT TO PORT AGENT": 2,

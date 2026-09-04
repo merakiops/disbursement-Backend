@@ -96,10 +96,10 @@ class FdaProcessingDetailDTO(BaseModel):
     vessel: Optional[str] = None
     country: Optional[str] = None
     port: Optional[str] = None
-    loa: Optional[float] = None
-    grt: Optional[float] = None
-    rgrt: Optional[float] = None
-    nrt: Optional[float] = None
+    loa: Optional[Union[float, str]] = None
+    grt: Optional[Union[float, str]] = None
+    rgrt: Optional[Union[float, str]] = None
+    nrt: Optional[Union[float, str]] = None
     pdaAmount: float
     fdaAmount: float
     manual_fda_amount: Optional[str] = None
@@ -113,15 +113,15 @@ class FdaProcessingDetailDTO(BaseModel):
     port_func: Optional[str] = None
     arrival_local: Optional[str] = None
     departure_local: Optional[str] = None
-    port_days: Optional[float] = None
+    port_days: Optional[Union[float, str]] = None
     agent: Optional[str] = None
     cargo_grade: Optional[str] = None
     counterparty_short_name: Optional[str] = None
     imo_no: Optional[str] = None
-    advance_amt: Optional[float] = None
-    final_amt: Optional[float] = None
-    advance_amount_remitted: Optional[float] = None
-    outstanding_balance: Optional[float] = None
+    advance_amt: Optional[Union[float, str]] = None
+    final_amt: Optional[Union[float, str]] = None
+    advance_amount_remitted: Optional[Union[float, str]] = None
+    outstanding_balance: Optional[Union[float, str]] = None
     remark: Optional[str] = None
     data_source: Optional[str] = "standard"
 
