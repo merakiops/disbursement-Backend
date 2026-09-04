@@ -196,7 +196,7 @@ class DisbursementRepository:
                     pda_status_background_color=pda_bg, pda_status_text_color=pda_text,
                     final_status_background_color=final_bg, final_status_text_color=final_text,
                     manual_fda_amount=None, manual_pda_amount=None,
-                    loss_prevented_reason=None, advance_amount_remitted=None, outstanding_balance=None, remark=r["reason"]
+                    loss_prevented_reason=None, advance_amount_remitted=None, outstanding_balance=None, remark="-"
                 ))
 
             return ankkumam_records, ankkumam_count
@@ -460,13 +460,16 @@ class DisbursementRepository:
             
             # Sort combined by internal ID desc
             def sort_key(dto):
+                is_primary = 0 if dto.source == "Ankkumam" else 1
                 seq = dto.disbursement_seq
                 if isinstance(seq, str) and seq.startswith("MDA"):
                     try:
-                        return int(seq.split("_")[1])
+                        seq_num = int(seq.split("_")[1])
                     except:
-                        return 0
-                return seq or 0
+                        seq_num = 0
+                else:
+                    seq_num = seq or 0
+                return (is_primary, seq_num)
                 
             all_records.sort(key=sort_key, reverse=True)
             
@@ -706,7 +709,7 @@ class DisbursementRepository:
             manual_fda_amount=None,
             advance_amount_remitted=None,
             outstanding_balance=None,
-            remark=r["reason"],
+            remark="-",
             vessel_imo=None,
             bank_details=None,
             presigned_url=None,
