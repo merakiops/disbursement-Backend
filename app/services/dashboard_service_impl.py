@@ -69,9 +69,11 @@ class DashboardServiceImpl(DashboardService):
         fda_total = int(round(float(result.get("fda_total_amount") or 0.0)))
         
         # Original logic for saving percentages
-        overall_savings = int(round(float(result.get("overallsavingsamount") or 0.0)))
         pda_savings = int(round(float(result.get("pdasavings") or 0.0)))
         fda_savings = int(round(float(result.get("fdasavings") or 0.0)))
+        
+        # Enforce overall_savings = pda_savings + fda_savings across the project
+        overall_savings = pda_savings + fda_savings
 
         def calc_pct(savings, total):
             if not total or total <= 0:
@@ -297,39 +299,56 @@ class DashboardServiceImpl(DashboardService):
             lp_fda = get_val(r, 'loss_prevention_fda')
             tot_lp = get_val(r, 'total_loss_prevented')
 
+            def safe_float(val):
+                if val is None:
+                    return None
+                if isinstance(val, str):
+                    val = val.strip()
+                    if val in ("", "-"):
+                        return None
+                    try:
+                        return float(val.replace(',', ''))
+                    except ValueError:
+                        return None
+                try:
+                    return float(val)
+                except (ValueError, TypeError):
+                    return None
+
             row_data = {
                 "sno": idx,
                 "disbursement_seq": get_val(r, 'disbursement_seq'),
+                "client_id": get_val(r, 'client_id'),
                 "date": etd_str,
                 "vessel": vessel_name.upper() if vessel_name else "",
                 "country": country_name.upper(),
                 "port": port_name.upper(),
-                "loa": float(loa_val) if loa_val is not None else None,
-                "grt": float(grt_val) if grt_val is not None else None,
-                "rgrt": float(rgrt_val) if rgrt_val is not None else None,
-                "nrt": float(nrt_val) if nrt_val is not None else None,
+                "loa": safe_float(loa_val),
+                "grt": safe_float(grt_val),
+                "rgrt": safe_float(rgrt_val),
+                "nrt": safe_float(nrt_val),
                 "pdaAmount": pda_numeric,
                 "fdaAmount": fda_numeric,
                 "manual_pda_amount": manual_pda,
                 "manual_fda_amount": manual_fda,
-                "loss_prevention_pda": float(lp_pda) if lp_pda is not None else None,
-                "loss_prevention_fda": float(lp_fda) if lp_fda is not None else None,
-                "total_loss_prevented": round((float(lp_pda or 0) + float(lp_fda or 0)), 2) if (lp_pda is not None or lp_fda is not None) else (float(tot_lp) if tot_lp is not None else None),
+                "loss_prevention_pda": safe_float(lp_pda),
+                "loss_prevention_fda": safe_float(lp_fda),
+                "total_loss_prevented": round((safe_float(lp_pda) or 0.0) + (safe_float(lp_fda) or 0.0), 2),
                 "loss_prevented_reason": get_val(r, 'loss_prevented_reason'),
-                "voyage_no": get_val(r, 'voyage_no'),
+                "voyage_no": str(get_val(r, 'voyage_no')) if get_val(r, 'voyage_no') is not None else None,
                 "vessel_type": get_val(r, 'vessel_type'),
                 "port_func": get_val(r, 'port_func'),
                 "arrival_local": get_val(r, 'arrival_local'),
                 "departure_local": get_val(r, 'departure_local'),
-                "port_days": float(get_val(r, 'port_days')) if get_val(r, 'port_days') is not None else None,
+                "port_days": safe_float(get_val(r, 'port_days')),
                 "agent": get_val(r, 'agent'),
                 "cargo_grade": get_val(r, 'cargo_grade'),
                 "counterparty_short_name": get_val(r, 'counterparty_short_name'),
                 "imo_no": get_val(r, 'imo_no'),
-                "advance_amt": float(get_val(r, 'advance_amt')) if get_val(r, 'advance_amt') is not None else None,
-                "final_amt": float(get_val(r, 'final_amt')) if get_val(r, 'final_amt') is not None else None,
-                "advance_amount_remitted": float(get_val(r, 'advance_amount_remitted')) if get_val(r, 'advance_amount_remitted') is not None else None,
-                "outstanding_balance": float(get_val(r, 'outstanding_balance')) if get_val(r, 'outstanding_balance') is not None else None,
+                "advance_amt": safe_float(get_val(r, 'advance_amt')),
+                "final_amt": safe_float(get_val(r, 'final_amt')),
+                "advance_amount_remitted": safe_float(get_val(r, 'advance_amount_remitted')),
+                "outstanding_balance": safe_float(get_val(r, 'outstanding_balance')),
                 "remark": get_val(r, 'remark'),
                 "data_source": get_val(r, 'data_source', 'standard'),
             }

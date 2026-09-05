@@ -410,9 +410,6 @@ class DashboardRepository:
                     where_clauses.append("EXTRACT(YEAR FROM d.etd) <= :to_year")
                     params["to_year"] = int(data_request.yearRange.to_year)
                     has_year_filter = True
-            if not has_year_filter and not is_meraki_user:
-                where_clauses.append("EXTRACT(YEAR FROM d.etd) >= :default_year")
-                params["default_year"] = current_year
 
             if getattr(data_request, 'monthRange', None):
                 if data_request.monthRange.from_date:
@@ -609,8 +606,6 @@ class DashboardRepository:
                         if data_request.yearRange.to_year:
                             q = q.filter(extract('year', ExcelDisbursementsTotalPortCost.arrival_local) <= int(data_request.yearRange.to_year))
                             has_year_filter = True
-                    if not has_year_filter and (client_ids_list or not is_meraki_user):
-                        q = q.filter(extract('year', ExcelDisbursementsTotalPortCost.arrival_local) >= current_year)
 
                     excel_count = q.count()
                     
@@ -707,9 +702,6 @@ class DashboardRepository:
                 params["to_year"] = int(data_request.yearRange.to_year)
                 has_year_filter = True
 
-        if not has_year_filter and (client_ids_list or not is_meraki_user):
-            where_clauses.append("EXTRACT(YEAR FROM vw.etd) >= :default_current_year")
-            params["default_current_year"] = current_year
 
         if data_request.tableFilter:
             tf = data_request.tableFilter
@@ -830,6 +822,16 @@ class DashboardRepository:
             # Merge both record sets (Prod first, then Ankkumam)
             all_records = standard_records + ankkumam_records
             total_count = standard_count + ankkumam_count
+
+            def get_sort_key(record):
+                val = record.get("etd")
+                if not val:
+                    return ""
+                if hasattr(val, "isoformat"):
+                    return val.isoformat()
+                return str(val)
+                
+            all_records.sort(key=get_sort_key, reverse=True)
 
             # Apply pagination on merged data
             if not is_all_records:

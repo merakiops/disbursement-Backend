@@ -92,6 +92,7 @@ class DashboardResponseDTO(BaseModel):
 class FdaProcessingDetailDTO(BaseModel):
     sno: int
     disbursement_seq: Union[int, str]
+    client_id: Optional[Union[int, str]] = None
     date: str
     vessel: Optional[str] = None
     country: Optional[str] = None
