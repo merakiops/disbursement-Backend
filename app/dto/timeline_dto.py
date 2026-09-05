@@ -25,6 +25,14 @@ class DisbursementSummaryListResponseDTO(BaseModel):
     total_count: int
     data: List[DisbursementSummaryItemDTO]
 
+class TimelineDocumentDTO(BaseModel):
+    document_url: Optional[str] = None
+    document_name: Optional[str] = None
+    file_id: Optional[int] = None
+    complete_file_path: Optional[str] = None
+    sync: Optional[str] = None
+    source_type: Optional[str] = None
+
 class DetailedTimelineStepDTO(BaseModel):
     step: int
     title: str  # Submitted, Under Review, Approved, Completed, Rejected
@@ -32,12 +40,7 @@ class DetailedTimelineStepDTO(BaseModel):
     date_time: Optional[datetime] = None
     description: Optional[str] = None
     updated_by: Optional[str] = None
-    document_url: Optional[str] = None
-    document_name: Optional[str] = None
-    file_id: Optional[int] = None
-    complete_file_path: Optional[str] = None
-    sync: Optional[str] = None
-    source_type: Optional[str] = None
+    documents: List[TimelineDocumentDTO] = []
 
 class DetailedDisbursementTimelineResponseDTO(BaseModel):
     request_id: Optional[int] = None

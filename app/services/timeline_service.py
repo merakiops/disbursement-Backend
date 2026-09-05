@@ -11,7 +11,8 @@ from app.dto.timeline_dto import (
     DisbursementSummaryListResponseDTO,
     TimelineStepSummaryDTO,
     DetailedDisbursementTimelineResponseDTO,
-    DetailedTimelineStepDTO
+    DetailedTimelineStepDTO,
+    TimelineDocumentDTO
 )
 
 class TimelineService:
@@ -233,14 +234,34 @@ class TimelineService:
         if not entries and disb_id and disb_id != identifier:
              entries = TimelineRepository.get_raw_timeline_entries(db, disb_id)
         
-                # --- File fetching patch ---
+        # --- File fetching patch ---
         from app.models.txn_disbursement_files import TxnDisbursementFiles
         timeline_files = db.query(TxnDisbursementFiles).filter(
             TxnDisbursementFiles.disbursement_seq == disb.disbursement_seq,
-            TxnDisbursementFiles.source_type == "TIMELINE_STEP",
             TxnDisbursementFiles.is_deleted == "N"
         ).all() if disb else []
-        file_map = {f.file_description.upper(): f for f in timeline_files}
+        
+        file_map = {}
+        for f in timeline_files:
+            if f.source_type == "TIMELINE_STEP":
+                t = f.file_description.upper()
+                if t not in file_map:
+                    file_map[t] = []
+                file_map[t].append(f)
+        
+        pda_files_list = [
+            f for f in sorted(timeline_files, key=lambda x: x.file_id, reverse=True) 
+            if f.pda_fda_flag == 'PDA' or (f.pda_fda_flag == 'DIS' and 'FDA' not in (f.file_name or '').upper())
+        ]
+        fda_files_list = [
+            f for f in sorted(timeline_files, key=lambda x: x.file_id, reverse=True) 
+            if f.pda_fda_flag == 'FDA' or (f.pda_fda_flag == 'DIS' and 'FDA' in (f.file_name or '').upper())
+        ]
+        
+        if pda_files_list:
+            file_map["PDA UPLOADED"] = pda_files_list
+        if fda_files_list:
+            file_map["FDA UPLOADED"] = fda_files_list
         # ---------------------------
 
         timeline_list = []
@@ -265,6 +286,10 @@ class TimelineService:
                 details_data = evt.details if isinstance(evt.details, dict) else {}
                 doc_url = details_data.get("document_url") or details_data.get("file_url") or details_data.get("url") or getattr(evt, "document_url", None)
                 doc_name = details_data.get("document_name") or details_data.get("file_name") or details_data.get("filename") or getattr(evt, "document_name", None)
+                
+                # Fallback URL to name if requested
+                if not doc_url and doc_name:
+                    doc_url = doc_name
 
                 title = (evt.status or "Action").replace("_", " ").title()
                 st_code = "REJECTED" if "REJECT" in st else "COMPLETED"
@@ -279,8 +304,25 @@ class TimelineService:
                     
                 dt = evt.created_on
 
-                f_obj = file_map.get(title.upper())
-                presigned = FileUploadRepository.get_file_download_url(f_obj.file_id, db) if f_obj else None
+                f_objs = file_map.get(title.upper()) or []
+                docs = []
+                
+                if not f_objs and doc_url and doc_name:
+                    docs.append(TimelineDocumentDTO(
+                        document_url=doc_url,
+                        document_name=doc_name
+                    ))
+                else:
+                    for f_obj in f_objs:
+                        presigned = FileUploadRepository.get_file_download_url(f_obj.file_id, db)
+                        docs.append(TimelineDocumentDTO(
+                            document_url=presigned or doc_url,
+                            document_name=f_obj.file_name or doc_name,
+                            file_id=f_obj.file_id,
+                            complete_file_path=f_obj.complete_file_path,
+                            sync=f_obj.sync,
+                            source_type=f_obj.source_type
+                        ))
                 
                 timeline_list.append(
                     DetailedTimelineStepDTO(
@@ -290,12 +332,7 @@ class TimelineService:
                         date_time=dt,
                         description=desc,
                         updated_by=upd_by,
-                        document_url=presigned if presigned else doc_url,
-                        document_name=f_obj.file_name if f_obj else doc_name,
-                        file_id=f_obj.file_id if f_obj else None,
-                        complete_file_path=f_obj.complete_file_path if f_obj else None,
-                        sync=f_obj.sync if f_obj else None,
-                        source_type=f_obj.source_type if f_obj else None
+                        documents=docs
                     )
                 )
         
@@ -306,10 +343,18 @@ class TimelineService:
         def add_missing(title_str, is_done=True, default_dt=None):
             # Check if an equivalent step already exists
             if not any(title_str.upper() in t or t in title_str.upper() for t in existing_titles):
-                file_obj = file_map.get(title_str.upper())
-                presigned = FileUploadRepository.get_file_download_url(file_obj.file_id, db) if file_obj else None
-                doc_url = presigned if presigned else None
-                doc_name = file_obj.file_name if file_obj else None
+                f_objs = file_map.get(title_str.upper()) or []
+                docs = []
+                for f_obj in f_objs:
+                    presigned = FileUploadRepository.get_file_download_url(f_obj.file_id, db)
+                    docs.append(TimelineDocumentDTO(
+                        document_url=presigned,
+                        document_name=f_obj.file_name,
+                        file_id=f_obj.file_id,
+                        complete_file_path=f_obj.complete_file_path,
+                        sync=f_obj.sync,
+                        source_type=f_obj.source_type
+                    ))
                 
                 updated_by_name = None
                 if is_done:
@@ -328,12 +373,7 @@ class TimelineService:
                         date_time=default_dt if is_done else None,
                         description=f"{title_str} (Recovered)" if is_done else None,
                         updated_by=updated_by_name,
-                        document_url=doc_url,
-                        document_name=doc_name,
-                        file_id=file_obj.file_id if file_obj else None,
-                        complete_file_path=file_obj.complete_file_path if file_obj else None,
-                        sync=file_obj.sync if file_obj else None,
-                        source_type=file_obj.source_type if file_obj else None
+                        documents=docs
                     )
                 )
 
