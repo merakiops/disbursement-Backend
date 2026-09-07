@@ -458,6 +458,9 @@ class DisbursementRepository:
             # Combine all records
             all_records = standard_dtos + ankkumam_records
             
+            from app.utils.dedup_utils import deduplicate_records
+            all_records = deduplicate_records(all_records)
+            
             # Sort combined by internal ID desc
             def sort_key(dto):
                 is_primary = 0 if dto.source == "Ankkumam" else 1
@@ -473,7 +476,7 @@ class DisbursementRepository:
                 
             all_records.sort(key=sort_key, reverse=True)
             
-            total_count = len(standard_records) + ankkumam_count
+            total_count = len(all_records)
             
             # Apply pagination
             paginated_data = all_records[offset:offset + request_dto.page_size]
