@@ -677,8 +677,8 @@ class DashboardRepository:
                 from sqlalchemy import func
                 from app.models.vw_fda_processing_details import VwFdaProcessingDetails
                 
-                norm_vessels = [str(v).upper().replace(" ", "") for v in vessel_names]
-                norm_col = func.replace(func.upper(VwFdaProcessingDetails.vessel_name), ' ', '')
+                norm_vessels = [str(v).upper().split(" EX ")[0].replace(" ", "") for v in vessel_names]
+                norm_col = func.replace(func.split_part(func.upper(VwFdaProcessingDetails.vessel_name), ' EX ', 1), ' ', '')
                 
                 stats = db.query(
                     norm_col.label("norm_vessel"),
@@ -698,7 +698,7 @@ class DashboardRepository:
 
             for r in rows:
                 v_name = r.get("vessel_name")
-                norm_v = str(v_name).upper().replace(" ", "") if v_name else ""
+                norm_v = str(v_name).upper().split(" EX ")[0].replace(" ", "") if v_name else ""
                 v_stats = vessel_stats_map.get(norm_v, {"loa": "-", "grt": "-", "rgrt": "-", "nrt": "-"})
 
                 etd_val = r.get("etd")
