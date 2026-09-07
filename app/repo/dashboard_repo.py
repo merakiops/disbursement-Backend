@@ -104,7 +104,11 @@ class DashboardRepository:
                 "pda_completed_no_fda": 0
             }
         except Exception as e:
-            print(f"Error querying kamba_data_prod summary: {e}")
+            db.rollback()
+            import traceback
+            with open("/tmp/ankkumam_error.log", "w") as f:
+                f.write(traceback.format_exc())
+            print(f"Error computing deduped ankkumam summary: {e}")
             return None
 
     @staticmethod
@@ -133,7 +137,7 @@ class DashboardRepository:
             from app.db import SCHEMA_NAME
             
             cids_str = ",".join(str(c) for c in prod_cids)
-            prod_keys_sql = "SELECT vw.vessel_name, vw.country_name as country, vw.port_name as port, vw.etd, td.voyage, td.port_agent FROM " + SCHEMA_NAME + ".vw_dashboard_data vw LEFT JOIN " + SCHEMA_NAME + ".txn_disbursement td ON vw.disbursement_seq = td.disbursement_seq WHERE vw.client_id IN (" + cids_str + ") AND (vw.fda_amount IS NOT NULL OR (vw.manual_fda_amount IS NOT NULL AND vw.manual_fda_amount != ''))"
+            prod_keys_sql = "SELECT vw.vessel_name, vw.country_name as country, vw.port_name as port, vw.etd, td.voyage, NULL as port_agent FROM " + SCHEMA_NAME + ".vw_dashboard_data vw LEFT JOIN " + SCHEMA_NAME + ".txn_disbursement td ON vw.disbursement_seq = td.disbursement_seq WHERE vw.client_id IN (" + cids_str + ") AND (vw.fda_amount IS NOT NULL OR (vw.manual_fda_amount IS NOT NULL AND vw.manual_fda_amount != ''))"
             
             prod_records = db.execute(text(prod_keys_sql)).mappings().all()
             
@@ -217,6 +221,9 @@ class DashboardRepository:
             }
         except Exception as e:
             db.rollback()
+            import traceback
+            with open("/tmp/ankkumam_error.log", "w") as f:
+                f.write(traceback.format_exc())
             print(f"Error computing deduped ankkumam summary: {e}")
             return None
             
@@ -318,6 +325,9 @@ class DashboardRepository:
             }
         except Exception as e:
             db.rollback()
+            import traceback
+            with open("/tmp/ankkumam_error.log", "w") as f:
+                f.write(traceback.format_exc())
             print(f"Error computing deduped ankkumam summary: {e}")
             return None
             
@@ -377,7 +387,10 @@ class DashboardRepository:
             }
         except Exception as e:
             db.rollback()
-            print(f"Error querying ankkumam_data_excel summary: {e}")
+            import traceback
+            with open("/tmp/ankkumam_error.log", "w") as f:
+                f.write(traceback.format_exc())
+            print(f"Error computing deduped ankkumam summary: {e}")
             return None
 
     @staticmethod
@@ -709,459 +722,10 @@ class DashboardRepository:
             return ankkumam_records, ankkumam_count
         except Exception as e:
             db.rollback()
-            print(f"Error querying ankkumam_data_excel records: {e}")
-            return [], 0
-
-    @staticmethod
-    def get_fda_processing_details(data_request, db: Session, is_meraki_user: bool = False):
-        """
-        Get FDA processing details with pagination.
-        For clients with kamba mapping, merges records from both prod and kamba_data_prod.
-        """
-        is_all_records = data_request.pageSize <= 0 or data_request.pageSize == -1
-        if not is_all_records and (data_request.page < 1 or data_request.pageSize < 1):
-            raise ValueError("Page number and page size must be greater than 0")
-
-        raw_cids = data_request.clientId if data_request.clientId is not None else data_request.client_id
-        client_ids_list = []
-        if raw_cids is not None:
-            if isinstance(raw_cids, list):
-                client_ids_list = [str(x) for x in raw_cids]
-            else:
-                client_ids_list = [str(raw_cids)]
-
-        has_excel_client = False
-        has_kamba_client = False
-        has_other = False
-        if client_ids_list:
-            for cid in client_ids_list:
-                if str(cid) == "84":
-                    has_excel_client = True
-                elif str(cid) == "85":
-                    has_kamba_client = True
-                else:
-                    has_other = True
-
-        # Backward compatibility
-        if has_kamba_client and not has_other and not has_excel_client:
-            ds = "ankkumam"
-        elif has_excel_client and not has_other and not has_kamba_client:
-            ds = "excel"
-        else:
-            ds = "standard"
-
-        offset = 0 if is_all_records else (data_request.page - 1) * data_request.pageSize
-
-        if ds in ["ankkumam", "kamba", "mysql"]:
-            return DashboardRepository._get_ankkumam_records(
-                ["ESDMCC", "NWL"], data_request, is_meraki_user, is_all_records, offset, db
-            )
-
-        if ds == "excel":
-            excel_records = []
-            excel_count = 0
-            try:
-                with db.begin_nested():
-                    q = db.query(
-                        ExcelDisbursementsTotalPortCost.id.label("disbursement_seq"),
-                        ExcelVessel.vessel_name,
-                        ExcelCountry.country_name,
-                        ExcelPort.port_name,
-                        ExcelDisbursementsTotalPortCost.arrival_local.label("etd"),
-                        ExcelDisbursementsTotalPortCost.advance_amt.label("pda_amount"),
-                        ExcelDisbursementsTotalPortCost.final_amt.label("fda_amount"),
-                        ExcelDisbursementsTotalPortCost.grt,
-                        ExcelDisbursementsTotalPortCost.dwt,
-                        ExcelDisbursementsTotalPortCost.vendor_short_name.label("agent"),
-                        ExcelDisbursementsTotalPortCost.cargo_grades.label("cargo_grade"),
-                        ExcelDisbursementsTotalPortCost.counterparty_short_name,
-                        ExcelDisbursementsTotalPortCost.voyage_no,
-                        ExcelDisbursementsTotalPortCost.vessel_type,
-                        ExcelDisbursementsTotalPortCost.port_func,
-                        ExcelDisbursementsTotalPortCost.departure_local,
-                        ExcelDisbursementsTotalPortCost.port_days,
-                        ExcelDisbursementsTotalPortCost.imo_no,
-                        ExcelDisbursementsTotalPortCost.advance_amount_remitted,
-                        ExcelDisbursementsTotalPortCost.outstanding_balance,
-                        ExcelDisbursementsTotalPortCost.remark
-                    ).outerjoin(ExcelVessel, ExcelDisbursementsTotalPortCost.vessel_id == ExcelVessel.id)\
-                     .outerjoin(ExcelCountry, ExcelDisbursementsTotalPortCost.country_id == ExcelCountry.id)\
-                     .outerjoin(ExcelPort, ExcelDisbursementsTotalPortCost.port_id == ExcelPort.id)
-
-                    if data_request.tableFilter:
-                        tf = data_request.tableFilter
-                        if tf.vessel:
-                            q = q.filter(ExcelVessel.vessel_name.in_(tf.vessel))
-                        if tf.country:
-                            q = q.filter(ExcelCountry.country_name.in_(tf.country))
-                        if tf.port:
-                            q = q.filter(ExcelPort.port_name.in_(tf.port))
-                        if tf.vessel_type:
-                            q = q.filter(ExcelDisbursementsTotalPortCost.vessel_type.in_(tf.vessel_type))
-                        if tf.agent:
-                            q = q.filter(ExcelDisbursementsTotalPortCost.vendor_short_name.in_(tf.agent))
-                        if tf.cargo_grade:
-                            q = q.filter(ExcelDisbursementsTotalPortCost.cargo_grades.in_(tf.cargo_grade))
-                        if tf.counterparty_short_name:
-                            q = q.filter(ExcelDisbursementsTotalPortCost.counterparty_short_name.in_(tf.counterparty_short_name))
-
-                    current_year = datetime.now().year
-                    has_year_filter = False
-                    if getattr(data_request, 'yearRange', None):
-                        if data_request.yearRange.from_year:
-                            q = q.filter(extract('year', ExcelDisbursementsTotalPortCost.arrival_local) >= int(data_request.yearRange.from_year))
-                            has_year_filter = True
-                        if data_request.yearRange.to_year:
-                            q = q.filter(extract('year', ExcelDisbursementsTotalPortCost.arrival_local) <= int(data_request.yearRange.to_year))
-                            has_year_filter = True
-
-                    excel_count = q.count()
-                    
-                    def map_excel_row(r):
-                        return {
-                            "disbursement_seq": r.disbursement_seq,
-                            "client_id": None,
-                            "etd": r.etd,
-                            "vessel_name": r.vessel_name or r.imo_no or f"Vessel-{r.disbursement_seq}",
-                            "country_id": None,
-                            "country_name": r.country_name or "N/A",
-                            "port_id": None,
-                            "port_name": r.port_name or "N/A",
-                            "loa": None,
-                            "grt": float(r.grt) if r.grt is not None else None,
-                            "rgrt": None,
-                            "nrt": None,
-                            "loss_prevention_pda": None,
-                            "loss_prevention_fda": None,
-                            "total_loss_prevented": None,
-                            "loss_prevented_reason": None,
-                            "fda_amount": abs(float(r.fda_amount)) if r.fda_amount is not None else 0.0,
-                            "pda_amount": abs(float(r.pda_amount)) if r.pda_amount is not None else 0.0,
-                            "manual_fda_amount": None,
-                            "manual_pda_amount": None,
-                            "voyage_no": str(r.voyage_no) if r.voyage_no else None,
-                            "vessel_type": r.vessel_type,
-                            "port_func": r.port_func,
-                            "arrival_local": r.etd.isoformat() if r.etd else None,
-                            "departure_local": r.departure_local.isoformat() if r.departure_local else None,
-                            "port_days": float(r.port_days) if r.port_days is not None else None,
-                            "agent": r.agent,
-                            "cargo_grade": r.cargo_grade,
-                            "counterparty_short_name": r.counterparty_short_name,
-                            "imo_no": r.imo_no,
-                            "advance_amt": abs(float(r.pda_amount)) if r.pda_amount is not None else None,
-                            "final_amt": abs(float(r.fda_amount)) if r.fda_amount is not None else None,
-                            "advance_amount_remitted": float(r.advance_amount_remitted) if r.advance_amount_remitted is not None else None,
-                            "outstanding_balance": float(r.outstanding_balance) if r.outstanding_balance is not None else None,
-                            "remark": r.remark,
-                            "data_source": "excel"
-                        }
-
-                    excel_query_obj = q.order_by(desc(ExcelDisbursementsTotalPortCost.arrival_local))
-                    if not is_all_records:
-                        excel_query_obj = excel_query_obj.offset(offset).limit(data_request.pageSize)
-                    excel_fetched = excel_query_obj.all()
-
-                    for r in excel_fetched:
-                        excel_records.append(map_excel_row(r))
-                    return excel_records, excel_count
-            except Exception:
-                db.rollback()
-                return [], 0
-
-        # --- Standard + Kamba merged flow ---
-        # Expand client_ids to include old/merged prod IDs
-        expanded_client_ids_list = client_ids_list
-        if client_ids_list:
-            expanded_client_ids_list = [str(x) for x in get_all_prod_ids_for_client_list(client_ids_list)]
-
-        params = {}
-        where_clauses = [
-            "1=1",
-            "(vw.fda_amount IS NOT NULL OR (vw.manual_fda_amount IS NOT NULL AND vw.manual_fda_amount != ''))"
-        ]
-
-        if expanded_client_ids_list:
-            try:
-                int_cids = [int(x) for x in expanded_client_ids_list if str(x).isdigit()]
-            except (ValueError, TypeError):
-                int_cids = list(expanded_client_ids_list)
-            if int_cids:
-                where_clauses.append("vw.client_id = ANY(:client_ids)")
-                params["client_ids"] = int_cids
-
-        if getattr(data_request, 'monthRange', None):
-            if data_request.monthRange.from_date:
-                where_clauses.append("vw.etd::date >= :from_date::date")
-                params["from_date"] = data_request.monthRange.from_date
-            if data_request.monthRange.to_date:
-                where_clauses.append("vw.etd::date <= :to_date::date")
-                params["to_date"] = data_request.monthRange.to_date
-
-        current_year = datetime.now().year
-        has_year_filter = False
-        if getattr(data_request, 'yearRange', None):
-            if data_request.yearRange.from_year:
-                where_clauses.append("EXTRACT(YEAR FROM vw.etd) >= :from_year")
-                params["from_year"] = int(data_request.yearRange.from_year)
-                has_year_filter = True
-            if data_request.yearRange.to_year:
-                where_clauses.append("EXTRACT(YEAR FROM vw.etd) <= :to_year")
-                params["to_year"] = int(data_request.yearRange.to_year)
-                has_year_filter = True
-
-
-        if data_request.tableFilter:
-            tf = data_request.tableFilter
-            if tf.vessel:
-                where_clauses.append("vw.vessel_name = ANY(:vessel_names)")
-                params["vessel_names"] = list(tf.vessel)
-            if tf.country:
-                where_clauses.append("vw.country_name = ANY(:country_names)")
-                params["country_names"] = list(tf.country)
-            if tf.port:
-                where_clauses.append("vw.port_name = ANY(:port_names)")
-                params["port_names"] = list(tf.port)
-            if tf.loa:
-                if tf.loa.min_value is not None:
-                    where_clauses.append("vw.loa >= :loa_min")
-                    params["loa_min"] = tf.loa.min_value
-                if tf.loa.max_value is not None:
-                    where_clauses.append("vw.loa <= :loa_max")
-                    params["loa_max"] = tf.loa.max_value
-            if tf.nrt:
-                if tf.nrt.min_value is not None:
-                    where_clauses.append("vw.nrt >= :nrt_min")
-                    params["nrt_min"] = tf.nrt.min_value
-                if tf.nrt.max_value is not None:
-                    where_clauses.append("vw.nrt <= :nrt_max")
-                    params["nrt_max"] = tf.nrt.max_value
-            if tf.grt:
-                if tf.grt.min_value is not None:
-                    where_clauses.append("vw.grt >= :grt_min")
-                    params["grt_min"] = tf.grt.min_value
-                if tf.grt.max_value is not None:
-                    where_clauses.append("vw.grt <= :grt_max")
-                    params["grt_max"] = tf.grt.max_value
-            if tf.rgrt:
-                if tf.rgrt.min_value is not None:
-                    where_clauses.append("vw.rgrt >= :rgrt_min")
-                    params["rgrt_min"] = tf.rgrt.min_value
-                if tf.rgrt.max_value is not None:
-                    where_clauses.append("vw.rgrt <= :rgrt_max")
-                    params["rgrt_max"] = tf.rgrt.max_value
-
-        where_sql = " AND ".join(where_clauses)
-
-        count_query = text(f"""
-            SELECT COUNT(DISTINCT vw.disbursement_seq)
-            FROM {SCHEMA_NAME}.vw_dashboard_data vw
-            LEFT JOIN {SCHEMA_NAME}.txn_disbursement td ON vw.disbursement_seq = td.disbursement_seq
-            WHERE {where_sql}
-        """)
-
-        standard_count = db.execute(count_query, params).scalar() or 0
-
-        data_query_str = f"""
-            SELECT 
-                vw.disbursement_seq,
-                vw.client_id,
-                vw.etd,
-                vw.vessel_name,
-                vw.country_id,
-                vw.country_name,
-                vw.port_id,
-                vw.port_name,
-                vw.loa,
-                vw.grt,
-                vw.rgrt,
-                vw.nrt,
-                vw.loss_prevention_pda,
-                vw.loss_prevention_fda,
-                vw.total_loss_prevented,
-                vw.loss_prevented_reason,
-                vw.fda_amount,
-                vw.pda_amount,
-                vw.manual_fda_amount,
-                vw.manual_pda_amount,
-                td.voyage AS voyage_no,
-                NULL::text AS vessel_type,
-                NULL::text AS port_func,
-                NULL::text AS arrival_local,
-                NULL::text AS departure_local,
-                NULL::numeric AS port_days,
-                NULL::text AS agent,
-                NULL::text AS cargo_grade,
-                NULL::text AS counterparty_short_name,
-                NULL::text AS imo_no,
-                NULL::numeric AS advance_amt,
-                NULL::numeric AS final_amt,
-                td.advance_amount_remitted,
-                td.outstanding_balance,
-                td.remark
-            FROM {SCHEMA_NAME}.vw_dashboard_data vw
-            LEFT JOIN {SCHEMA_NAME}.txn_disbursement td ON vw.disbursement_seq = td.disbursement_seq
-            WHERE {where_sql}
-            ORDER BY vw.etd DESC NULLS LAST
-        """
-
-        # Determine if we need to also fetch ankkumam data
-        ankkumam_clients = []
-        if client_ids_list:
-            for cid in client_ids_list:
-                if str(cid) == '83':
-                    ankkumam_clients.append("ESDMCC")
-                elif str(cid) == '14':
-                    ankkumam_clients.append("NWL")
-        else:
-            ankkumam_clients = ["ESDMCC", "NWL"]
-
-        if ankkumam_clients:
-            # Fetch ALL records from both sources (no per-source pagination)
-            # then combine and paginate the merged result
-            data_query_all = text(data_query_str)
-            raw_std = list(db.execute(data_query_all, params).mappings().all())
-            standard_records = [dict(r, data_source="standard") for r in raw_std]
-
-            ankkumam_records, ankkumam_count = DashboardRepository._get_ankkumam_records(
-                ankkumam_clients, data_request, is_meraki_user, True, 0, db
-            )
-
-            # Merge both record sets (Prod first, then Ankkumam)
-            from app.utils.dedup_utils import deduplicate_records
-            all_records = standard_records + ankkumam_records
-            all_records = deduplicate_records(all_records)
-            total_count = len(all_records)
-
-            def get_sort_key(record):
-                val = record.get("etd")
-                if not val:
-                    return ""
-                if hasattr(val, "isoformat"):
-                    return val.isoformat()
-                return str(val)
-                
-            all_records.sort(key=get_sort_key, reverse=True)
-
-            # Apply pagination on merged data
-            if not is_all_records:
-                all_records = all_records[offset:offset + data_request.pageSize]
-
-            return all_records, total_count
-        else:
-            # No ankkumam mapping, standard flow only
-            if not is_all_records:
-                data_query_str += " OFFSET :offset LIMIT :limit"
-
-            data_query = text(data_query_str)
-            if not is_all_records:
-                params["offset"] = offset
-                params["limit"] = data_request.pageSize
-
-            raw_std = list(db.execute(data_query, params).mappings().all())
-            standard_records = [dict(r, data_source="standard") for r in raw_std]
-            return standard_records, standard_count
-
-    @staticmethod
-    def update_dashboard_row(payload, db: Session):
-        """
-        Update advance_amount_remitted, outstanding_balance, and remark for a row in standard or excel schema.
-        Supports setting values to numbers/strings or setting them to null/None.
-        """
-        ds = (payload.data_source or "standard").lower()
-        update_fields = payload.model_dump(exclude_unset=True) if hasattr(payload, 'model_dump') else payload.dict(exclude_unset=True)
-
-        d_seq = payload.disbursement_seq
-        if isinstance(d_seq, str) and d_seq.startswith("Kamba"):
-            d_seq = int(d_seq.replace("Kamba", ""))
-        else:
-            d_seq = int(d_seq)
-
-        if ds == "excel":
-            row = db.query(ExcelDisbursementsTotalPortCost).filter(ExcelDisbursementsTotalPortCost.id == d_seq).first()
-            if not row:
-                raise ValueError(f"Excel disbursement record with ID {d_seq} not found")
-            if "advance_amount_remitted" in update_fields:
-                row.advance_amount_remitted = payload.advance_amount_remitted
-            if "outstanding_balance" in update_fields:
-                row.outstanding_balance = payload.outstanding_balance
-            if "remark" in update_fields:
-                row.remark = payload.remark
-            db.commit()
-            db.refresh(row)
-            return row
-        else:
-            row = db.query(TxnDisbursement).filter(TxnDisbursement.disbursement_seq == d_seq).first()
-            if not row:
-                raise ValueError(f"Standard disbursement record with seq {d_seq} not found")
-            if "advance_amount_remitted" in update_fields:
-                row.advance_amount_remitted = payload.advance_amount_remitted
-            if "outstanding_balance" in update_fields:
-                row.outstanding_balance = payload.outstanding_balance
-            if "remark" in update_fields:
-                row.remark = payload.remark
-            db.commit()
-            db.refresh(row)
-            return row
-
-    
-    @staticmethod
-    def _get_kamba_filter_data(kamba_company_ids, db):
-        """
-        Get filter data from kamba_data_prod, optionally filtered by company IDs.
-        Returns dict with vessel_name, country_name, port_name lists and grt/loa ranges.
-        """
-        try:
-            if kamba_company_ids:
-                ids_str = ",".join(str(i) for i in kamba_company_ids)
-                vessel_sql = f"""
-                    SELECT DISTINCT v.vessel FROM kamba_data_prod.disbursements d
-                    JOIN kamba_data_prod.vessels v ON d.vessels_id = v.id
-                    WHERE d.companies_id IN ({ids_str}) AND v.vessel IS NOT NULL AND v.vessel != ''
-                """
-                country_sql = f"""
-                    SELECT DISTINCT c.country FROM kamba_data_prod.disbursements d
-                    JOIN kamba_data_prod.countries c ON d.countries_id = c.id
-                    WHERE d.companies_id IN ({ids_str}) AND c.country IS NOT NULL AND c.country != ''
-                """
-                port_sql = f"""
-                    SELECT DISTINCT p.port FROM kamba_data_prod.disbursements d
-                    JOIN kamba_data_prod.ports p ON d.ports_id = p.id
-                    WHERE d.companies_id IN ({ids_str}) AND p.port IS NOT NULL AND p.port != ''
-                """
-                grt_sql = f"""
-                    SELECT MIN(v.grt), MAX(v.grt), MIN(v.loa), MAX(v.loa),
-                           MIN(v.nrt), MAX(v.nrt), MIN(v.rgrt), MAX(v.rgrt)
-                    FROM kamba_data_prod.disbursements d
-                    JOIN kamba_data_prod.vessels v ON d.vessels_id = v.id
-                    WHERE d.companies_id IN ({ids_str}) AND v.grt IS NOT NULL
-                """
-            else:
-                vessel_sql = "SELECT DISTINCT vessel FROM kamba_data_prod.vessels WHERE vessel IS NOT NULL AND vessel != ''"
-                country_sql = "SELECT DISTINCT country FROM kamba_data_prod.countries WHERE country IS NOT NULL AND country != ''"
-                port_sql = "SELECT DISTINCT port FROM kamba_data_prod.ports WHERE port IS NOT NULL AND port != ''"
-                grt_sql = "SELECT MIN(grt), MAX(grt), MIN(loa), MAX(loa), MIN(nrt), MAX(nrt), MIN(rgrt), MAX(rgrt) FROM kamba_data_prod.vessels WHERE grt IS NOT NULL"
-
-            vessel_names = [v[0] for v in db.execute(text(vessel_sql)).all() if v[0]]
-            country_names = [c[0] for c in db.execute(text(country_sql)).all() if c[0]]
-            port_names = [p[0] for p in db.execute(text(port_sql)).all() if p[0]]
-
-            stats_res = db.execute(text(grt_sql)).first()
-            return {
-                "vessel_name": vessel_names,
-                "country_name": country_names,
-                "port_name": port_names,
-                "grt_min": float(stats_res[0]) if stats_res and stats_res[0] is not None else None,
-                "grt_max": float(stats_res[1]) if stats_res and stats_res[1] is not None else None,
-                "loa_min": float(stats_res[2]) if stats_res and stats_res[2] is not None else None,
-                "loa_max": float(stats_res[3]) if stats_res and stats_res[3] is not None else None,
-                "nrt_min": float(stats_res[4]) if stats_res and stats_res[4] is not None else None,
-                "nrt_max": float(stats_res[5]) if stats_res and stats_res[5] is not None else None,
-                "rgrt_min": float(stats_res[6]) if stats_res and stats_res[6] is not None else None,
-                "rgrt_max": float(stats_res[7]) if stats_res and stats_res[7] is not None else None,
-            }
-        except Exception as e:
-            print(f"Error querying kamba filter data: {e}")
+            import traceback
+            with open("/tmp/ankkumam_error.log", "w") as f:
+                f.write(traceback.format_exc())
+            print(f"Error computing deduped ankkumam summary: {e}")
             return None
 
     @staticmethod
