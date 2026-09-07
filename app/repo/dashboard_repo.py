@@ -109,7 +109,7 @@ class DashboardRepository:
             with open("/tmp/ankkumam_error.log", "w") as f:
                 f.write(traceback.format_exc())
             print(f"Error computing deduped ankkumam summary: {e}")
-            return None
+            return [], 0
 
     @staticmethod
     def _get_ankkumam_summary_for_companies(ankkumam_clients, db):
@@ -225,7 +225,7 @@ class DashboardRepository:
             with open("/tmp/ankkumam_error.log", "w") as f:
                 f.write(traceback.format_exc())
             print(f"Error computing deduped ankkumam summary: {e}")
-            return None
+            return [], 0
             
             # Fetch raw ankkumam records
             class DummyDataRequest:
@@ -329,7 +329,7 @@ class DashboardRepository:
             with open("/tmp/ankkumam_error.log", "w") as f:
                 f.write(traceback.format_exc())
             print(f"Error computing deduped ankkumam summary: {e}")
-            return None
+            return [], 0
             
             clients_str = ",".join(f"'{c}'" for c in ankkumam_clients)
             where_sql = f"d.client IN ({clients_str})"
@@ -391,7 +391,7 @@ class DashboardRepository:
             with open("/tmp/ankkumam_error.log", "w") as f:
                 f.write(traceback.format_exc())
             print(f"Error computing deduped ankkumam summary: {e}")
-            return None
+            return [], 0
 
     @staticmethod
     def _merge_summaries(prod_summary, kamba_summary):
@@ -669,7 +669,38 @@ class DashboardRepository:
                 params["offset"] = offset
 
             rows = db.execute(text(data_sql), params).mappings().all()
+            
+            # Fetch vessel stats from PROD schema (using normalized matching)
+            vessel_names = list(set([r.get("vessel_name") for r in rows if r.get("vessel_name")]))
+            vessel_stats_map = {}
+            if vessel_names:
+                from sqlalchemy import func
+                from app.models.vw_fda_processing_details import VwFdaProcessingDetails
+                
+                norm_vessels = [str(v).upper().replace(" ", "") for v in vessel_names]
+                norm_col = func.replace(func.upper(VwFdaProcessingDetails.vessel_name), ' ', '')
+                
+                stats = db.query(
+                    norm_col.label("norm_vessel"),
+                    func.max(VwFdaProcessingDetails.loa).label("loa"),
+                    func.max(VwFdaProcessingDetails.grt).label("grt"),
+                    func.max(VwFdaProcessingDetails.rgrt).label("rgrt"),
+                    func.max(VwFdaProcessingDetails.nrt).label("nrt")
+                ).filter(norm_col.in_(norm_vessels)).group_by(norm_col).all()
+                
+                for s in stats:
+                    vessel_stats_map[s.norm_vessel] = {
+                        "loa": s.loa if s.loa is not None else "-",
+                        "grt": s.grt if s.grt is not None else "-",
+                        "rgrt": s.rgrt if s.rgrt is not None else "-",
+                        "nrt": s.nrt if s.nrt is not None else "-"
+                    }
+
             for r in rows:
+                v_name = r.get("vessel_name")
+                norm_v = str(v_name).upper().replace(" ", "") if v_name else ""
+                v_stats = vessel_stats_map.get(norm_v, {"loa": "-", "grt": "-", "rgrt": "-", "nrt": "-"})
+
                 etd_val = r.get("etd")
                 etd_str = etd_val.isoformat() if hasattr(etd_val, 'isoformat') else str(etd_val or "")
                 
@@ -699,7 +730,7 @@ class DashboardRepository:
                     "country_name": r["country_name"] or "N/A",
                     "port_id": None,
                     "port_name": r["port_name"] or "N/A",
-                    "loa": "-", "grt": "-", "rgrt": "-", "nrt": "-",
+                    "loa": v_stats["loa"], "grt": v_stats["grt"], "rgrt": v_stats["rgrt"], "nrt": v_stats["nrt"],
                     "loss_prevention_pda": lp_pda,
                     "loss_prevention_fda": lp_fda,
                     "total_loss_prevented": tot_lp,
@@ -726,7 +757,7 @@ class DashboardRepository:
             with open("/tmp/ankkumam_error.log", "w") as f:
                 f.write(traceback.format_exc())
             print(f"Error computing deduped ankkumam summary: {e}")
-            return None
+            return [], 0
 
     @staticmethod
     def get_fda_processing_details(data_request, db: Session, is_meraki_user: bool = False):
