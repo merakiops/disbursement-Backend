@@ -170,6 +170,7 @@ class DisbursementRepository:
                 ankkumam_records.append(DisbursementTrackerDTO(
                     disbursement_seq=r['disbursement_seq'],
                     disbursement_id=r['disbursement_seq'],
+                    created_on=r["created_on"],
                     source="Ankkumam",
                     pic=None,
                     client_name=r["client_name"],
@@ -623,7 +624,7 @@ class DisbursementRepository:
                 d.total_savings_usd,
                 d.purpose,
                 d.reason,
-                d.loaded_at
+                d.loaded_at AS created_on
             FROM ankkumam_data_excel.data d
             WHERE d.mda_id = :seq
         '''
