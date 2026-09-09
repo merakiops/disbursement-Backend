@@ -336,7 +336,8 @@ class DemurrageService:
                 "Net Demurrage": voyage.summary.net_demurrage if voyage.summary else 0.0,
                 "Report Sent Date": voyage.final_pdf_date ,
                 "Revised Date": voyage.updated_at,
-                "Action": voyage.report_s3_url
+                "Action": voyage.report_s3_url,
+                "final_pdf": voyage.final_pdf
             }
             
             for i, port in enumerate(load_ports, 1):
