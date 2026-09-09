@@ -131,6 +131,7 @@ class DashboardRepository:
             prod_cids = []
             if "ESDMCC" in ankkumam_clients: prod_cids.append(83)
             if "NWL" in ankkumam_clients: prod_cids.append(14)
+            if "ALGHAF" in ankkumam_clients: prod_cids.append(2)
             
             # Fetch PROD keys exactly as dashboard does (only records with FDA amount)
             from sqlalchemy import text
@@ -243,6 +244,7 @@ class DashboardRepository:
             prod_cids = []
             if "ESDMCC" in ankkumam_clients: prod_cids.append(83)
             if "NWL" in ankkumam_clients: prod_cids.append(14)
+            if "ALGHAF" in ankkumam_clients: prod_cids.append(2)
             
             from app.models.vw_disbursement_tracker import DisbursementTracker
             prod_records = db.query(
@@ -461,11 +463,18 @@ class DashboardRepository:
 
         ds = (data_source or "all").lower()
 
-        # Backward compatibility: client_id=85 (Kamba) shows all kamba data
+        # Backward compatibility: client_id=85 (Kamba) shows all kamba data plus ALGHAF
         if is_kamba_client or (ds in ["kamba", "mysql"] and client_ids and 85 in [int(x) for x in client_ids if str(x).isdigit()] and len(client_ids) == 1):
-            result = DashboardRepository._get_kamba_summary_for_companies(None, db)
-            if result:
-                return result
+            kamba_summary = DashboardRepository._get_kamba_summary_for_companies(None, db)
+            ankkumam_summary = DashboardRepository._get_ankkumam_summary_for_companies(["ALGHAF"], db)
+            if kamba_summary and ankkumam_summary:
+                return DashboardRepository._merge_summaries(kamba_summary, ankkumam_summary)
+            elif kamba_summary:
+                return kamba_summary
+            elif ankkumam_summary:
+                return ankkumam_summary
+            else:
+                return {}
 
         if is_excel_client or ds == "excel":
             try:
@@ -534,8 +543,10 @@ class DashboardRepository:
                     ankkumam_clients.append("ESDMCC")
                 elif str(cid) == '14':
                     ankkumam_clients.append("NWL")
+                elif str(cid) == '2' or str(cid) == '85':
+                    ankkumam_clients.append("ALGHAF")
         else:
-            ankkumam_clients = ["ESDMCC", "NWL"]
+            ankkumam_clients = ["ESDMCC", "NWL", "ALGHAF"]
 
         if ankkumam_clients:
             ankkumam_summary = DashboardRepository._get_ankkumam_summary_for_companies(ankkumam_clients, db)
@@ -719,7 +730,7 @@ class DashboardRepository:
                 try: tot_lp = abs(float(str(r["total_savings_usd"]).replace(",", ""))) if r["total_savings_usd"] is not None else 0.0
                 except: tot_lp = 0.0
 
-                c_id = 83 if str(r.get("client")) == "ESDMCC" else (14 if str(r.get("client")) == "NWL" else 85)
+                c_id = 83 if str(r.get("client")) == "ESDMCC" else (14 if str(r.get("client")) == "NWL" else (2 if str(r.get("client")) == "ALGHAF" else 85))
 
                 ankkumam_records.append({
                     "disbursement_seq": r['disbursement_seq'],
@@ -801,7 +812,7 @@ class DashboardRepository:
 
         if ds in ["ankkumam", "kamba", "mysql"]:
             return DashboardRepository._get_ankkumam_records(
-                ["ESDMCC", "NWL"], data_request, is_meraki_user, is_all_records, offset, db
+                ["ESDMCC", "NWL", "ALGHAF"], data_request, is_meraki_user, is_all_records, offset, db
             )
 
         if ds == "excel":
@@ -1060,8 +1071,10 @@ class DashboardRepository:
                     ankkumam_clients.append("ESDMCC")
                 elif str(cid) == '14':
                     ankkumam_clients.append("NWL")
+                elif str(cid) == '2' or str(cid) == '85':
+                    ankkumam_clients.append("ALGHAF")
         else:
-            ankkumam_clients = ["ESDMCC", "NWL"]
+            ankkumam_clients = ["ESDMCC", "NWL", "ALGHAF"]
 
         if ankkumam_clients:
             # Fetch ALL records from both sources (no per-source pagination)
@@ -1197,7 +1210,7 @@ class DashboardRepository:
                 min_grt = float(grt_res[0]) if grt_res and grt_res[0] is not None else None
                 max_grt = float(grt_res[1]) if grt_res and grt_res[1] is not None else None
 
-                return {
+                kamba_filters = {
                     "clients": clients_list,
                     "vessel_name": vessel_names,
                     "country_name": country_names,
@@ -1211,6 +1224,12 @@ class DashboardRepository:
                     "cargo_grade": [],
                     "counterparty_short_name": []
                 }
+                ankkumam_filters = DashboardRepository._get_ankkumam_filter_data(["ALGHAF"], db)
+                if ankkumam_filters:
+                    kamba_filters["vessel_name"] = sorted(list(set(kamba_filters["vessel_name"] + ankkumam_filters.get("vessel_name", []))))
+                    kamba_filters["country_name"] = sorted(list(set(kamba_filters["country_name"] + ankkumam_filters.get("country_name", []))))
+                    kamba_filters["port_name"] = sorted(list(set(kamba_filters["port_name"] + ankkumam_filters.get("port_name", []))))
+                return kamba_filters
             except Exception as e:
                 print("Error querying PostgreSQL kamba_data_prod filter data:", e)
 
@@ -1294,13 +1313,16 @@ class DashboardRepository:
         ankkumam_clients = []
         if client_id is None:
             should_merge_ankkumam = True
-            ankkumam_clients = ["ESDMCC", "NWL"]
+            ankkumam_clients = ["ESDMCC", "NWL", "ALGHAF"]
         elif str(client_id) == '83':
             should_merge_ankkumam = True
             ankkumam_clients = ["ESDMCC"]
         elif str(client_id) == '14':
             should_merge_ankkumam = True
             ankkumam_clients = ["NWL"]
+        elif str(client_id) == '2' or str(client_id) == '85':
+            should_merge_ankkumam = True
+            ankkumam_clients = ["ALGHAF"]
 
         if should_merge_ankkumam and ankkumam_clients:
             ankkumam_filter = DashboardRepository._get_ankkumam_filter_data(ankkumam_clients, db)
