@@ -622,14 +622,14 @@ class DashboardRepository:
             if data_request.tableFilter:
                 tf = data_request.tableFilter
                 if tf.vessel and len(tf.vessel) > 0:
-                    where_clauses.append("d.vessel IN :vessels")
-                    params["vessels"] = tuple(tf.vessel)
+                    where_clauses.append("d.vessel = ANY(:vessels)")
+                    params["vessels"] = list(tf.vessel)
                 if tf.country and len(tf.country) > 0:
-                    where_clauses.append("d.country IN :countries")
-                    params["countries"] = tuple(tf.country)
+                    where_clauses.append("d.country = ANY(:countries)")
+                    params["countries"] = list(tf.country)
                 if tf.port and len(tf.port) > 0:
-                    where_clauses.append("d.port IN :ports")
-                    params["ports"] = tuple(tf.port)
+                    where_clauses.append("d.port = ANY(:ports)")
+                    params["ports"] = list(tf.port)
 
             current_year = datetime.now().year
             has_year_filter = False
