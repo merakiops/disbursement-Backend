@@ -622,14 +622,14 @@ class DashboardRepository:
             if data_request.tableFilter:
                 tf = data_request.tableFilter
                 if tf.vessel and len(tf.vessel) > 0:
-                    where_clauses.append("d.vessel = ANY(:vessels)")
-                    params["vessels"] = list(tf.vessel)
+                    where_clauses.append("UPPER(d.vessel) = ANY(:vessels)")
+                    params["vessels"] = [str(x).upper() for x in tf.vessel]
                 if tf.country and len(tf.country) > 0:
-                    where_clauses.append("d.country = ANY(:countries)")
-                    params["countries"] = list(tf.country)
+                    where_clauses.append("UPPER(d.country) = ANY(:countries)")
+                    params["countries"] = [str(x).upper() for x in tf.country]
                 if tf.port and len(tf.port) > 0:
-                    where_clauses.append("d.port = ANY(:ports)")
-                    params["ports"] = list(tf.port)
+                    where_clauses.append("UPPER(d.port) = ANY(:ports)")
+                    params["ports"] = [str(x).upper() for x in tf.port]
 
             current_year = datetime.now().year
             has_year_filter = False
@@ -972,14 +972,14 @@ class DashboardRepository:
         if data_request.tableFilter:
             tf = data_request.tableFilter
             if tf.vessel:
-                where_clauses.append("vw.vessel_name = ANY(:vessel_names)")
-                params["vessel_names"] = list(tf.vessel)
+                where_clauses.append("UPPER(vw.vessel_name) = ANY(:vessel_names)")
+                params["vessel_names"] = [str(x).upper() for x in tf.vessel]
             if tf.country:
-                where_clauses.append("vw.country_name = ANY(:country_names)")
-                params["country_names"] = list(tf.country)
+                where_clauses.append("UPPER(vw.country_name) = ANY(:country_names)")
+                params["country_names"] = [str(x).upper() for x in tf.country]
             if tf.port:
-                where_clauses.append("vw.port_name = ANY(:port_names)")
-                params["port_names"] = list(tf.port)
+                where_clauses.append("UPPER(vw.port_name) = ANY(:port_names)")
+                params["port_names"] = [str(x).upper() for x in tf.port]
             if tf.loa:
                 if tf.loa.min_value is not None:
                     where_clauses.append("vw.loa >= :loa_min")
