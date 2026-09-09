@@ -52,3 +52,4 @@ class DisbursementTracker(Base):
     advance_amount_remitted=Column(Float, nullable=True)
     outstanding_balance=Column(Float, nullable=True)
     remark=Column(String, nullable=True)
+    created_on=Column(DateTime, nullable=True)

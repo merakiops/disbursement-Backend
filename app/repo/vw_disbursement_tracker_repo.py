@@ -137,7 +137,7 @@ class DisbursementRepository:
                     d.savings_at_fda_usd,
                     d.purpose,
                     d.reason,
-                    d.loaded_at
+                    d.fda_received_date AS created_on
                 FROM ankkumam_data_excel.data d
                 WHERE {where_sql}
                 ORDER BY d.excel_row ASC
@@ -624,7 +624,7 @@ class DisbursementRepository:
                 d.total_savings_usd,
                 d.purpose,
                 d.reason,
-                d.loaded_at AS created_on
+                d.fda_received_date AS created_on
             FROM ankkumam_data_excel.data d
             WHERE d.mda_id = :seq
         '''
