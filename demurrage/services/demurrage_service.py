@@ -325,6 +325,7 @@ class DemurrageService:
                 "Vessel": voyage.vessel,
                 "IMO": voyage.vessel_imo,
                 "Voyage": voyage.voyage_no,
+                "Nomination Date": voyage.created_at,
                 "Charterparty Terms": voyage.charterparty_terms,
                 "Charterers Name": voyage.charteres_name,
                 "BL Dated": voyage.bl_dated,
