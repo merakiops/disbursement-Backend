@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session, joinedload
-from app.dto.pda_dto import TxnDisbursementInitiateDTo,TxnDisbursementDto,TxnDisbursementInitiateManualDTo,TxnPdaEditDto,DisbursementClientFormRequestDTO,RecalculateDisbursementRequestDTO,TxnClientApprovalRequestInitiateDTo,OTPValidationResponseDTO,PtmInstrMailRequestDTO
+from app.dto.pda_dto import CheckDuplicateDisbursementDTO, TxnDisbursementInitiateDTo,TxnDisbursementDto,TxnDisbursementInitiateManualDTo,TxnPdaEditDto,DisbursementClientFormRequestDTO,RecalculateDisbursementRequestDTO,TxnClientApprovalRequestInitiateDTo,OTPValidationResponseDTO,PtmInstrMailRequestDTO
 from app.dto.vw_vessel_details_comparision_dto import VesselDetailsComparisonDto
 from app.models.txn_disbursement import TxnDisbursement
 from app.models.user import User
@@ -1794,3 +1794,69 @@ class PDARepository:
             raise ValueError("No valid port agents provided to initiate client disbursement.")
             
         return created_disbursements
+
+
+@staticmethod
+def check_duplicate_record(dto: CheckDuplicateDisbursementDTO, db: Session):
+    """
+    Checks if an active/non-completed record exists matching vessel_id, port_id, and ETA.
+    """
+    completed_status = StatusRepository.get_status_details_by_name('COMPLETED', db)
+    completed_status_id = completed_status.status_id if completed_status else None
+
+    if dto.check_type == 'FDA':
+        query = db.query(
+            TxnDisbursement, 
+            TxnFDA.fda_eta.label("eta")
+        ).join(
+            TxnFDA, TxnFDA.disbursement_seq == TxnDisbursement.disbursement_seq
+        ).filter(
+            TxnFDA.state.notin_(["D", "N"])
+        )
+        if completed_status_id:
+            query = query.filter(TxnFDA.status != completed_status_id)
+            
+        if dto.eta:
+            query = query.filter(func.date(TxnFDA.fda_eta) == func.date(dto.eta))
+    else:
+        query = db.query(
+            TxnDisbursement, 
+            PDAModel.pda_eta.label("eta")
+        ).join(
+            PDAModel, PDAModel.disbursement_seq == TxnDisbursement.disbursement_seq
+        ).filter(
+            PDAModel.state.notin_(["D", "N"])
+        )
+        if completed_status_id:
+            query = query.filter(PDAModel.status != completed_status_id)
+            
+        if dto.eta:
+            query = query.filter(func.date(PDAModel.pda_eta) == func.date(dto.eta))
+
+    if dto.vessel_id:
+        query = query.filter(TxnDisbursement.vsl_id == dto.vessel_id)
+    if dto.port_id:
+        query = query.filter(TxnDisbursement.port_id == dto.port_id)
+
+    record = query.first()
+    
+    if not record:
+        return {"exists": False}
+
+    disbursement, record_eta = record
+
+    # Fetch names for response details
+    from app.models.vessels import MaVessel
+    from app.models.ports import MaPort
+
+    vessel_obj = db.query(MaVessel).filter(MaVessel.vessel_id == disbursement.vsl_id).first()
+    port_obj = db.query(MaPort).filter(MaPort.port_id == disbursement.port_id).first()
+
+    return {
+        "exists": True,
+        "vessel_name": vessel_obj.name if vessel_obj else None,
+        "port_name": port_obj.name if port_obj else None,
+        "eta": record_eta or disbursement.eta,
+        "disbursement_id": disbursement.disbursement_id,
+        "disbursement_seq": disbursement.disbursement_seq
+    }    

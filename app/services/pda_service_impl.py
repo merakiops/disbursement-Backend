@@ -12,7 +12,7 @@ from fastapi import BackgroundTasks, HTTPException, status
 from sqlalchemy.orm import Session, joinedload
 from datetime import datetime
 from app.services.pda_service import PDAService
-from app.dto.pda_dto import ReturnToPdaRequestDTO,TxnDisbursementInitiateDTo,DisbursementPAFormRequestDTO,TxnDisbursementInitiateManualDTo,TxnPdaEditDto, TxnReRequestInitiateDTo,DisbursementClientFormRequestDTO,RecalculateDisbursementRequestDTO,TxnClientApprovalRequestInitiateDTo, TxnDisbursementDto,RecordState,PtmInstrMailRequestDTO
+from app.dto.pda_dto import CheckDuplicateDisbursementDTO, CheckDuplicateResponseDTO, ReturnToPdaRequestDTO,TxnDisbursementInitiateDTo,DisbursementPAFormRequestDTO,TxnDisbursementInitiateManualDTo,TxnPdaEditDto, TxnReRequestInitiateDTo,DisbursementClientFormRequestDTO,RecalculateDisbursementRequestDTO,TxnClientApprovalRequestInitiateDTo, TxnDisbursementDto,RecordState,PtmInstrMailRequestDTO
 from app.repo.pda_repo import PDARepository
 from app.models.txn_pa_form_link import PAFormLink
 from app.models.txn_client_link import ClientFormLink
@@ -960,3 +960,24 @@ class PDAServiceImpl(PDAService):
                 "purpose_id": [disb.purpose_id] if disb.purpose_id else []
             }] if disb.portagent_id else []
         )
+
+
+
+def check_existing_disbursement(self, dto: CheckDuplicateDisbursementDTO, db: Session) -> CheckDuplicateResponseDTO:
+    result = self.pda_repo.check_duplicate_record(dto, db)
+    
+    if result.get("exists"):
+        return CheckDuplicateResponseDTO(
+            exists=True,
+            message="Matching record already exists in the database.",
+            vessel_name=result.get("vessel_name"),
+            port_name=result.get("port_name"),
+            eta=result.get("eta"),
+            disbursement_id=result.get("disbursement_id"),
+            disbursement_seq=result.get("disbursement_seq")
+        )
+    
+    return CheckDuplicateResponseDTO(
+        exists=False,
+        message="No matching record found."
+    )

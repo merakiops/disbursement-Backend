@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from typing import List
 from app.db import get_db
 from app.core.decorators import jwt_required,role_required
-from app.dto.pda_dto import TxnDisbursementInitiateDTo,ValidatePdaLink,ReturnToPdaResponseDTO,TxnDisbursementDto,OTPValidationResponseDTO,linkValidationResponseDTO,TxnDisbursementInitiateManualDTo,TxnPdaEditDto,TxnClientApprovalRequestInitiateDTo,DisbursementClientFormRequestDTO ,RecalculateDisbursementRequestDTO,ValidateClientLinkNoAuth,linkValidationNoAuthResponseDTO,PtmInstrMailRequestDTO
+from app.dto.pda_dto import CheckDuplicateDisbursementDTO, CheckDuplicateResponseDTO, TxnDisbursementInitiateDTo,ValidatePdaLink,ReturnToPdaResponseDTO,TxnDisbursementDto,OTPValidationResponseDTO,linkValidationResponseDTO,TxnDisbursementInitiateManualDTo,TxnPdaEditDto,TxnClientApprovalRequestInitiateDTo,DisbursementClientFormRequestDTO ,RecalculateDisbursementRequestDTO,ValidateClientLinkNoAuth,linkValidationNoAuthResponseDTO,PtmInstrMailRequestDTO
 from app.services.pda_service_impl import PDAServiceImpl
 import uuid
 from app.core.security import encrypt_token, encrypt_token_mail,decrypt_token_mail
@@ -1020,3 +1020,28 @@ async def send_client_comment(
     except Exception as e:
         logger.error(f"Error in client_comment: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+
+
+@disbursementController.post(
+    "/api/v1/check_duplicate_disbursement", 
+    tags=["Disbursement"], 
+    response_model=CheckDuplicateResponseDTO
+)
+@jwt_required
+@role_required(ALLOWED_ROLES_ALL)
+async def check_duplicate_disbursement(
+    request: Request, 
+    request_data: CheckDuplicateDisbursementDTO, 
+    db: Session = Depends(get_db)
+):
+    try:
+        response = pda_service.check_existing_disbursement(request_data, db)
+        return response
+    except Exception as e:
+        logger.error(f"Error checking duplicate disbursement: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to check duplicate record."
+        )    

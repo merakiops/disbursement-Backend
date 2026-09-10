@@ -715,3 +715,21 @@ class PtmInstrMailRequestDTO(BaseModel):
     update_signature: Optional[str] = None
     bank_details: Optional[Dict[str, Any]] = None
     attachments: Optional[List[Any]] = None
+
+
+class CheckDuplicateDisbursementDTO(BaseModel):
+    vessel_id: Optional[int] = None
+    port_id: Optional[int] = None
+    eta: Optional[datetime] = None
+    client_id: Optional[int] = None
+    portagent_id: Optional[int] = None
+    check_type: Optional[str] = "PDA"  # Options: "PDA" or "FDA"
+
+class CheckDuplicateResponseDTO(BaseModel):
+    exists: bool
+    message: str
+    vessel_name: Optional[str] = None
+    port_name: Optional[str] = None
+    eta: Optional[datetime] = None
+    disbursement_id: Optional[str] = None
+    disbursement_seq: Optional[int] = None
