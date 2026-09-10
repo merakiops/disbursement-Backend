@@ -218,7 +218,7 @@ class DashboardRepository:
                 "countries": len(c_set),
                 "ports": len(p_set),
                 "vessels": len(v_set),
-                "total_pda": tot_disb,
+                "total_pda": completed_pda,
                 "completed_pda": completed_pda,
                 "under_process_pda": under_process_pda,
                 "total_fda": tot_disb,
