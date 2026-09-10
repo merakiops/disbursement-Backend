@@ -1000,7 +1000,8 @@ class DisbursementRepository:
             bank_dict = {
                 "account_holder_name": None,
                 "account_no": None,
-                "swift_code": None
+                "swift_code": None,
+                "bank_name": None
             }
 
             # 1. Try fetching from port agent company bank_details_id / company_id in DB
@@ -1022,6 +1023,7 @@ class DisbursementRepository:
                     bank_dict["account_holder_name"] = b_obj.beneficiary_acc_holder_name
                     bank_dict["account_no"] = b_obj.iban_number or b_obj.current_account_number
                     bank_dict["swift_code"] = b_obj.swift_code or b_obj.bic_code
+                    bank_dict["bank_name"] = b_obj.bank_name
 
             # 2. Fallback to PDA portagent_pda_data / meraki_pda_data bank details JSON if not found
             if (not bank_dict["account_holder_name"] or not bank_dict["account_no"]) and pda:
@@ -1039,16 +1041,19 @@ class DisbursementRepository:
                     holder = b_info.get("beneficiary_acc_holder_name") or b_info.get("account_holder_name") or b_info.get("beneficiary_name")
                     acc_no = b_info.get("iban_number") or b_info.get("current_account_number") or b_info.get("account_number") or b_info.get("account_no")
                     swift = b_info.get("swift_code") or b_info.get("bic_code") or b_info.get("swift")
+                    b_name = b_info.get("bank_name")
 
                     if holder and not bank_dict["account_holder_name"]: bank_dict["account_holder_name"] = holder
                     if acc_no and not bank_dict["account_no"]: bank_dict["account_no"] = acc_no
                     if swift and not bank_dict["swift_code"]: bank_dict["swift_code"] = swift
+                    if b_name and not bank_dict["bank_name"]: bank_dict["bank_name"] = b_name
 
             # 3. Always assign bank_dict (convert empty strings to None/null)
             clean_bank_dict = {
                 "account_holder_name": bank_dict["account_holder_name"] if bank_dict["account_holder_name"] else None,
                 "account_no": bank_dict["account_no"] if bank_dict["account_no"] else None,
-                "swift_code": bank_dict["swift_code"] if bank_dict["swift_code"] else None
+                "swift_code": bank_dict["swift_code"] if bank_dict["swift_code"] else None,
+                "bank_name": bank_dict["bank_name"] if bank_dict["bank_name"] else None
             }
             setattr(base_query, "bank_details", clean_bank_dict)
 
