@@ -25,6 +25,25 @@ SCHEMA_NAME = os.getenv("DB_SCHEMA")
 
 
 class DashboardRepository:
+
+    @staticmethod
+    def _get_dynamic_client_mapping(db):
+        from sqlalchemy import text
+        from app.models.company import MaCompany
+        excel_clients_result = db.execute(text("SELECT DISTINCT client FROM ankkumam_data_excel.data WHERE client IS NOT NULL")).fetchall()
+        excel_clients = [r[0].strip() for r in excel_clients_result if r[0]]
+        prod_cid_to_excel_client = {}
+        excel_client_to_prod_cid = {}
+        for ec in excel_clients:
+            comp = db.query(MaCompany).filter(
+                MaCompany.company_type_id == 2,
+                MaCompany.status == 'Y',
+                MaCompany.company_name.ilike(f"{ec}%")
+            ).first()
+            if comp:
+                prod_cid_to_excel_client[comp.company_id] = ec
+                excel_client_to_prod_cid[ec] = comp.company_id
+        return prod_cid_to_excel_client, excel_client_to_prod_cid
     
     @staticmethod
     def _get_kamba_summary_for_companies(kamba_company_ids, db):
@@ -128,10 +147,8 @@ class DashboardRepository:
                 ankkumam_clients, DummyDataRequest(), False, True, 0, db
             )
             
-            prod_cids = []
-            if "ESDMCC" in ankkumam_clients: prod_cids.append(83)
-            if "NWL" in ankkumam_clients: prod_cids.append(14)
-            if "ALGHAF" in ankkumam_clients: prod_cids.append(2)
+            _, excel_to_prod_cid = DashboardRepository._get_dynamic_client_mapping(db)
+            prod_cids = [excel_to_prod_cid[c] for c in ankkumam_clients if c in excel_to_prod_cid]
             
             # Fetch PROD keys exactly as dashboard does (only records with FDA amount)
             from sqlalchemy import text
@@ -256,10 +273,8 @@ class DashboardRepository:
             
             # Fetch PROD keys for dedup (we fetch all active prod records for these clients)
             # Since client mapping: ESDMCC=83, NWL=14
-            prod_cids = []
-            if "ESDMCC" in ankkumam_clients: prod_cids.append(83)
-            if "NWL" in ankkumam_clients: prod_cids.append(14)
-            if "ALGHAF" in ankkumam_clients: prod_cids.append(2)
+            _, excel_to_prod_cid = DashboardRepository._get_dynamic_client_mapping(db)
+            prod_cids = [excel_to_prod_cid[c] for c in ankkumam_clients if c in excel_to_prod_cid]
             
             from app.models.vw_disbursement_tracker import DisbursementTracker
             prod_records = db.query(
@@ -551,17 +566,16 @@ class DashboardRepository:
         prod_summary = dict(result) if result else {}
 
         # Fetch Ankkumam data instead of Kamba
+        prod_cid_to_excel, excel_to_prod_cid = DashboardRepository._get_dynamic_client_mapping(db)
         ankkumam_clients = []
         if client_ids:
             for cid in client_ids:
-                if str(cid) == '83':
-                    ankkumam_clients.append("ESDMCC")
-                elif str(cid) == '14':
-                    ankkumam_clients.append("NWL")
-                elif str(cid) == '2' or str(cid) == '85':
+                if cid and int(cid) in prod_cid_to_excel:
+                    ankkumam_clients.append(prod_cid_to_excel[int(cid)])
+                elif str(cid) == '85' and "ALGHAF" in excel_to_prod_cid:
                     ankkumam_clients.append("ALGHAF")
         else:
-            ankkumam_clients = ["ESDMCC", "NWL", "ALGHAF"]
+            ankkumam_clients = list(excel_to_prod_cid.keys())
 
         if ankkumam_clients:
             ankkumam_summary = DashboardRepository._get_ankkumam_summary_for_companies(ankkumam_clients, db)
@@ -745,7 +759,8 @@ class DashboardRepository:
                 try: tot_lp = abs(float(str(r["total_savings_usd"]).replace(",", ""))) if r["total_savings_usd"] is not None else 0.0
                 except: tot_lp = 0.0
 
-                c_id = 83 if str(r.get("client")) == "ESDMCC" else (14 if str(r.get("client")) == "NWL" else (2 if str(r.get("client")) == "ALGHAF" else 85))
+                _, excel_to_prod_cid = DashboardRepository._get_dynamic_client_mapping(db)
+                c_id = excel_to_prod_cid.get(str(r.get("client")), 85)
 
                 ankkumam_records.append({
                     "disbursement_seq": r['disbursement_seq'],
@@ -829,7 +844,7 @@ class DashboardRepository:
 
         if ds in ["ankkumam", "kamba", "mysql"]:
             return DashboardRepository._get_ankkumam_records(
-                ["ESDMCC", "NWL", "ALGHAF"], data_request, is_meraki_user, is_all_records, offset, db
+                list(DashboardRepository._get_dynamic_client_mapping(db)[1].keys()), data_request, is_meraki_user, is_all_records, offset, db
             )
 
         if ds == "excel":
@@ -1081,17 +1096,16 @@ class DashboardRepository:
         """
 
         # Determine if we need to also fetch ankkumam data
+        prod_cid_to_excel, excel_to_prod_cid = DashboardRepository._get_dynamic_client_mapping(db)
         ankkumam_clients = []
         if client_ids_list:
             for cid in client_ids_list:
-                if str(cid) == '83':
-                    ankkumam_clients.append("ESDMCC")
-                elif str(cid) == '14':
-                    ankkumam_clients.append("NWL")
-                elif str(cid) == '2' or str(cid) == '85':
+                if cid and int(cid) in prod_cid_to_excel:
+                    ankkumam_clients.append(prod_cid_to_excel[int(cid)])
+                elif str(cid) == '85' and "ALGHAF" in excel_to_prod_cid:
                     ankkumam_clients.append("ALGHAF")
         else:
-            ankkumam_clients = ["ESDMCC", "NWL", "ALGHAF"]
+            ankkumam_clients = list(excel_to_prod_cid.keys())
 
         if ankkumam_clients:
             # Fetch ALL records from both sources (no per-source pagination)
@@ -1241,7 +1255,9 @@ class DashboardRepository:
                     "cargo_grade": [],
                     "counterparty_short_name": []
                 }
-                ankkumam_filters = DashboardRepository._get_ankkumam_filter_data(["ALGHAF"], db)
+                _, excel_to_prod_cid = DashboardRepository._get_dynamic_client_mapping(db)
+                alghaf_only = ["ALGHAF"] if "ALGHAF" in excel_to_prod_cid else []
+                ankkumam_filters = DashboardRepository._get_ankkumam_filter_data(alghaf_only, db)
                 if ankkumam_filters:
                     kamba_filters["vessel_name"] = sorted(list(set(kamba_filters["vessel_name"] + ankkumam_filters.get("vessel_name", []))))
                     kamba_filters["country_name"] = sorted(list(set(kamba_filters["country_name"] + ankkumam_filters.get("country_name", []))))
@@ -1326,20 +1342,19 @@ class DashboardRepository:
         ).filter(VwFdaProcessingDetails.rgrt.isnot(None)).first()
 
         # Determine if we need to merge ankkumam data
+        prod_cid_to_excel, excel_to_prod_cid = DashboardRepository._get_dynamic_client_mapping(db)
         should_merge_ankkumam = False
         ankkumam_clients = []
         if client_id is None:
             should_merge_ankkumam = True
-            ankkumam_clients = ["ESDMCC", "NWL", "ALGHAF"]
-        elif str(client_id) == '83':
+            ankkumam_clients = list(excel_to_prod_cid.keys())
+        elif client_id and int(client_id) in prod_cid_to_excel:
             should_merge_ankkumam = True
-            ankkumam_clients = ["ESDMCC"]
-        elif str(client_id) == '14':
+            ankkumam_clients = [prod_cid_to_excel[int(client_id)]]
+        elif str(client_id) == '85':
             should_merge_ankkumam = True
-            ankkumam_clients = ["NWL"]
-        elif str(client_id) == '2' or str(client_id) == '85':
-            should_merge_ankkumam = True
-            ankkumam_clients = ["ALGHAF"]
+            if "ALGHAF" in excel_to_prod_cid:
+                ankkumam_clients = ["ALGHAF"]
 
         if should_merge_ankkumam and ankkumam_clients:
             ankkumam_filter = DashboardRepository._get_ankkumam_filter_data(ankkumam_clients, db)
