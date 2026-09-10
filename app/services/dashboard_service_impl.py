@@ -45,19 +45,27 @@ class DashboardServiceImpl(DashboardService):
             totalFDA=result.get("total_fda") or 0
         )
         
-        pda_progress = ProgressDetailDTO(
-            Completed=result.get("completed_pda") or 0,
-            Underprogress=result.get("under_process_pda") or 0,
-            total=result.get("total_pda") or 0,
-            pdaCompletedNoFda=result.get("pda_completed_no_fda") or 0
+        pda_completed = result.get("completed_pda") or 0
+        pda_under_process = result.get("under_process_pda") or 0
+        pda_total_count = pda_completed + pda_under_process
 
+        pda_progress = ProgressDetailDTO(
+            Completed=pda_completed,
+            Underprogress=pda_under_process,
+            total=pda_total_count,
+            pdaCompletedNoFda=result.get("pda_completed_no_fda") or 0
         )
         
+        fda_completed = result.get("completed_fda") or 0
+        fda_under_process = result.get("under_process_fda") or 0
+        fda_yet_to_process = result.get("yet_to_process") or 0
+        fda_total_count = fda_completed + fda_under_process + fda_yet_to_process
+
         fda_progress = FDAProgressDetailDTO(
-            Completed=result.get("completed_fda") or 0,
-            Underprogress=result.get("under_process_fda") or 0,
-            yetToProcess=result.get("yet_to_process") or 0,
-            total=result.get("total_fda") or 0
+            Completed=fda_completed,
+            Underprogress=fda_under_process,
+            yetToProcess=fda_yet_to_process,
+            total=fda_total_count
         )
         
         overall_progress = OverallProgressDTO(
