@@ -634,7 +634,7 @@ class PDAServiceImpl(PDAService):
             }
             
             # Standard order of fields to render
-            keys_to_render = ["account_holder_name", "account_no", "swift_code"]
+            keys_to_render = ["account_holder_name", "bank_name", "account_no", "swift_code"]
             for k in bank_details.keys():
                 if k not in keys_to_render:
                     keys_to_render.append(k)
