@@ -1798,65 +1798,85 @@ class PDARepository:
 
 @staticmethod
 def check_duplicate_record(dto: CheckDuplicateDisbursementDTO, db: Session):
-    """
-    Checks if an active/non-completed record exists matching vessel_id, port_id, and ETA.
-    """
-    completed_status = StatusRepository.get_status_details_by_name('COMPLETED', db)
-    completed_status_id = completed_status.status_id if completed_status else None
+    try:
+        # 1. Fetch completed status ID safely
+        completed_status_id = None
+        try:
+            completed_status = StatusRepository.get_status_details_by_name('COMPLETED', db)
+            if completed_status:
+                completed_status_id = completed_status.status_id
+        except Exception as e:
+            logger.warning(f"Could not fetch COMPLETED status: {e}")
 
-    if dto.check_type == 'FDA':
-        query = db.query(
-            TxnDisbursement, 
-            TxnFDA.fda_eta.label("eta")
-        ).join(
-            TxnFDA, TxnFDA.disbursement_seq == TxnDisbursement.disbursement_seq
-        ).filter(
-            TxnFDA.state.notin_(["D", "N"])
-        )
-        if completed_status_id:
-            query = query.filter(TxnFDA.status != completed_status_id)
-            
-        if dto.eta:
-            query = query.filter(func.date(TxnFDA.fda_eta) == func.date(dto.eta))
-    else:
-        query = db.query(
-            TxnDisbursement, 
-            PDAModel.pda_eta.label("eta")
-        ).join(
-            PDAModel, PDAModel.disbursement_seq == TxnDisbursement.disbursement_seq
-        ).filter(
-            PDAModel.state.notin_(["D", "N"])
-        )
-        if completed_status_id:
-            query = query.filter(PDAModel.status != completed_status_id)
-            
-        if dto.eta:
-            query = query.filter(func.date(PDAModel.pda_eta) == func.date(dto.eta))
+        # 2. Build Query based on check_type
+        if dto.check_type == 'FDA':
+            query = db.query(
+                TxnDisbursement, 
+                TxnFDA.fda_eta.label("eta")
+            ).join(
+                TxnFDA, TxnFDA.disbursement_seq == TxnDisbursement.disbursement_seq
+            ).filter(
+                or_(TxnFDA.state.is_(None), TxnFDA.state.notin_(["D", "N"]))
+            )
+            if completed_status_id:
+                query = query.filter(TxnFDA.status != completed_status_id)
+                
+            if dto.eta:
+                query = query.filter(func.date(TxnFDA.fda_eta) == func.date(dto.eta))
+        else:
+            query = db.query(
+                TxnDisbursement, 
+                PDAModel.pda_eta.label("eta")
+            ).join(
+                PDAModel, PDAModel.disbursement_seq == TxnDisbursement.disbursement_seq
+            ).filter(
+                or_(PDAModel.state.is_(None), PDAModel.state.notin_(["D", "N"]))
+            )
+            if completed_status_id:
+                query = query.filter(PDAModel.status != completed_status_id)
+                
+            if dto.eta:
+                query = query.filter(func.date(PDAModel.pda_eta) == func.date(dto.eta))
 
-    if dto.vessel_id:
-        query = query.filter(TxnDisbursement.vsl_id == dto.vessel_id)
-    if dto.port_id:
-        query = query.filter(TxnDisbursement.port_id == dto.port_id)
+        # 3. Apply Filters
+        if dto.vessel_id:
+            query = query.filter(TxnDisbursement.vsl_id == dto.vessel_id)
+        if dto.port_id:
+            query = query.filter(TxnDisbursement.port_id == dto.port_id)
 
-    record = query.first()
-    
-    if not record:
-        return {"exists": False}
+        record = query.first()
+        
+        if not record:
+            return {"exists": False}
 
-    disbursement, record_eta = record
+        disbursement, record_eta = record
 
-    # Fetch names for response details
-    from app.models.vessels import MaVessel
-    from app.models.ports import MaPort
+        # 4. Fetch Vessel & Port names safely
+        vessel_name = None
+        port_name = None
 
-    vessel_obj = db.query(MaVessel).filter(MaVessel.vessel_id == disbursement.vsl_id).first()
-    port_obj = db.query(MaPort).filter(MaPort.port_id == disbursement.port_id).first()
+        if disbursement.vsl_id:
+            from app.models.vessels import MaVessel
+            vessel_obj = db.query(MaVessel).filter(MaVessel.vessel_id == disbursement.vsl_id).first()
+            if vessel_obj:
+                vessel_name = vessel_obj.name
 
-    return {
-        "exists": True,
-        "vessel_name": vessel_obj.name if vessel_obj else None,
-        "port_name": port_obj.name if port_obj else None,
-        "eta": record_eta or disbursement.eta,
-        "disbursement_id": disbursement.disbursement_id,
-        "disbursement_seq": disbursement.disbursement_seq
-    }    
+        if disbursement.port_id:
+            from app.models.ports import MaPort
+            port_obj = db.query(MaPort).filter(MaPort.port_id == disbursement.port_id).first()
+            if port_obj:
+                port_name = port_obj.name
+
+        return {
+            "exists": True,
+            "vessel_name": vessel_name,
+            "port_name": port_name,
+            "eta": record_eta or disbursement.eta,
+            "disbursement_id": disbursement.disbursement_id,
+            "disbursement_seq": disbursement.disbursement_seq
+        }
+
+    except Exception as e:
+        logger.error(f"Error in check_duplicate_record DB execution: {str(e)}")
+        logger.error(traceback.format_exc())
+        raise e   

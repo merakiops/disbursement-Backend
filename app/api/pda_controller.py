@@ -1024,11 +1024,7 @@ async def send_client_comment(
 
 
 
-@disbursementController.post(
-    "/api/v1/check_duplicate_disbursement", 
-    tags=["Disbursement"], 
-    response_model=CheckDuplicateResponseDTO
-)
+@disbursementController.post("/api/v1/check_duplicate_disbursement", tags=["Disbursement"])
 @jwt_required
 @role_required(ALLOWED_ROLES_ALL)
 async def check_duplicate_disbursement(
@@ -1039,9 +1035,11 @@ async def check_duplicate_disbursement(
     try:
         response = pda_service.check_existing_disbursement(request_data, db)
         return response
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Error checking duplicate disbursement: {e}")
+        logger.error(f"Error in check_duplicate_disbursement: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to check duplicate record."
-        )    
+            detail=f"Failed to check duplicate record: {str(e)}"
+        )  
