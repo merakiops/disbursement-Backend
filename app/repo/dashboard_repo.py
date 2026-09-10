@@ -173,6 +173,11 @@ class DashboardRepository:
             fda_sav = 0.0
             tot_sav = 0.0
             
+            completed_pda = 0
+            under_process_pda = 0
+            completed_fda = 0
+            under_process_fda = 0
+            
             for r in deduped_ankkumam:
                 if r.get("country_name") and r["country_name"] != "N/A": c_set.add(str(r["country_name"]).strip().upper())
                 if r.get("port_name") and r["port_name"] != "N/A": p_set.add(str(r["port_name"]).strip().upper())
@@ -194,6 +199,16 @@ class DashboardRepository:
                 fda_sav += float(r.get("loss_prevention_fda") or 0.0)
                 tot_sav += float(r.get("total_loss_prevented") or 0.0)
                 
+                if str(r.get("pda_status") or "").strip().lower() == "completed":
+                    completed_pda += 1
+                else:
+                    under_process_pda += 1
+                    
+                if str(r.get("fda_status") or "").strip().lower() == "completed":
+                    completed_fda += 1
+                else:
+                    under_process_fda += 1
+                
             tot_disb = len(deduped_ankkumam)
             
             return {
@@ -204,11 +219,11 @@ class DashboardRepository:
                 "ports": len(p_set),
                 "vessels": len(v_set),
                 "total_pda": tot_disb,
-                "completed_pda": tot_disb,
-                "under_process_pda": 0,
+                "completed_pda": completed_pda,
+                "under_process_pda": under_process_pda,
                 "total_fda": tot_disb,
-                "completed_fda": tot_disb,
-                "under_process_fda": 0,
+                "completed_fda": completed_fda,
+                "under_process_fda": under_process_fda,
                 "yet_to_process": 0,
                 "pdasavings": pda_sav,
                 "fdasavings": fda_sav,
@@ -746,6 +761,8 @@ class DashboardRepository:
                     "loss_prevention_fda": lp_fda,
                     "total_loss_prevented": tot_lp,
                     "loss_prevented_reason": r.get("reason"),
+                    "pda_status": r.get("pda_status"),
+                    "fda_status": r.get("fda_status"),
                     "fda_amount": fda_amt,
                     "pda_amount": pda_amt,
                     "manual_fda_amount": "-",
