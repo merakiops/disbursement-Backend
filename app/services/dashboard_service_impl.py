@@ -240,22 +240,17 @@ class DashboardServiceImpl(DashboardService):
                 min_amount = min(fda_amounts)
                 n = len(fda_amounts_sorted)
 
-                # -----median of two value if record is even -----
-                # if n % 2 == 0:
-                #     median_amount = (fda_amounts_sorted[n//2 - 1] + fda_amounts_sorted[n//2]) / 2
-                # else:
-                #     median_amount = fda_amounts_sorted[n//2]
-                
-                median_amount = fda_amounts_sorted[n//2]
+                # Calculate actual average (mean)
+                average_amount = sum(fda_amounts) / n
                 max_amount = max(fda_amounts)
             else:
-                min_amount = median_amount = max_amount = 0.0
+                min_amount = average_amount = max_amount = 0.0
         else:
-            min_amount = median_amount = max_amount = 0.0
+            min_amount = average_amount = max_amount = 0.0
         
         stats = FDAStatsDTO(
             lowestFDAAmount=int(round(min_amount)),
-            averageFDAAmount=int(round(median_amount)),
+            averageFDAAmount=int(round(average_amount)),
             highestFDAAmount=int(round(max_amount))
         )
         is_client = user_role == 3
