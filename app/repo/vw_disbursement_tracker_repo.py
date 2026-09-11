@@ -1097,8 +1097,6 @@ class DisbursementRepository:
         
         # Set foreign keys from fetched objects for the Update purpose. Commented for the future Purpose
         
-        # status_obj = StatusRepository.get_status_details_by_name(disbursement_data.fda_status, db)
-        
         # country = db.query(MaCountry).filter(func.upper(MaCountry.name) == disbursement_data.country.upper()).first()
         # port = db.query(MaPort).filter(func.upper(MaPort.name) == disbursement_data.port.upper()).first()
         # purpose = db.query(MaPurpose).filter(func.upper(MaPurpose.name) == disbursement_data.port.upper()).first()
@@ -1115,20 +1113,26 @@ class DisbursementRepository:
                 value = getattr(disbursement_data, field, None)
                 if value is not None:
                     setattr(pda, field, value)
-            # pda.status = int(status_obj.status_id)
+            if disbursement_data.pda_status:
+                status_obj = StatusRepository.get_status_details_by_name(disbursement_data.pda_status, db)
+                if status_obj:
+                    pda.status = int(status_obj.status_id)
             pda.updated_by = username
 
         # --- Update FDA ---
         if disbursement.fda:
             fda = disbursement.fda
             fda_fields = [
-                'fda_status', 'fda_received_ops_agent','fda_remark', 'fda_receive_date','manual_fda_amount'
+                'fda_received_ops_agent','fda_remark', 'fda_receive_date','manual_fda_amount'
             ]    #removed updating the fda_amount
             for field in fda_fields:
                 value = getattr(disbursement_data, field, None)
                 if value is not None:
                     setattr(fda, field, value)
-            # fda.status = int(status_obj.status_id)
+            if disbursement_data.fda_status:
+                status_obj = StatusRepository.get_status_details_by_name(disbursement_data.fda_status, db)
+                if status_obj:
+                    fda.status = int(status_obj.status_id)
             fda.updated_by = username
 
         # --- Update Disbursement ---
