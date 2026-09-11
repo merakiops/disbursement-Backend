@@ -20,6 +20,6 @@ class MaStatus(Base):
     __table_args__ = {'schema': SCHEMA_NAME}
 
     status_id = Column(Integer, primary_key=True, index=True)
-    status_name = Column(Integer, primary_key=True, index=True)
+    status_name = Column(String, index=True)
     created_on = Column(DateTime, default=func.now(), nullable=False)
     created_by = Column(String, nullable=True)
