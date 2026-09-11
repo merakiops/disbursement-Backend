@@ -53,7 +53,24 @@ class PDAServiceImpl(PDAService):
             raw_host += "/"
         self.host = raw_host
         self.meraki_email = os.getenv("MERAKI_DISBURSEMENT_EMAIL_ADDRESS") if (os.getenv("MERAKI_DISBURSEMENT_EMAIL_ADDRESS") and "configured" not in os.getenv("MERAKI_DISBURSEMENT_EMAIL_ADDRESS")) else (os.getenv("SMTP_USER") or os.getenv("EMAIL_ADDRESS"))
-
+    def check_existing_disbursement(self, dto: CheckDuplicateDisbursementDTO, db: Session) -> CheckDuplicateResponseDTO:
+        result = self.pda_repo.check_duplicate_record(dto, db)
+        
+        if result.get("exists"):
+            return CheckDuplicateResponseDTO(
+                exists=True,
+                message="Matching record already exists in the database.",
+                vessel_name=result.get("vessel_name"),
+                port_name=result.get("port_name"),
+                eta=result.get("eta"),
+                disbursement_id=result.get("disbursement_id"),
+                disbursement_seq=result.get("disbursement_seq")
+            )
+        
+        return CheckDuplicateResponseDTO(
+            exists=False,
+            message="No matching record found."
+        )
     async def initiate_disbursement(self,user: str, request_data: TxnDisbursementInitiateDTo, background_tasks: BackgroundTasks,db: Session) -> TxnDisbursementDto:
         """
         Args:
@@ -963,21 +980,3 @@ class PDAServiceImpl(PDAService):
 
 
 
-def check_existing_disbursement(self, dto: CheckDuplicateDisbursementDTO, db: Session) -> CheckDuplicateResponseDTO:
-    result = self.pda_repo.check_duplicate_record(dto, db)
-    
-    if result.get("exists"):
-        return CheckDuplicateResponseDTO(
-            exists=True,
-            message="Matching record already exists in the database.",
-            vessel_name=result.get("vessel_name"),
-            port_name=result.get("port_name"),
-            eta=result.get("eta"),
-            disbursement_id=result.get("disbursement_id"),
-            disbursement_seq=result.get("disbursement_seq")
-        )
-    
-    return CheckDuplicateResponseDTO(
-        exists=False,
-        message="No matching record found."
-    )
