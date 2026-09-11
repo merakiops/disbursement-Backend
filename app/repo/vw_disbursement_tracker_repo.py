@@ -456,6 +456,16 @@ class DisbursementRepository:
             # Map standard records to DTO
             standard_dtos = [DisbursementTrackerDTO.model_validate(r) for r in standard_records]
             
+            seqs = [r.disbursement_seq for r in standard_dtos if r.disbursement_seq]
+            if seqs:
+                from app.models.txn_fda import TxnFDA
+                fda_dates = db.query(TxnFDA.disbursement_seq, TxnFDA.fda_processing_date).filter(
+                    TxnFDA.disbursement_seq.in_(seqs)
+                ).all()
+                fda_date_map = {seq: date for seq, date in fda_dates}
+                for dto in standard_dtos:
+                    dto.fda_completed_date = fda_date_map.get(dto.disbursement_seq)
+            
             # Combine all records
             all_records = standard_dtos + ankkumam_records
             

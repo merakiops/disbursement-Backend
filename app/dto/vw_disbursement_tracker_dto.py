@@ -49,6 +49,7 @@ class DisbursementTrackerDTO(BaseModel):
     outstanding_balance: Optional[float] = None
     remark: Optional[str] = None
     created_on: Optional[datetime] = None
+    fda_completed_date: Optional[datetime] = None
     model_config = {
         "from_attributes": True
     }
