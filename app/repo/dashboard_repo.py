@@ -237,15 +237,17 @@ class DashboardRepository:
                 
                 if str(r.get("pda_status") or "").strip().lower() == "completed":
                     completed_pda += 1
-                else:
-                    under_process_pda += 1
-                    
+                
                 if str(r.get("fda_status") or "").strip().lower() == "completed":
                     completed_fda += 1
                 else:
                     under_process_fda += 1
                 
             tot_disb = len(deduped_ankkumam)
+            
+            # Treat all PDA total as completed count, and 0 under process
+            total_pda = completed_pda
+            under_process_pda = 0
             
             return {
                 "country_list": list(c_set),
@@ -254,7 +256,7 @@ class DashboardRepository:
                 "countries": len(c_set),
                 "ports": len(p_set),
                 "vessels": len(v_set),
-                "total_pda": completed_pda,
+                "total_pda": total_pda,
                 "completed_pda": completed_pda,
                 "under_process_pda": under_process_pda,
                 "total_fda": tot_disb,
