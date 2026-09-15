@@ -157,7 +157,8 @@ class DashboardRepository:
             raw_vessel_names = list(set([str(r.get("vessel_name")).strip().lower() for r in raw_records if r.get("vessel_name")]))
             vessels_str = ",".join(f"'{v.replace(chr(39), chr(39)+chr(39))}'" for v in raw_vessel_names) if raw_vessel_names else "''"
             
-            cids_str = ",".join(str(c) for c in prod_cids)
+            expanded_cids = get_all_prod_ids_for_client_list(prod_cids) if prod_cids else []
+            cids_str = ",".join(str(c) for c in expanded_cids) if expanded_cids else "'-1'"
             
             # Use base tables instead of vw_dashboard_data to avoid 60-110s full-view evaluation overhead in PostgreSQL
             prod_keys_sql = f"""
@@ -717,12 +718,15 @@ class DashboardRepository:
         
         return query.first()
     @staticmethod
-    def _get_ankkumam_records(ankkumam_company_ids, data_request, is_meraki_user, is_all_records, offset, db):
+    def _get_ankkumam_records(ankkumam_company_ids, data_request, is_meraki_user, is_all_records, offset, db, only_completed_fda: bool = False):
         ankkumam_records = []
         try:
             ids_str = ",".join(f"'{c}'" for c in ankkumam_company_ids)
             where_clauses = [f"d.client IN ({ids_str})"]
             params = {}
+
+            if only_completed_fda:
+                where_clauses.append("LOWER(d.fda_status) = 'completed'")
 
             if data_request.tableFilter:
                 tf = data_request.tableFilter
@@ -920,7 +924,7 @@ class DashboardRepository:
 
         if ds in ["ankkumam", "kamba", "mysql"]:
             return DashboardRepository._get_ankkumam_records(
-                list(DashboardRepository._get_dynamic_client_mapping(db)[1].keys()), data_request, is_meraki_user, is_all_records, offset, db
+                list(DashboardRepository._get_dynamic_client_mapping(db)[1].keys()), data_request, is_meraki_user, is_all_records, offset, db, only_completed_fda=True
             )
 
         if ds == "excel":
@@ -1196,7 +1200,7 @@ class DashboardRepository:
             standard_records = [dict(r, data_source="standard") for r in raw_std]
 
             ankkumam_records, ankkumam_count = DashboardRepository._get_ankkumam_records(
-                ankkumam_clients, data_request, is_meraki_user, True, 0, db
+                ankkumam_clients, data_request, is_meraki_user, True, 0, db, only_completed_fda=True
             )
 
             # Merge both record sets (Prod first, then Ankkumam)
