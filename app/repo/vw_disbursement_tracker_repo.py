@@ -206,6 +206,20 @@ class DisbursementRepository:
             return [], 0
     
     @staticmethod
+
+    @staticmethod
+    def _populate_fda_completed_dates(dtos, db):
+        seqs = [r.disbursement_seq for r in dtos if r.disbursement_seq]
+        if seqs:
+            from app.models.txn_fda import TxnFDA
+            fda_dates = db.query(TxnFDA.disbursement_seq, TxnFDA.fda_processing_date).filter(
+                TxnFDA.disbursement_seq.in_(seqs)
+            ).all()
+            fda_date_map = {seq: date for seq, date in fda_dates}
+            for dto in dtos:
+                dto.fda_completed_date = fda_date_map.get(dto.disbursement_seq)
+
+    @staticmethod
     def get_disbursement_list(user: str, request_dto: DisbursementTrackerRequestDTO, db: Session):
         """
         Fetch paginated list of disbursement.
@@ -456,15 +470,7 @@ class DisbursementRepository:
             # Map standard records to DTO
             standard_dtos = [DisbursementTrackerDTO.model_validate(r) for r in standard_records]
             
-            seqs = [r.disbursement_seq for r in standard_dtos if r.disbursement_seq]
-            if seqs:
-                from app.models.txn_fda import TxnFDA
-                fda_dates = db.query(TxnFDA.disbursement_seq, TxnFDA.fda_processing_date).filter(
-                    TxnFDA.disbursement_seq.in_(seqs)
-                ).all()
-                fda_date_map = {seq: date for seq, date in fda_dates}
-                for dto in standard_dtos:
-                    dto.fda_completed_date = fda_date_map.get(dto.disbursement_seq)
+            DisbursementRepository._populate_fda_completed_dates(standard_dtos, db)
             
             # Combine all records
             all_records = standard_dtos + ankkumam_records
@@ -504,6 +510,7 @@ class DisbursementRepository:
                 .all()
             )
             data_dtos = [DisbursementTrackerDTO.model_validate(r) for r in data]
+            DisbursementRepository._populate_fda_completed_dates(data_dtos, db)
             return {
                 "total_count": total_count,
                 "data": data_dtos
@@ -552,10 +559,13 @@ class DisbursementRepository:
             .limit(request_dto.page_size)
             .all()
         )
+        
+        data_dtos = [DisbursementTrackerDTO.model_validate(r) for r in disbursement]
+        DisbursementRepository._populate_fda_completed_dates(data_dtos, db)
 
         return {
             "total_count": total_count,
-            "data": disbursement
+            "data": data_dtos
         }
     
 
@@ -602,10 +612,13 @@ class DisbursementRepository:
             .limit(request_dto.page_size)
             .all()
         )
+        
+        data_dtos = [DisbursementTrackerDTO.model_validate(r) for r in disbursement]
+        DisbursementRepository._populate_fda_completed_dates(data_dtos, db)
 
         return {
             "total_count": total_count,
-            "data": disbursement
+            "data": data_dtos
         }
 
             
