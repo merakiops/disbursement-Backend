@@ -154,9 +154,28 @@ class DashboardRepository:
             from sqlalchemy import text
             from app.db import SCHEMA_NAME
             
-            cids_str = ",".join(str(c) for c in prod_cids)
-            prod_keys_sql = "SELECT vw.vessel_name, vw.country_name as country, vw.port_name as port, vw.etd, td.voyage, NULL as port_agent FROM " + SCHEMA_NAME + ".vw_dashboard_data vw LEFT JOIN " + SCHEMA_NAME + ".txn_disbursement td ON vw.disbursement_seq = td.disbursement_seq WHERE vw.client_id IN (" + cids_str + ") AND (vw.fda_amount IS NOT NULL OR (vw.manual_fda_amount IS NOT NULL AND vw.manual_fda_amount != ''))"
+            raw_vessel_names = list(set([str(r.get("vessel_name")).strip().lower() for r in raw_records if r.get("vessel_name")]))
+            vessels_str = ",".join(f"'{v.replace(chr(39), chr(39)+chr(39))}'" for v in raw_vessel_names) if raw_vessel_names else "''"
             
+            cids_str = ",".join(str(c) for c in prod_cids)
+            
+            # Use base tables instead of vw_dashboard_data to avoid 60-110s full-view evaluation overhead in PostgreSQL
+            prod_keys_sql = f"""
+                SELECT 
+                    v.name as vessel_name, 
+                    c.name as country, 
+                    p.name as port, 
+                    td.etd, 
+                    td.voyage, 
+                    NULL as port_agent 
+                FROM {SCHEMA_NAME}.txn_disbursement td
+                JOIN {SCHEMA_NAME}.ma_vessels v ON td.vsl_id = v.vsl_id
+                LEFT JOIN {SCHEMA_NAME}.ma_country c ON td.country_id = c.country_id
+                LEFT JOIN {SCHEMA_NAME}.ma_port p ON td.port_id = p.port_id
+                WHERE td.client_id IN ({cids_str}) 
+                  AND LOWER(v.name) IN ({vessels_str})
+                  AND td.final_amount IS NOT NULL
+            """
             prod_records = db.execute(text(prod_keys_sql)).mappings().all()
             
             prod_dicts = [
@@ -601,15 +620,70 @@ class DashboardRepository:
                 
             prod_where_sql = " AND ".join(prod_where)
             
-            prod_vessels = db.execute(text(f"SELECT DISTINCT vessel_name FROM {SCHEMA_NAME}.vw_dashboard_data WHERE {prod_where_sql} AND vessel_name IS NOT NULL"), prod_params).scalars().all()
-            prod_countries = db.execute(text(f"SELECT DISTINCT country_name FROM {SCHEMA_NAME}.vw_dashboard_data WHERE {prod_where_sql} AND country_name IS NOT NULL"), prod_params).scalars().all()
-            prod_ports = db.execute(text(f"SELECT DISTINCT port_name FROM {SCHEMA_NAME}.vw_dashboard_data WHERE {prod_where_sql} AND port_name IS NOT NULL"), prod_params).scalars().all()
+            # Optimize: Calculate overlap by only checking the kamba items against standard data
+            kamba_vessels = [str(x).upper() for x in ankkumam_summary.get("vessel_list", []) if x]
+            kamba_countries = [str(x).upper() for x in ankkumam_summary.get("country_list", []) if x]
+            kamba_ports = [str(x).upper() for x in ankkumam_summary.get("port_list", []) if x]
             
-            prod_summary["country_list"] = [str(c).strip().upper() for c in prod_countries if c]
-            prod_summary["port_list"] = [str(p).strip().upper() for p in prod_ports if p]
-            prod_summary["vessel_list"] = [str(v).strip().upper() for v in prod_vessels if v]
+            overlap_vessels = overlap_countries = overlap_ports = 0
             
-            return DashboardRepository._merge_summaries(prod_summary, ankkumam_summary)
+            # Rewrite overlap logic to use base tables (td, v, c, p) instead of vw_dashboard_data 
+            # because Postgres cannot push down ANY(...) filters through the view efficiently.
+            base_where = ["1=1"]
+            if expanded_client_ids:
+                try:
+                    int_cids = [int(x) for x in expanded_client_ids if str(x).isdigit()]
+                except:
+                    int_cids = list(expanded_client_ids)
+                if int_cids:
+                    base_where.append("td.client_id = ANY(:cids)")
+                    prod_params["cids"] = int_cids
+            if from_date:
+                base_where.append("td.etd::date >= :from_date::date")
+            if to_date:
+                base_where.append("td.etd::date <= :to_date::date")
+            base_where_sql = " AND ".join(base_where)
+
+            if kamba_vessels:
+                prod_params["kamba_vessels"] = kamba_vessels
+                overlap_vessels = db.execute(text(f"""
+                    SELECT COUNT(DISTINCT UPPER(v.name)) 
+                    FROM {SCHEMA_NAME}.txn_disbursement td
+                    JOIN {SCHEMA_NAME}.ma_vessels v ON td.vsl_id = v.vsl_id
+                    WHERE {base_where_sql} AND UPPER(v.name) = ANY(:kamba_vessels)
+                """), prod_params).scalar() or 0
+                
+            if kamba_countries:
+                prod_params["kamba_countries"] = kamba_countries
+                overlap_countries = db.execute(text(f"""
+                    SELECT COUNT(DISTINCT UPPER(c.name)) 
+                    FROM {SCHEMA_NAME}.txn_disbursement td
+                    JOIN {SCHEMA_NAME}.ma_country c ON td.country_id = c.country_id
+                    WHERE {base_where_sql} AND UPPER(c.name) = ANY(:kamba_countries)
+                """), prod_params).scalar() or 0
+                
+            if kamba_ports:
+                prod_params["kamba_ports"] = kamba_ports
+                overlap_ports = db.execute(text(f"""
+                    SELECT COUNT(DISTINCT UPPER(p.name)) 
+                    FROM {SCHEMA_NAME}.txn_disbursement td
+                    JOIN {SCHEMA_NAME}.ma_port p ON td.port_id = p.port_id
+                    WHERE {base_where_sql} AND UPPER(p.name) = ANY(:kamba_ports)
+                """), prod_params).scalar() or 0
+                
+            merged = DashboardRepository._merge_summaries(prod_summary, ankkumam_summary)
+            
+            # Overwrite the lists fallback logic with mathematically correct counts
+            merged["vessels"] = float(prod_summary.get("vessels", 0)) + float(ankkumam_summary.get("vessels", 0)) - overlap_vessels
+            merged["countries"] = float(prod_summary.get("countries", 0)) + float(ankkumam_summary.get("countries", 0)) - overlap_countries
+            merged["ports"] = float(prod_summary.get("ports", 0)) + float(ankkumam_summary.get("ports", 0)) - overlap_ports
+            
+            # Remove the lists so they aren't processed accidentally or sent out
+            merged.pop("vessel_list", None)
+            merged.pop("country_list", None)
+            merged.pop("port_list", None)
+            
+            return merged
 
         return prod_summary
     
@@ -714,18 +788,17 @@ class DashboardRepository:
             vessel_names = list(set([r.get("vessel_name") for r in rows if r.get("vessel_name")]))
             vessel_stats_map = {}
             if vessel_names:
-                from sqlalchemy import func
-                from app.models.vw_fda_processing_details import VwFdaProcessingDetails
+                from app.models.vessels import MaVessel
                 
                 norm_vessels = [str(v).upper().split(" EX ")[0].replace(" ", "") for v in vessel_names]
-                norm_col = func.replace(func.split_part(func.upper(VwFdaProcessingDetails.vessel_name), ' EX ', 1), ' ', '')
+                norm_col = func.replace(func.split_part(func.upper(MaVessel.name), ' EX ', 1), ' ', '')
                 
                 stats = db.query(
                     norm_col.label("norm_vessel"),
-                    func.max(VwFdaProcessingDetails.loa).label("loa"),
-                    func.max(VwFdaProcessingDetails.grt).label("grt"),
-                    func.max(VwFdaProcessingDetails.rgrt).label("rgrt"),
-                    func.max(VwFdaProcessingDetails.nrt).label("nrt")
+                    func.max(MaVessel.loa).label("loa"),
+                    func.max(MaVessel.grt).label("grt"),
+                    func.max(MaVessel.rgrt).label("rgrt"),
+                    func.max(MaVessel.nrt).label("nrt")
                 ).filter(norm_col.in_(norm_vessels)).group_by(norm_col).all()
                 
                 for s in stats:
@@ -736,6 +809,8 @@ class DashboardRepository:
                         "nrt": s.nrt if s.nrt is not None else "-"
                     }
 
+            _, excel_to_prod_cid = DashboardRepository._get_dynamic_client_mapping(db)
+            
             for r in rows:
                 v_name = r.get("vessel_name")
                 norm_v = str(v_name).upper().split(" EX ")[0].replace(" ", "") if v_name else ""
@@ -759,7 +834,6 @@ class DashboardRepository:
                 try: tot_lp = abs(float(str(r["total_savings_usd"]).replace(",", ""))) if r["total_savings_usd"] is not None else 0.0
                 except: tot_lp = 0.0
 
-                _, excel_to_prod_cid = DashboardRepository._get_dynamic_client_mapping(db)
                 c_id = excel_to_prod_cid.get(str(r.get("client")), 85)
 
                 ankkumam_records.append({
@@ -1108,9 +1182,14 @@ class DashboardRepository:
             ankkumam_clients = list(excel_to_prod_cid.keys())
 
         if ankkumam_clients:
-            # Fetch ALL records from both sources (no per-source pagination)
-            # then combine and paginate the merged result
-            data_query_all = text(data_query_str)
+            # Fetch enough standard records to cover the requested page, plus all excel records
+            if not is_all_records:
+                fetch_limit = offset + data_request.pageSize
+                data_query_all = text(data_query_str + " LIMIT :fetch_limit")
+                params["fetch_limit"] = fetch_limit
+            else:
+                data_query_all = text(data_query_str)
+                
             raw_std = list(db.execute(data_query_all, params).mappings().all())
             standard_records = [dict(r, data_source="standard") for r in raw_std]
 

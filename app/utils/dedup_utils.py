@@ -1,6 +1,16 @@
 from typing import List, Any, Set, Tuple
 import re
 
+_PUNCTUATION_RE = re.compile(r'[^\w\s]')
+_WHITESPACE_RE = re.compile(r'\s+')
+_SUFFIXES = [
+    r'\bpvt\b', r'\bltd\b', r'\bllc\b', r'\binc\b', r'\bco\b', 
+    r'\bcorporation\b', r'\bcorp\b', r'\bshipping\b', r'\bmarine\b', 
+    r'\bmaritime\b', r'\bagency\b', r'\bagencies\b', r'\bprivate\b',
+    r'\blimited\b', r'\bship\b', r'\bmanagement\b', r'\bgroup\b'
+]
+_SUFFIX_RES = [re.compile(s) for s in _SUFFIXES]
+
 def normalize_string(val: Any) -> str:
     if val is None:
         return ""
@@ -12,22 +22,14 @@ def normalize_agent_name(val: Any) -> str:
     val_str = str(val).strip().lower()
     
     # Remove common punctuation
-    val_str = re.sub(r'[^\w\s]', ' ', val_str)
+    val_str = _PUNCTUATION_RE.sub(' ', val_str)
     
     # Common corporate and shipping suffixes to remove to find the core name
-    # We use word boundaries \b so we don't accidentally remove parts of a name
-    suffixes = [
-        r'\bpvt\b', r'\bltd\b', r'\bllc\b', r'\binc\b', r'\bco\b', 
-        r'\bcorporation\b', r'\bcorp\b', r'\bshipping\b', r'\bmarine\b', 
-        r'\bmaritime\b', r'\bagency\b', r'\bagencies\b', r'\bprivate\b',
-        r'\blimited\b', r'\bship\b', r'\bmanagement\b', r'\bgroup\b'
-    ]
-    
-    for suffix in suffixes:
-        val_str = re.sub(suffix, '', val_str)
+    for suffix_re in _SUFFIX_RES:
+        val_str = suffix_re.sub('', val_str)
         
     # Remove extra whitespaces
-    val_str = re.sub(r'\s+', ' ', val_str).strip()
+    val_str = _WHITESPACE_RE.sub(' ', val_str).strip()
     return val_str
 
 def get_date_str(val: Any) -> str:
