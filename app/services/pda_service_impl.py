@@ -613,9 +613,32 @@ class PDAServiceImpl(PDAService):
                     <col style="width:60%;" />
                 </colgroup>
             """
+            
+            def format_value(k, v):
+                val_str = str(v) if v is not None else ""
+                if any(x in k.lower() for x in ["amount", "pay", "balance", "cost", "total", "remit", "savings"]):
+                    parts = val_str.split(" ", 1)
+                    if len(parts) == 2 and parts[0].isalpha() and len(parts[0]) == 3:
+                        currency = parts[0]
+                        num_str = parts[1].replace(',', '')
+                        try:
+                            num = float(num_str)
+                            return f"{currency} {num:,.2f}"
+                        except ValueError:
+                            pass
+                    else:
+                        num_str = val_str.replace(',', '')
+                        try:
+                            num = float(num_str)
+                            return f"{num:,.2f}"
+                        except ValueError:
+                            pass
+                return val_str
+
             table_data = dto.body["table"]
             for key, value in table_data.items():
-                val_upper = str(value).upper() if value is not None else ""
+                formatted_val = format_value(key, value)
+                val_upper = formatted_val.upper()
                 table_html += f"""
                 <tr>
                     <td style="font-size:13px; font-weight:bold; color:#0b192c; background-color:#ffffff; padding:10px 14px; vertical-align:middle; border:1px solid #000000;">
