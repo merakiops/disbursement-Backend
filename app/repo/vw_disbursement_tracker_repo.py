@@ -21,7 +21,10 @@ from sqlalchemy import text
 
 PROD_TO_ANKKUMAM_MAPPING = {
     83: "ESDMCC",
-    14: "NWL"
+    14: "NWL",
+    2: "ALGHAF",
+    57: "AVANAH",
+    75: "Eiger Shipping SA"
 }
 
 def _get_status_color(status):
@@ -57,7 +60,7 @@ class DisbursementRepository:
 
             if request_dto.query:
                 search = f"%{request_dto.query.strip()}%"
-                where_clauses.append("(d.client ILIKE :search OR d.vessel ILIKE :search OR d.port ILIKE :search OR d.port_agent ILIKE :search)")
+                where_clauses.append("(d.client ILIKE :search OR d.vessel ILIKE :search OR d.port ILIKE :search OR d.port_agent ILIKE :search OR d.mda_id ILIKE :search OR d.column_1 ILIKE :search OR d.final_status ILIKE :search)")
                 params["search"] = search
 
             f = request_dto.filter
@@ -459,7 +462,7 @@ class DisbursementRepository:
                 elif req_client == "N W L":
                     ankkumam_clients.append("NWL")
                     should_merge_ankkumam = True
-        elif user and user.lower() in ["meraki", "admin"]:
+        elif user and ("meraki" in user.lower() or "admin" in user.lower()):
             ankkumam_clients = list(PROD_TO_ANKKUMAM_MAPPING.values())
             should_merge_ankkumam = True
         
