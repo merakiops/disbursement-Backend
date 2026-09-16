@@ -161,22 +161,23 @@ class DashboardRepository:
             cids_str = ",".join(str(c) for c in expanded_cids) if expanded_cids else "'-1'"
             
             # Use base tables instead of vw_dashboard_data to avoid 60-110s full-view evaluation overhead in PostgreSQL
-            prod_keys_sql = f"""
+            prod_keys_sql = f'''
                 SELECT 
-                    v.name as vessel_name, 
-                    c.name as country, 
-                    p.name as port, 
-                    td.etd, 
-                    td.voyage, 
-                    NULL as port_agent 
-                FROM {SCHEMA_NAME}.txn_disbursement td
-                JOIN {SCHEMA_NAME}.ma_vessels v ON td.vsl_id = v.vsl_id
-                LEFT JOIN {SCHEMA_NAME}.ma_country c ON td.country_id = c.country_id
-                LEFT JOIN {SCHEMA_NAME}.ma_port p ON td.port_id = p.port_id
-                WHERE td.client_id IN ({cids_str}) 
-                  AND LOWER(v.name) IN ({vessels_str})
-                  AND td.final_amount IS NOT NULL
-            """
+                    vw.vessel_name, 
+                    vw.country_name as country, 
+                    vw.port_name as port, 
+                    vw.etd, 
+                    td.eta,
+                    td.voyage as voyage_no, 
+                    mac.name as port_agent,
+                    purp.name as purpose
+                FROM {SCHEMA_NAME}.vw_dashboard_data vw
+                LEFT JOIN {SCHEMA_NAME}.txn_disbursement td ON vw.disbursement_seq = td.disbursement_seq
+                LEFT JOIN {SCHEMA_NAME}.ma_company mac ON td.portagent_id = mac.company_id
+                LEFT JOIN {SCHEMA_NAME}.ma_purpose purp ON td.purpose_id = purp.purpose_id
+                WHERE vw.client_id IN ({cids_str}) 
+                  AND LOWER(vw.vessel_name) IN ({vessels_str})
+            '''
             prod_records = db.execute(text(prod_keys_sql)).mappings().all()
             
             prod_dicts = [
@@ -185,19 +186,22 @@ class DashboardRepository:
                     "country": r["country"],
                     "port": r["port"],
                     "etd": r["etd"],
-                    "voyage_no": r["voyage"],
+                    "eta": r["eta"],
+                    "purpose": r["purpose"],
+                    "voyage_no": r["voyage_no"],
                     "port_agent": r["port_agent"]
                 } for r in prod_records
             ]
             
-            from app.utils.dedup_utils import deduplicate_records
+            from app.utils.dedup_utils import get_record_key, deduplicate_records
             
-            # Put prod first so they take priority
-            all_records = prod_dicts + raw_records
-            deduped_all = deduplicate_records(all_records)
+            prod_keys = {get_record_key(r) for r in prod_dicts}
+            
+            # Deduplicate internally within Ankkumam first
+            raw_records = deduplicate_records(raw_records)
             
             # Filter back to only ankkumam records that survived
-            deduped_ankkumam = [r for r in deduped_all if r.get("data_source") == "ankkumam"]
+            deduped_ankkumam = [r for r in raw_records if get_record_key(r) not in prod_keys]
             
             # Now compute summary on deduped_ankkumam
             c_set = set()
@@ -1045,11 +1049,13 @@ class DashboardRepository:
         if client_ids_list:
             expanded_client_ids_list = [str(x) for x in get_all_prod_ids_for_client_list(client_ids_list)]
 
-        params = {}
+        # We use vw_dashboard_data which contains both FDA and PDA records.
+        # Since this API is for the FDA tracker, we must exclude PDA-only records.
         where_clauses = [
-            "1=1",
-            "(vw.fda_amount IS NOT NULL OR (vw.manual_fda_amount IS NOT NULL AND vw.manual_fda_amount != ''))"
+            f"EXISTS (SELECT 1 FROM {SCHEMA_NAME}.txn_fda fda WHERE fda.disbursement_seq = vw.disbursement_seq AND fda.status = 7 AND (fda.state IS NULL OR fda.state <> 'D'))"
         ]
+
+        params = {}
 
         if expanded_client_ids_list:
             try:
@@ -1092,28 +1098,28 @@ class DashboardRepository:
             if tf.port:
                 where_clauses.append("UPPER(vw.port_name) = ANY(:port_names)")
                 params["port_names"] = [str(x).upper() for x in tf.port]
-            if tf.loa:
+            if getattr(tf, 'loa', None):
                 if tf.loa.min_value is not None:
                     where_clauses.append("vw.loa >= :loa_min")
                     params["loa_min"] = tf.loa.min_value
                 if tf.loa.max_value is not None:
                     where_clauses.append("vw.loa <= :loa_max")
                     params["loa_max"] = tf.loa.max_value
-            if tf.nrt:
+            if getattr(tf, 'nrt', None):
                 if tf.nrt.min_value is not None:
                     where_clauses.append("vw.nrt >= :nrt_min")
                     params["nrt_min"] = tf.nrt.min_value
                 if tf.nrt.max_value is not None:
                     where_clauses.append("vw.nrt <= :nrt_max")
                     params["nrt_max"] = tf.nrt.max_value
-            if tf.grt:
+            if getattr(tf, 'grt', None):
                 if tf.grt.min_value is not None:
                     where_clauses.append("vw.grt >= :grt_min")
                     params["grt_min"] = tf.grt.min_value
                 if tf.grt.max_value is not None:
                     where_clauses.append("vw.grt <= :grt_max")
                     params["grt_max"] = tf.grt.max_value
-            if tf.rgrt:
+            if getattr(tf, 'rgrt', None):
                 if tf.rgrt.min_value is not None:
                     where_clauses.append("vw.rgrt >= :rgrt_min")
                     params["rgrt_min"] = tf.rgrt.min_value
@@ -1157,10 +1163,10 @@ class DashboardRepository:
                 td.voyage AS voyage_no,
                 NULL::text AS vessel_type,
                 NULL::text AS port_func,
-                NULL::text AS arrival_local,
-                NULL::text AS departure_local,
+                td.eta::text AS arrival_local,
+                vw.etd::text AS departure_local,
                 NULL::numeric AS port_days,
-                NULL::text AS agent,
+                mac.name AS agent,
                 NULL::text AS cargo_grade,
                 NULL::text AS counterparty_short_name,
                 NULL::text AS imo_no,
@@ -1168,9 +1174,12 @@ class DashboardRepository:
                 NULL::numeric AS final_amt,
                 td.advance_amount_remitted,
                 td.outstanding_balance,
-                td.remark
+                td.remark,
+                purp.name AS purpose
             FROM {SCHEMA_NAME}.vw_dashboard_data vw
             LEFT JOIN {SCHEMA_NAME}.txn_disbursement td ON vw.disbursement_seq = td.disbursement_seq
+            LEFT JOIN {SCHEMA_NAME}.ma_company mac ON td.portagent_id = mac.company_id
+            LEFT JOIN {SCHEMA_NAME}.ma_purpose purp ON td.purpose_id = purp.purpose_id
             WHERE {where_sql}
             ORDER BY vw.etd DESC NULLS LAST
         """
@@ -1188,13 +1197,7 @@ class DashboardRepository:
             ankkumam_clients = list(excel_to_prod_cid.keys())
 
         if ankkumam_clients:
-            # Fetch enough standard records to cover the requested page, plus all excel records
-            if not is_all_records:
-                fetch_limit = offset + data_request.pageSize
-                data_query_all = text(data_query_str + " LIMIT :fetch_limit")
-                params["fetch_limit"] = fetch_limit
-            else:
-                data_query_all = text(data_query_str)
+            data_query_all = text(data_query_str)
                 
             raw_std = list(db.execute(data_query_all, params).mappings().all())
             standard_records = [dict(r, data_source="standard") for r in raw_std]
@@ -1203,10 +1206,15 @@ class DashboardRepository:
                 ankkumam_clients, data_request, is_meraki_user, True, 0, db, only_completed_fda=True
             )
 
-            # Merge both record sets (Prod first, then Ankkumam)
-            from app.utils.dedup_utils import deduplicate_records
-            all_records = standard_records + ankkumam_records
-            all_records = deduplicate_records(all_records)
+            from app.utils.dedup_utils import get_record_key, deduplicate_records
+
+            # Deduplicate internally within Ankkumam first
+            ankkumam_records = deduplicate_records(ankkumam_records)
+
+            std_keys = {get_record_key(r) for r in standard_records}
+            deduped_ankkumam = [r for r in ankkumam_records if get_record_key(r) not in std_keys]
+
+            all_records = standard_records + deduped_ankkumam
             total_count = len(all_records)
 
             def get_sort_key(record):

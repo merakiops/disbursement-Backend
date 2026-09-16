@@ -52,19 +52,19 @@ def extract_field(record: Any, field_names: List[str]) -> Any:
 
 def get_record_key(record: Any) -> Tuple:
     vessel = extract_field(record, ["vessel_name", "vessel"])
-    country = extract_field(record, ["country_name", "country"])
     port = extract_field(record, ["port_name", "port"])
-    etd = extract_field(record, ["etd", "arrival_local", "eta"])
-    voyage_no = extract_field(record, ["voyage_no", "voyage"])
     port_agent = extract_field(record, ["port_agent", "agent", "vendor_short_name"])
+    eta = extract_field(record, ["eta", "arrival_local"])
+    etd = extract_field(record, ["etd", "departure_local"])
+    purpose = extract_field(record, ["purpose", "purpose_name"])
     
     return (
         normalize_string(vessel),
-        normalize_string(country),
         normalize_string(port),
+        normalize_agent_name(port_agent),
+        get_date_str(eta),
         get_date_str(etd),
-        normalize_string(voyage_no),
-        normalize_agent_name(port_agent)
+        normalize_string(purpose)
     )
 
 def deduplicate_records(records: List[Any]) -> List[Any]:

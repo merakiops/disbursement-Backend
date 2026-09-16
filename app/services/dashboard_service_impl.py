@@ -223,18 +223,27 @@ class DashboardServiceImpl(DashboardService):
         """
         Get FDA processing details with pagination and stats.
         """
-        records, total_count = DashboardRepository.get_fda_processing_details(
+        original_page_size = data_request.pageSize
+        original_page = data_request.page
+        
+        # Fetch all matching records to compute global stats
+        data_request.pageSize = -1
+        all_records, total_count = DashboardRepository.get_fda_processing_details(
             data_request, db=db, is_meraki_user=is_meraki_user
         )
+        
+        # Restore original pagination parameters
+        data_request.pageSize = original_page_size
+        data_request.page = original_page
         
         def get_val(item, key, default=None):
             if isinstance(item, dict):
                 return item.get(key, default)
             return getattr(item, key, default)
 
-        # Calculate stats from filtered records
-        if records:
-            fda_amounts = [float(get_val(r, 'fda_amount')) for r in records if get_val(r, 'fda_amount') not in (None, 0)]
+        # Calculate stats from ALL filtered records
+        if all_records:
+            fda_amounts = [float(get_val(r, 'fda_amount')) for r in all_records if get_val(r, 'fda_amount') not in (None, 0)]
             if fda_amounts:
                 fda_amounts_sorted = sorted(fda_amounts)
                 min_amount = min(fda_amounts)
@@ -255,13 +264,15 @@ class DashboardServiceImpl(DashboardService):
         )
         is_client = user_role == 3
         
-        def get_val(item, key, default=None):
-            if isinstance(item, dict):
-                return item.get(key, default)
-            return getattr(item, key, default)
+        # Paginate the records
+        if data_request.pageSize > 0:
+            offset = (data_request.page - 1) * data_request.pageSize
+            paginated_records = all_records[offset : offset + data_request.pageSize]
+        else:
+            paginated_records = all_records
 
         table_data = []
-        for idx, r in enumerate(records, start=1):
+        for idx, r in enumerate(paginated_records, start=1):
             etd = get_val(r, 'etd')
             if hasattr(etd, 'date'):
                 etd_str = etd.date().isoformat()
