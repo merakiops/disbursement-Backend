@@ -12,7 +12,8 @@ from app.dto.timeline_dto import (
     TimelineStepSummaryDTO,
     DetailedDisbursementTimelineResponseDTO,
     DetailedTimelineStepDTO,
-    TimelineDocumentDTO
+    TimelineDocumentDTO,
+    StepCommentDTO
 )
 
 class TimelineService:
@@ -234,6 +235,29 @@ class TimelineService:
         if not entries and disb_id and disb_id != identifier:
              entries = TimelineRepository.get_raw_timeline_entries(db, disb_id)
         
+        # --- Collect step comments / disputes from raw timeline entries ---
+        comments_by_step_name = {}
+        comments_by_step_index = {}
+
+        for entry in entries:
+            details = entry.details if isinstance(entry.details, dict) else {}
+            if entry.message and (entry.status == "Client Comment" or (entry.status and "Dispute:" in entry.status)):
+                cmt_obj = StepCommentDTO(
+                    author=entry.action_by_user,
+                    role=entry.action_by_role,
+                    comment=entry.message,
+                    step_name=details.get("step_name"),
+                    step_index=details.get("step_index"),
+                    date_time=entry.created_on
+                )
+                step_name_key = (details.get("step_name") or "").strip().upper()
+                if step_name_key:
+                    comments_by_step_name.setdefault(step_name_key, []).append(cmt_obj)
+
+                step_index_key = details.get("step_index")
+                if step_index_key is not None:
+                    comments_by_step_index.setdefault(step_index_key, []).append(cmt_obj)
+
         # --- File fetching patch ---
         from app.models.txn_disbursement_files import TxnDisbursementFiles
         timeline_files = db.query(TxnDisbursementFiles).filter(
@@ -269,10 +293,16 @@ class TimelineService:
         current_step = 1
 
         if entries:
+            # Filter out dispute/comment log entries so they don't form independent timeline node steps
+            step_entries = [
+                e for e in entries 
+                if e.status != "Client Comment" and not (e.status and e.status.startswith("Dispute:"))
+            ]
+
             # Deduplicate consecutive identical status entries
             deduped_entries = []
             last_status = None
-            for entry in entries:
+            for entry in step_entries:
                 if entry.status != last_status:
                     deduped_entries.append(entry)
                     last_status = entry.status
@@ -324,6 +354,12 @@ class TimelineService:
                             source_type=f_obj.source_type
                         ))
                 
+                # Retrieve step comments matching either step title or step index
+                step_cmts = (
+                    comments_by_step_name.get(title.upper(), []) or 
+                    comments_by_step_index.get(s, [])
+                )
+
                 timeline_list.append(
                     DetailedTimelineStepDTO(
                         step=s,
@@ -332,11 +368,10 @@ class TimelineService:
                         date_time=dt,
                         description=desc,
                         updated_by=upd_by,
-                        documents=docs
+                        documents=docs,
+                        comments=step_cmts
                     )
                 )
-        
-        
 
         existing_titles = [t.title.upper() for t in timeline_list]
 
@@ -365,6 +400,9 @@ class TimelineService:
                     else:
                         updated_by_name = "Meraki"
                 
+                # Fetch comments for recovered step if any exist
+                step_cmts = comments_by_step_name.get(title_str.upper(), [])
+
                 timeline_list.append(
                     DetailedTimelineStepDTO(
                         step=0,
@@ -373,7 +411,8 @@ class TimelineService:
                         date_time=default_dt if is_done else None,
                         description=f"{title_str} (Recovered)" if is_done else None,
                         updated_by=updated_by_name,
-                        documents=docs
+                        documents=docs,
+                        comments=step_cmts
                     )
                 )
 
@@ -395,7 +434,6 @@ class TimelineService:
             fda_appr_dt = getattr(fda, 'updated_on', None) or fda_up_dt
 
         # Always show all 6 standard steps
-        # Completed steps get "COMPLETED", future/bypassed steps get None (null)
         add_missing("Client request received", is_done=True, default_dt=client_req_dt)
         add_missing("Port Agent Assigned", is_done=True, default_dt=pa_assign_dt)
         add_missing("Pda Uploaded", is_done=has_pda, default_dt=pda_up_dt)
@@ -403,9 +441,6 @@ class TimelineService:
         add_missing("Fda Uploaded", is_done=has_fda, default_dt=fda_up_dt)
         add_missing("Fda Approved", is_done=fda_is_approved, default_dt=fda_appr_dt)
 
-        # Sort timeline: items with dates first, then null dates (legacy injected)
-        # But we want legacy injected to be in logical order. The easiest way is to just 
-        # define a fixed chronological order for known steps.
         order_map = {
             "CLIENT REQUEST RECEIVED": 1,
             "CLIENT REQUEST": 1,
@@ -420,7 +455,7 @@ class TimelineService:
             "PDA APPROVED": 5,
             "FDA UPLOADED": 6,
             "FDA APPROVED": 7,
-            "APPROVED": 5,  # Fallback for other approvals
+            "APPROVED": 5,
             "COMPLETED": 8
         }
 
@@ -447,20 +482,19 @@ class TimelineService:
 
         timeline_list.sort(key=lambda x: (x._temp_order, x.date_time.timestamp() if x.date_time else 0))
 
-        # Re-assign sequential steps
+        # Re-assign sequential step numbers
         completed_steps = 0
         for idx, t in enumerate(timeline_list, start=1):
             t.step = idx
             if hasattr(t, '_temp_order'):
                 delattr(t, '_temp_order')
-            if t.status:  # count as completed if status is not None
+            if t.status:
                 completed_steps += 1
                 
         current_step = completed_steps
 
         status_name = "Submitted"
         if timeline_list:
-            # Get the last completed step for status
             last_completed = [t for t in timeline_list if t.status]
             if last_completed:
                 last_entry_title = last_completed[-1].title.upper()
@@ -479,7 +513,7 @@ class TimelineService:
         if has_fda:
             status_name = "FDA Uploaded"
 
-        # Calculate progress
+        # Calculate progress percentage
         total_steps = len(timeline_list) if timeline_list else 4
         progress_pct = int(min(100, (current_step / total_steps) * 100)) if total_steps > 0 else 0
         
@@ -496,7 +530,7 @@ class TimelineService:
             progress_percentage=progress_pct,
             timeline=timeline_list
         )
-
+    
     @staticmethod
     def save_timeline_document(identifier: str, payload, username: str, db: Session):
         from app.models.txn_disbursement_files import TxnDisbursementFiles

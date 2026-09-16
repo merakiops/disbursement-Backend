@@ -1,11 +1,17 @@
 from pydantic import BaseModel, Field, field_validator
-class ClientCommentRequestDTO(BaseModel):
-    disbursement_id: str = Field(..., description="The disbursement ID (e.g. MDA123)")
-    comment: str = Field(..., description="The comment from the client")
+
 
 from typing import Optional, List, Dict, Any, Union
 from datetime import datetime
+class DisputeItemDTO(BaseModel):
+    step_name: str
+    step_index: int
+    comment: str
 
+class ClientCommentRequestDTO(BaseModel):
+    disbursement_id: Optional[str] = None
+    disbursement_seq: Optional[int] = None
+    disputes: List[DisputeItemDTO]
 class PortAgentSelectionDTO(BaseModel):
     portagent_id: int
     CNA: Optional[bool] = False

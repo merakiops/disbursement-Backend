@@ -982,28 +982,46 @@ async def send_client_comment(
         username = request.state.user.get("username", "Unknown Client")
         disbursement_email = MERAKI_DISBURSEMENT_EMAIL_ADDRESS
         
-        # Determine disbursement_seq if body.disbursement_id is like 'MDA123'
-        seq = None
-        if body.disbursement_id and body.disbursement_id.upper().startswith("MDA"):
+        # Determine disbursement_seq if not explicitly provided
+        seq = body.disbursement_seq
+        if not seq and body.disbursement_id and body.disbursement_id.upper().startswith("MDA"):
             try:
                 seq = int(body.disbursement_id.upper().replace("MDA", ""))
             except ValueError:
                 pass
-                
-        # 1. Save Timeline Entry
-        TimelineRepository.add_timeline_entry(
-            db=db,
-            status="Client Comment",
-            action_by_role="Client",
-            action_by_user=username,
-            message=body.comment,
-            disbursement_id=body.disbursement_id,
-            disbursement_seq=seq
-        )
+
+        saved_entries = []
+
+        # Process each dispute/comment item sent from frontend
+        for dispute in body.disputes:
+            comment_text = f"[{dispute.step_name} - Step {dispute.step_index}] {dispute.comment}"
+            
+            # Save Timeline Entry for the specific step
+            entry = TimelineRepository.add_timeline_entry(
+                db=db,
+                status=f"Dispute: {dispute.step_name}",
+                action_by_role="Client",
+                action_by_user=username,
+                message=dispute.comment,
+                disbursement_id=body.disbursement_id,
+                disbursement_seq=seq,
+                details={
+                    "step_name": dispute.step_name,
+                    "step_index": dispute.step_index
+                }
+            )
+            saved_entries.append(comment_text)
+
+        # Build and send consolidated email for all step comments
+        subject = f"New Step Comments from Client {username} for ID: {body.disbursement_id or seq}"
+        comments_formatted = "\n".join([f"- Step {item.step_index} ({item.step_name}): {item.comment}" for item in body.disputes])
         
-        # 2. Prepare & Send Email
-        subject = f"New Comment from Client {username} for ID: {body.disbursement_id}"
-        email_body = f"Hello Disbursement Team,\n\nThis client ({username}) is sending this comment for Request/Disbursement ID: {body.disbursement_id}.\n\nComment below:\n{body.comment}\n\nRegards,\nMeraki Shipping Portal"
+        email_body = (
+            f"Hello Disbursement Team,\n\n"
+            f"Client '{username}' submitted step comments for Request/Disbursement ID: {body.disbursement_id or seq}.\n\n"
+            f"Comments:\n{comments_formatted}\n\n"
+            f"Regards,\nMeraki Shipping Portal"
+        )
         
         background_tasks.add_task(
             SendMail.send_email,
@@ -1015,7 +1033,7 @@ async def send_client_comment(
         
         return {
             "status": "success",
-            "message": "Comment saved to timeline and email scheduled successfully."
+            "message": f"{len(saved_entries)} step comment(s) saved to timeline and email scheduled successfully."
         }
     except Exception as e:
         logger.error(f"Error in client_comment: {str(e)}")

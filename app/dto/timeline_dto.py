@@ -6,7 +6,13 @@ class TimelineStepSummaryDTO(BaseModel):
     step: int
     name: str
     status: str  # COMPLETED, CURRENT, PENDING, REJECTED
-
+class StepCommentDTO(BaseModel):
+    author: Optional[str] = None
+    role: Optional[str] = None
+    comment: str
+    step_name: Optional[str] = None
+    step_index: Optional[int] = None
+    date_time: Optional[datetime] = None
 class DisbursementSummaryItemDTO(BaseModel):
     request_id: Optional[int] = None
     disbursement_id: Optional[str] = None
@@ -41,6 +47,7 @@ class DetailedTimelineStepDTO(BaseModel):
     description: Optional[str] = None
     updated_by: Optional[str] = None
     documents: List[TimelineDocumentDTO] = []
+    comments: List[StepCommentDTO] = []
 
 class DetailedDisbursementTimelineResponseDTO(BaseModel):
     request_id: Optional[int] = None
