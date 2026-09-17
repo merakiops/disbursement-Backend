@@ -167,8 +167,12 @@ class DisbursementRepository:
 
                 status_bg, status_text = _get_status_color(r["final_status"])
                 final_bg, final_text = _get_status_color(r["final_status"])
-                pda_bg, pda_text = _get_status_color(r["pda_status"])
-                fda_bg, fda_text = _get_status_color(r["fda_status"])
+                
+                pda_stat = "Completed" if str(r["pda_status"] or "").strip().lower() == "completed" else "N/A"
+                fda_stat = "Completed" if str(r["fda_status"] or "").strip().lower() == "completed" else "Under process"
+                
+                pda_bg, pda_text = _get_status_color(pda_stat)
+                fda_bg, fda_text = _get_status_color(fda_stat)
                 
                 ankkumam_records.append(DisbursementTrackerDTO(
                     disbursement_seq=r['disbursement_seq'],
@@ -195,7 +199,7 @@ class DisbursementRepository:
                     pda_savings=pda_savings, fda_savings=fda_savings,
                     final_status=r["final_status"],
                     purpose=r["purpose"],
-                    pda_status=r["pda_status"], fda_status=r["fda_status"],
+                    pda_status=pda_stat, fda_status=fda_stat,
                     fda_status_background_color=fda_bg, fda_status_text_color=fda_text,
                     pda_status_background_color=pda_bg, pda_status_text_color=pda_text,
                     final_status_background_color=final_bg, final_status_text_color=final_text,

@@ -696,7 +696,7 @@ class DashboardRepository:
                     "loss_prevention_fda": lp_fda,
                     "total_loss_prevented": tot_lp,
                     "loss_prevented_reason": r.get("reason"),
-                    "pda_status": "Completed" if str(r.get("pda_status") or "").strip().lower() == "completed" else "Under process",
+                    "pda_status": "Completed" if str(r.get("pda_status") or "").strip().lower() == "completed" else "N/A",
                     "fda_status": "Completed" if str(r.get("fda_status") or "").strip().lower() == "completed" else "Under process",
                     "fda_amount": fda_amt,
                     "pda_amount": pda_amt,
