@@ -37,17 +37,22 @@ class DashboardServiceImpl(DashboardService):
                 detail="Dashboard data not found"
             )
         
+        pda_completed = result.get("completed_pda") or 0
+        pda_under_process = result.get("under_process_pda") or 0
+        pda_total_count = pda_completed + pda_under_process
+        
+        fda_completed = result.get("completed_fda") or 0
+        fda_under_process = result.get("under_process_fda") or 0
+        fda_yet_to_process = result.get("yet_to_process") or 0
+        fda_total_count = fda_completed + fda_under_process + fda_yet_to_process
+
         summary_cards = SummaryCardsDTO(
             countries=result.get("countries") or 0,
             ports=result.get("ports") or 0,
             vessels=result.get("vessels") or 0,
-            totalPDA=result.get("total_pda") or 0,
-            totalFDA=result.get("total_fda") or 0
+            totalPDA=pda_total_count,
+            totalFDA=fda_total_count
         )
-        
-        pda_completed = result.get("completed_pda") or 0
-        pda_under_process = result.get("under_process_pda") or 0
-        pda_total_count = pda_completed + pda_under_process
 
         pda_progress = ProgressDetailDTO(
             Completed=pda_completed,
@@ -55,11 +60,6 @@ class DashboardServiceImpl(DashboardService):
             total=pda_total_count,
             pdaCompletedNoFda=result.get("pda_completed_no_fda") or 0
         )
-        
-        fda_completed = result.get("completed_fda") or 0
-        fda_under_process = result.get("under_process_fda") or 0
-        fda_yet_to_process = result.get("yet_to_process") or 0
-        fda_total_count = fda_completed + fda_under_process + fda_yet_to_process
 
         fda_progress = FDAProgressDetailDTO(
             Completed=fda_completed,

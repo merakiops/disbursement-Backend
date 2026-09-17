@@ -240,10 +240,8 @@ class DashboardRepository:
                 fda_sav += float(r.get("loss_prevention_fda") or 0.0)
                 tot_sav += float(r.get("total_loss_prevented") or 0.0)
                 
-                if str(r.get("pda_status") or "").strip().lower() == "completed":
-                    completed_pda += 1
-                else:
-                    under_process_pda += 1
+                # Ankkumam PDA is always assumed completed
+                completed_pda += 1
                 
                 if str(r.get("fda_status") or "").strip().lower() == "completed":
                     completed_fda += 1
@@ -442,10 +440,8 @@ class DashboardRepository:
                 total_pda += 1
                 total_fda += 1
                 
-                if str(r.get("pda_status") or "").strip().lower() == "completed":
-                    pda_completed += 1
-                else:
-                    pda_under_process += 1
+                # Ankkumam PDA is always assumed completed
+                pda_completed += 1
                     
                 if str(r.get("fda_status") or "").strip().lower() == "completed":
                     fda_completed += 1
