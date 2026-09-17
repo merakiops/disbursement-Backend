@@ -173,3 +173,21 @@ async def get_negotiations_endpoint(request: Request, payload: NegotiationReques
         return dashboard_service.get_negotiations(payload.type, db)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+from app.dto.dasboard_response_dto import DashboardHoverStatsResponseDTO
+
+@DashboardController.post("/api/v1/dashboard/hover-stats", response_model=DashboardHoverStatsResponseDTO)
+@jwt_required
+async def get_dashboard_hover_stats(request: Request, payload: DashboardRequestDTO, db: Session = Depends(get_db)):
+    """
+    Get dashboard hover stats for countries, ports, vessels, port calls, and FDA.
+    """
+    try:
+        return dashboard_service.get_dashboard_hover_stats(payload, db)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )

@@ -172,3 +172,40 @@ class FilterDataDTO(BaseModel):
     model_config = {
         "from_attributes": True
     }
+
+class HoverTopItemDTO(BaseModel):
+    name: str
+    count: int
+
+class HoverCountriesDTO(BaseModel):
+    total_countries: int
+    top_countries: List[HoverTopItemDTO]
+
+class HoverPortsDTO(BaseModel):
+    total_ports: int
+    top_ports: List[HoverTopItemDTO]
+
+class HoverPortCallsDTO(BaseModel):
+    total_port_calls: int
+    average_calls_per_port: float
+    top_ports: List[HoverTopItemDTO]
+
+class HoverVesselsDTO(BaseModel):
+    total_vessels: int
+    active_vessels: int
+    completed_vessels: int
+    top_vessels: List[HoverTopItemDTO]
+
+class HoverFdaDTO(BaseModel):
+    total_fda: int
+    completed: int
+    in_progress: int
+    awaiting_fda: int
+    completion_percentage: float
+
+class DashboardHoverStatsResponseDTO(BaseModel):
+    countries: HoverCountriesDTO
+    ports: HoverPortsDTO
+    port_calls: HoverPortCallsDTO
+    vessels: HoverVesselsDTO
+    fda: HoverFdaDTO

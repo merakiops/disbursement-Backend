@@ -22,3 +22,7 @@ class DashboardService(ABC):
     @abstractmethod
     def get_dashboard_filter_data(self, db: Session) -> FilterDataDTO:
         pass
+
+    @abstractmethod
+    def get_dashboard_hover_stats(self, payload: DashboardRequestDTO, db: Session):
+        pass

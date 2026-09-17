@@ -115,6 +115,29 @@ class DashboardServiceImpl(DashboardService):
 
         return DashboardResponseDTO(overallSummary=overall_summary)
 
+    def get_dashboard_hover_stats(self, payload: DashboardRequestDTO, db: Session):
+        """
+        Get dashboard hover stats for a single client or all clients.
+        """
+        from_date = payload.monthRange.from_date if payload.monthRange else None
+        to_date = payload.monthRange.to_date if payload.monthRange else None
+        
+        result = DashboardRepository.get_dashboard_hover_stats(
+            payload.clientId,
+            from_date,
+            to_date,
+            getattr(payload, 'dataSource', 'all'),
+            db
+        )
+        
+        if not result:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Dashboard hover data not found"
+            )
+            
+        return result
+
     def get_savings_insights(self, payload: DashboardRequestDTO, db: Session) -> SavingsInsightsDTO:
         """
         Get savings insights for a single client or all clients if client_id is not provided.

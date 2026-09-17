@@ -56,23 +56,47 @@ class DisbursementTrackerDTO(BaseModel):
 
     @model_validator(mode='after')
     def apply_status_rules(self) -> 'DisbursementTrackerDTO':
-        if self.source == "Ankkumam":
-            return self
-            
-        fda = (self.fda_status or "").lower()
-        pda = (self.pda_status or "").lower()
+        pda = (self.pda_status or "").strip().lower()
+        fda = (self.fda_status or "").strip().lower()
         
-        if fda == "completed":
-            self.pda_status = "NA"
-            # Optional: adjust background colors for NA
-            self.pda_status_background_color = "#70757d"
-            self.pda_status_text_color = "#ffffff"
+        def get_color(status_name: str):
+            mapping = {
+                "pda in progress": ("#f59e0b", "#ffffff"),
+                "cancelled": ("#ef4444", "#ffffff"),
+                "awaiting fda": ("#f59e0b", "#ffffff"),
+                "fda in progress": ("#f59e0b", "#ffffff"),
+                "fda completed": ("#10b981", "#ffffff"),
+            }
+            return mapping.get(status_name.lower(), (self.final_status_background_color, self.final_status_text_color))
+
+        new_final = self.final_status
+        
+        if pda in ["under process", "under progress", "in progress"]:
+            if fda in ["n/a", "na", "-", ""]:
+                new_final = "PDA in Progress"
+        elif pda == "cancelled":
+            if fda in ["n/a", "na", "-", ""]:
+                new_final = "Cancelled"
         elif pda == "completed":
-            if not fda or fda == "na":
-                self.fda_status = "Pending"
-                # Optional: adjust background colors for Pending
-                self.fda_status_background_color = "#f59e0b" # typical pending color
-                self.fda_status_text_color = "#ffffff"
+            if fda in ["n/a", "na", "-", ""]:
+                new_final = "Awaiting FDA"
+            elif fda in ["under process", "under progress", "in progress"]:
+                new_final = "FDA in Progress"
+            elif fda == "completed":
+                new_final = "FDA Completed"
+        elif pda in ["n/a", "na", "-", ""]:
+            if fda in ["under process", "under progress", "in progress"]:
+                new_final = "FDA in Progress"
+                
+        if new_final and new_final != self.final_status:
+            self.final_status = new_final
+            self.status = new_final
+            bg, txt = get_color(new_final)
+            if bg and txt:
+                self.final_status_background_color = bg
+                self.final_status_text_color = txt
+                self.status_background_color = bg
+                self.status_text_color = txt
                 
         return self
 

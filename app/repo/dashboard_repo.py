@@ -334,6 +334,244 @@ class DashboardRepository:
 
         return merged
 
+
+    @staticmethod
+    def get_dashboard_hover_stats(client_ids: List[int], from_date, to_date, data_source: Optional[str] = "all", db: Session = None):
+        from collections import Counter
+        from app.dto.dasboard_response_dto import DashboardHoverStatsResponseDTO, HoverCountriesDTO, HoverPortsDTO, HoverPortCallsDTO, HoverVesselsDTO, HoverFdaDTO, HoverTopItemDTO
+        
+        is_excel_client = False
+        is_kamba_client = False
+        if client_ids:
+            try:
+                c_ids = [int(x) for x in client_ids if str(x).isdigit()]
+                is_excel_client = 84 in c_ids and len(c_ids) == 1
+                is_kamba_client = 85 in c_ids and len(c_ids) == 1
+            except (ValueError, TypeError):
+                pass
+
+        ds = (data_source or "all").lower()
+
+        # We will collect frequencies for each category
+        country_counter = Counter()
+        port_counter = Counter()
+        vessel_counter = Counter()
+        
+        total_pda = 0
+        total_fda = 0
+        pda_completed = 0
+        pda_under_process = 0
+        fda_completed = 0
+        fda_under_process = 0
+        
+        # Helper to process ankkumam records
+        def process_ankkumam(ankkumam_clients):
+            nonlocal total_pda, total_fda, pda_completed, pda_under_process, fda_completed, fda_under_process
+            if not ankkumam_clients:
+                return
+            
+            class DummyDataRequest:
+                tableFilter = None
+                pageSize = -1
+                page = 1
+                clientId = None
+            
+            raw_records, _ = DashboardRepository._get_ankkumam_records(
+                ankkumam_clients, DummyDataRequest(), False, True, 0, db
+            )
+            
+            _, excel_to_prod_cid = DashboardRepository._get_dynamic_client_mapping(db)
+            prod_cids = [excel_to_prod_cid[c] for c in ankkumam_clients if c in excel_to_prod_cid]
+            
+            from sqlalchemy import text
+            from app.db import SCHEMA_NAME
+            
+            raw_vessel_names = list(set([str(r.get("vessel_name")).strip().lower() for r in raw_records if r.get("vessel_name")]))
+            vessels_str = ",".join(f"'{v.replace(chr(39), chr(39)+chr(39))}'" for v in raw_vessel_names) if raw_vessel_names else "''"
+            
+            expanded_cids = get_all_prod_ids_for_client_list(prod_cids) if prod_cids else []
+            cids_str = ",".join(str(c) for c in expanded_cids) if expanded_cids else "'-1'"
+            
+            prod_keys_sql = f'''
+                SELECT 
+                    vw.vessel_name, 
+                    vw.country_name as country, 
+                    vw.port_name as port, 
+                    vw.etd, 
+                    td.eta,
+                    td.voyage as voyage_no, 
+                    mac.name as port_agent,
+                    purp.name as purpose
+                FROM {SCHEMA_NAME}.vw_dashboard_data vw
+                LEFT JOIN {SCHEMA_NAME}.txn_disbursement td ON vw.disbursement_seq = td.disbursement_seq
+                LEFT JOIN {SCHEMA_NAME}.ma_company mac ON td.portagent_id = mac.company_id
+                LEFT JOIN {SCHEMA_NAME}.ma_purpose purp ON td.purpose_id = purp.purpose_id
+                WHERE vw.client_id IN ({cids_str}) 
+                  AND LOWER(vw.vessel_name) IN ({vessels_str})
+            '''
+            prod_records = db.execute(text(prod_keys_sql)).mappings().all()
+            
+            prod_dicts = [
+                {
+                    "vessel_name": r["vessel_name"],
+                    "country": r["country"],
+                    "port": r["port"],
+                    "etd": r["etd"],
+                    "eta": r["eta"],
+                    "purpose": r["purpose"],
+                    "voyage_no": r["voyage_no"],
+                    "port_agent": r["port_agent"]
+                } for r in prod_records
+            ]
+            
+            from app.utils.dedup_utils import get_record_key, deduplicate_records
+            
+            prod_keys = {get_record_key(r) for r in prod_dicts}
+            raw_records = deduplicate_records(raw_records)
+            deduped_ankkumam = [r for r in raw_records if get_record_key(r) not in prod_keys]
+            
+            for r in deduped_ankkumam:
+                c_name = str(r.get("country_name") or "N/A").strip().upper()
+                p_name = str(r.get("port_name") or "N/A").strip().upper()
+                v_name = str(r.get("vessel_name") or "N/A").strip().upper()
+                
+                if c_name != "N/A": country_counter[c_name] += 1
+                if p_name != "N/A": port_counter[p_name] += 1
+                if v_name != "N/A": vessel_counter[v_name] += 1
+                
+                total_pda += 1
+                total_fda += 1
+                
+                if str(r.get("pda_status") or "").strip().lower() == "completed":
+                    pda_completed += 1
+                else:
+                    pda_under_process += 1
+                    
+                if str(r.get("fda_status") or "").strip().lower() == "completed":
+                    fda_completed += 1
+                else:
+                    fda_under_process += 1
+
+        # Fetch standard data
+        if not is_kamba_client and ds != "kamba" and ds != "excel":
+            from sqlalchemy import text
+            from app.db import SCHEMA_NAME
+            
+            expanded_client_ids = get_all_prod_ids_for_client_list(client_ids) if client_ids else None
+            
+            base_where = ["1=1"]
+            params = {}
+            if expanded_client_ids:
+                int_cids = [int(x) for x in expanded_client_ids if str(x).isdigit()]
+                if int_cids:
+                    base_where.append("td.client_id = ANY(:cids)")
+                    params["cids"] = int_cids
+            if from_date:
+                base_where.append("td.etd::date >= :from_date::date")
+                params["from_date"] = from_date
+            if to_date:
+                base_where.append("td.etd::date <= :to_date::date")
+                params["to_date"] = to_date
+                
+            base_where_sql = " AND ".join(base_where)
+            
+            sql = f'''
+                SELECT 
+                    UPPER(c.name) as country, 
+                    UPPER(p.name) as port, 
+                    UPPER(v.name) as vessel,
+                    fda.status as fda_status,
+                    pda.status as pda_status
+                FROM {SCHEMA_NAME}.txn_disbursement td
+                LEFT JOIN {SCHEMA_NAME}.ma_country c ON td.country_id = c.country_id
+                LEFT JOIN {SCHEMA_NAME}.ma_port p ON td.port_id = p.port_id
+                LEFT JOIN {SCHEMA_NAME}.ma_vessels v ON td.vsl_id = v.vsl_id
+                LEFT JOIN {SCHEMA_NAME}.txn_fda fda ON td.disbursement_seq = fda.disbursement_seq AND (fda.state IS NULL OR fda.state <> 'D')
+                LEFT JOIN {SCHEMA_NAME}.txn_pda pda ON td.disbursement_seq = pda.disbursement_seq AND (pda.state IS NULL OR pda.state <> 'D')
+                WHERE {base_where_sql}
+            '''
+            
+            prod_records = db.execute(text(sql), params).mappings().all()
+            for r in prod_records:
+                c_name = r.get("country") or "N/A"
+                p_name = r.get("port") or "N/A"
+                v_name = r.get("vessel") or "N/A"
+                
+                if c_name != "N/A": country_counter[c_name] += 1
+                if p_name != "N/A": port_counter[p_name] += 1
+                if v_name != "N/A": vessel_counter[v_name] += 1
+                
+                total_fda += 1
+                total_pda += 1
+                
+                # In prod, status=7 means approved/completed
+                if r.get("fda_status") == 7:
+                    fda_completed += 1
+                else:
+                    fda_under_process += 1
+                    
+                if r.get("pda_status") == 7:
+                    pda_completed += 1
+                else:
+                    pda_under_process += 1
+
+        # Fetch ankkumam data
+        if not is_excel_client and ds != "excel" and ds != "standard":
+            prod_cid_to_excel, excel_to_prod_cid = DashboardRepository._get_dynamic_client_mapping(db)
+            ankkumam_clients = []
+            if client_ids:
+                for cid in client_ids:
+                    if cid and int(cid) in prod_cid_to_excel:
+                        ankkumam_clients.append(prod_cid_to_excel[int(cid)])
+                    elif str(cid) == '85' and "ALGHAF" in excel_to_prod_cid:
+                        ankkumam_clients.append("ALGHAF")
+            else:
+                ankkumam_clients = list(excel_to_prod_cid.keys())
+                
+            process_ankkumam(ankkumam_clients)
+            
+        # Top 5 mappings
+        top_countries = [HoverTopItemDTO(name=k, count=v) for k, v in country_counter.most_common(5)]
+        top_ports = [HoverTopItemDTO(name=k, count=v) for k, v in port_counter.most_common(5)]
+        top_vessels = [HoverTopItemDTO(name=k, count=v) for k, v in vessel_counter.most_common(5)]
+        
+        unique_countries = len(country_counter)
+        unique_ports = len(port_counter)
+        unique_vessels = len(vessel_counter)
+        total_port_calls = sum(port_counter.values())
+        avg_calls_per_port = round(total_port_calls / unique_ports, 2) if unique_ports > 0 else 0.0
+        
+        fda_completion_pct = round((fda_completed / total_fda) * 100, 2) if total_fda > 0 else 0.0
+
+        return DashboardHoverStatsResponseDTO(
+            countries=HoverCountriesDTO(
+                total_countries=unique_countries,
+                top_countries=top_countries
+            ),
+            ports=HoverPortsDTO(
+                total_ports=unique_ports,
+                top_ports=top_ports
+            ),
+            port_calls=HoverPortCallsDTO(
+                total_port_calls=total_port_calls,
+                average_calls_per_port=avg_calls_per_port,
+                top_ports=top_ports
+            ),
+            vessels=HoverVesselsDTO(
+                total_vessels=unique_vessels,
+                active_vessels=fda_under_process,
+                completed_vessels=fda_completed,
+                top_vessels=top_vessels
+            ),
+            fda=HoverFdaDTO(
+                total_fda=total_fda,
+                completed=fda_completed,
+                in_progress=fda_under_process,
+                awaiting_fda=0,
+                completion_percentage=fda_completion_pct
+            )
+        )
+
     @staticmethod
     def get_dashboard_summary(client_ids: List[int], from_date, to_date, data_source: Optional[str] = "all", db: Session = None):
         """
