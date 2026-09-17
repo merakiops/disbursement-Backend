@@ -56,8 +56,8 @@ class DisbursementTrackerDTO(BaseModel):
 
     @model_validator(mode='after')
     def apply_status_rules(self) -> 'DisbursementTrackerDTO':
-        pda = (self.pda_status or "").strip().lower()
-        fda = (self.fda_status or "").strip().lower()
+        pda = (self.pda_status or "").strip().lower().replace("-", " ")
+        fda = (self.fda_status or "").strip().lower().replace("-", " ")
         
         def get_color(status_name: str):
             mapping = {
@@ -72,8 +72,7 @@ class DisbursementTrackerDTO(BaseModel):
         new_final = self.final_status
         
         if pda in ["under process", "under progress", "in progress"]:
-            if fda in ["n/a", "na", "-", ""]:
-                new_final = "PDA in Progress"
+            new_final = "PDA in Progress"
         elif pda == "cancelled":
             if fda in ["n/a", "na", "-", ""]:
                 new_final = "Cancelled"
