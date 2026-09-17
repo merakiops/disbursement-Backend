@@ -196,6 +196,8 @@ class DashboardRepository:
             from app.utils.dedup_utils import get_record_key, deduplicate_records
             
             prod_keys = {get_record_key(r) for r in prod_dicts}
+            # Sort Ankkumam records so that 'completed' ones appear first and survive internal deduplication
+            raw_records.sort(key=lambda r: 0 if str(r.get("fda_status") or "").strip().lower() == "completed" else 1)
             
             # Deduplicate internally within Ankkumam first
             raw_records = deduplicate_records(raw_records)
@@ -425,6 +427,9 @@ class DashboardRepository:
             from app.utils.dedup_utils import get_record_key, deduplicate_records
             
             prod_keys = {get_record_key(r) for r in prod_dicts}
+            
+            # Sort before internal deduplication
+            raw_records.sort(key=lambda r: 0 if str(r.get("fda_status") or "").strip().lower() == "completed" else 1)
             raw_records = deduplicate_records(raw_records)
             deduped_ankkumam = [r for r in raw_records if get_record_key(r) not in prod_keys]
             
@@ -1281,7 +1286,43 @@ class DashboardRepository:
             # Deduplicate internally within Ankkumam first
             ankkumam_records = deduplicate_records(ankkumam_records)
 
-            std_keys = {get_record_key(r) for r in standard_records}
+            # Fetch all Prod keys for proper deduplication (regardless of completed status)
+            prod_keys_sql = f'''
+                SELECT 
+                    vw.vessel_name, 
+                    vw.country_name as country_name, 
+                    vw.port_name as port_name, 
+                    vw.etd, 
+                    td.eta,
+                    td.voyage as voyage_no, 
+                    mac.name as port_agent,
+                    purp.name as purpose
+                FROM {SCHEMA_NAME}.vw_dashboard_data vw
+                LEFT JOIN {SCHEMA_NAME}.txn_disbursement td ON vw.disbursement_seq = td.disbursement_seq
+                LEFT JOIN {SCHEMA_NAME}.ma_company mac ON td.portagent_id = mac.company_id
+                LEFT JOIN {SCHEMA_NAME}.ma_purpose purp ON td.purpose_id = purp.purpose_id
+            '''
+            cids_str = ",".join(str(c) for c in (int_cids if 'int_cids' in locals() else []))
+            if cids_str:
+                prod_keys_sql += f" WHERE vw.client_id IN ({cids_str})"
+                
+            all_prod_for_keys = db.execute(text(prod_keys_sql)).mappings().all()
+            
+            # Map column names for get_record_key which expects specific dict keys
+            mapped_prod = [
+                {
+                    "vessel_name": r.get("vessel_name"),
+                    "country_name": r.get("country_name") or r.get("country"),
+                    "port_name": r.get("port_name") or r.get("port"),
+                    "etd": r.get("etd"),
+                    "eta": r.get("eta"),
+                    "voyage_no": r.get("voyage_no"),
+                    "agent": r.get("port_agent"),
+                    "purpose": r.get("purpose")
+                } for r in all_prod_for_keys
+            ]
+            
+            std_keys = {get_record_key(r) for r in mapped_prod}
             deduped_ankkumam = [r for r in ankkumam_records if get_record_key(r) not in std_keys]
 
             all_records = standard_records + deduped_ankkumam
