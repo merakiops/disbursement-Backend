@@ -242,6 +242,8 @@ class DashboardRepository:
                 
                 if str(r.get("pda_status") or "").strip().lower() == "completed":
                     completed_pda += 1
+                else:
+                    under_process_pda += 1
                 
                 if str(r.get("fda_status") or "").strip().lower() == "completed":
                     completed_fda += 1
@@ -250,9 +252,7 @@ class DashboardRepository:
                 
             tot_disb = len(deduped_ankkumam)
             
-            # Treat all PDA total as completed count, and 0 under process
-            total_pda = completed_pda
-            under_process_pda = 0
+            total_pda = tot_disb
             
             return {
                 "country_list": list(c_set),
@@ -285,171 +285,7 @@ class DashboardRepository:
                 f.write(traceback.format_exc())
             print(f"Error computing deduped ankkumam summary: {e}")
             return [], 0
-            
-            # Fetch raw ankkumam records
-            class DummyDataRequest:
-                tableFilter = None
-                pageSize = -1
-                page = 1
-                clientId = None
-            
-            raw_records, _ = DashboardRepository._get_ankkumam_records(
-                ankkumam_clients, DummyDataRequest(), False, True, 0, db
-            )
-            
-            # Fetch PROD keys for dedup (we fetch all active prod records for these clients)
-            # Since client mapping: ESDMCC=83, NWL=14
-            _, excel_to_prod_cid = DashboardRepository._get_dynamic_client_mapping(db)
-            prod_cids = [excel_to_prod_cid[c] for c in ankkumam_clients if c in excel_to_prod_cid]
-            
-            from app.models.vw_disbursement_tracker import DisbursementTracker
-            prod_records = db.query(
-                DisbursementTracker.vessel_name,
-                DisbursementTracker.country,
-                DisbursementTracker.port,
-                DisbursementTracker.etd,
-                DisbursementTracker.voyage,
-                DisbursementTracker.port_agent
-            ).filter(DisbursementTracker.client_id.in_(prod_cids)).all()
-            
-            # Create dummy prod dicts to pass to deduplicator
-            prod_dicts = [
-                {
-                    "vessel_name": r.vessel_name,
-                    "country": r.country,
-                    "port": r.port,
-                    "etd": r.etd,
-                    "voyage_no": r.voyage,
-                    "port_agent": r.port_agent
-                } for r in prod_records
-            ]
-            
-            from app.utils.dedup_utils import deduplicate_records
-            
-            # Put prod first so they take priority
-            all_records = prod_dicts + raw_records
-            deduped_all = deduplicate_records(all_records)
-            
-            # Filter back to only ankkumam records that survived
-            deduped_ankkumam = [r for r in deduped_all if r.get("data_source") == "ankkumam"]
-            
-            # Now compute summary on deduped_ankkumam
-            c_set = set()
-            p_set = set()
-            v_set = set()
-            
-            pda_total = 0.0
-            fda_total = 0.0
-            pda_sav = 0.0
-            fda_sav = 0.0
-            tot_sav = 0.0
-            
-            for r in deduped_ankkumam:
-                if r.get("country_name") and r["country_name"] != "N/A": c_set.add(str(r["country_name"]).strip().upper())
-                if r.get("port_name") and r["port_name"] != "N/A": p_set.add(str(r["port_name"]).strip().upper())
-                if r.get("vessel_name"): v_set.add(str(r["vessel_name"]).strip().upper())
-                
-                pda_total += float(r.get("pda_amount") or 0.0)
-                fda_total += float(r.get("fda_amount") or 0.0)
-                pda_sav += float(r.get("loss_prevention_pda") or 0.0)
-                fda_sav += float(r.get("loss_prevention_fda") or 0.0)
-                tot_sav += float(r.get("total_loss_prevented") or 0.0)
-                
-            tot_disb = len(deduped_ankkumam)
-            
-            return {
-                "country_list": list(c_set),
-                "port_list": list(p_set),
-                "vessel_list": list(v_set),
-                "countries": len(c_set),
-                "ports": len(p_set),
-                "vessels": len(v_set),
-                "total_pda": tot_disb,
-                "completed_pda": tot_disb,
-                "under_process_pda": 0,
-                "total_fda": tot_disb,
-                "completed_fda": tot_disb,
-                "under_process_fda": 0,
-                "yet_to_process": 0,
-                "pdasavings": pda_sav,
-                "fdasavings": fda_sav,
-                "overallsavingsamount": tot_sav,
-                "fda_total_amount": fda_total,
-                "pda_total_amount": pda_total,
-                "percentage_savings": round((tot_sav / fda_total * 100), 2) if fda_total > 0 else 0.0,
-                "percentage_savings_fda": round((tot_sav / fda_total * 100), 2) if fda_total > 0 else 0.0,
-                "percentage_savings_pda": round((tot_sav / pda_total * 100), 2) if pda_total > 0 else 0.0,
-                "pda_completed_no_fda": 0
-            }
-        except Exception as e:
-            db.rollback()
-            import traceback
-            with open("/tmp/ankkumam_error.log", "w") as f:
-                f.write(traceback.format_exc())
-            print(f"Error computing deduped ankkumam summary: {e}")
-            return [], 0
-            
-            clients_str = ",".join(f"'{c}'" for c in ankkumam_clients)
-            where_sql = f"d.client IN ({clients_str})"
-            
-            v_list = db.execute(text(f"SELECT DISTINCT d.vessel FROM ankkumam_data_excel.data d WHERE {where_sql} AND d.vessel IS NOT NULL")).scalars().all()
-            c_list = db.execute(text(f"SELECT DISTINCT d.country FROM ankkumam_data_excel.data d WHERE {where_sql} AND d.country IS NOT NULL")).scalars().all()
-            p_list = db.execute(text(f"SELECT DISTINCT d.port FROM ankkumam_data_excel.data d WHERE {where_sql} AND d.port IS NOT NULL")).scalars().all()
-            
-            v_cnt = len(v_list)
-            c_cnt = len(c_list)
-            p_cnt = len(p_list)
-            tot_disb = db.execute(text(f"SELECT COUNT(*) FROM ankkumam_data_excel.data d WHERE {where_sql}")).scalar() or 0
-            
-            amt_sql = f"""
-                SELECT 
-                    SUM(CAST(COALESCE(NULLIF(regexp_replace(CAST(d.pda_amount AS TEXT), '[^0-9.]', '', 'g'), ''), '0') AS NUMERIC)) as pda_tot,
-                    SUM(CAST(COALESCE(NULLIF(regexp_replace(CAST(d.fda_amount_usd AS TEXT), '[^0-9.]', '', 'g'), ''), '0') AS NUMERIC)) as fda_tot,
-                    SUM(CAST(COALESCE(NULLIF(regexp_replace(CAST(d.savings_at_pda_usd AS TEXT), '[^0-9.]', '', 'g'), ''), '0') AS NUMERIC)) as pda_sav,
-                    SUM(CAST(COALESCE(NULLIF(regexp_replace(CAST(d.savings_at_fda_usd AS TEXT), '[^0-9.]', '', 'g'), ''), '0') AS NUMERIC)) as fda_sav,
-                    SUM(CAST(COALESCE(NULLIF(regexp_replace(CAST(d.total_savings_usd AS TEXT), '[^0-9.]', '', 'g'), ''), '0') AS NUMERIC)) as tot_sav
-                FROM ankkumam_data_excel.data d
-                WHERE {where_sql}
-            """
-            amts = db.execute(text(amt_sql)).mappings().first()
-            
-            pda_total = float(amts.get('pda_tot') or 0.0)
-            fda_total = float(amts.get('fda_tot') or 0.0)
-            pda_sav = float(amts.get('pda_sav') or 0.0)
-            fda_sav = float(amts.get('fda_sav') or 0.0)
-            tot_sav = float(amts.get('tot_sav') or 0.0)
-            
-            return {
-                "country_list": [str(c).strip().upper() for c in c_list if c],
-                "port_list": [str(p).strip().upper() for p in p_list if p],
-                "vessel_list": [str(v).strip().upper() for v in v_list if v],
-                "countries": c_cnt,
-                "ports": p_cnt,
-                "vessels": v_cnt,
-                "total_pda": tot_disb,
-                "completed_pda": tot_disb,
-                "under_process_pda": 0,
-                "total_fda": tot_disb,
-                "completed_fda": tot_disb,
-                "under_process_fda": 0,
-                "yet_to_process": 0,
-                "pdasavings": pda_sav,
-                "fdasavings": fda_sav,
-                "overallsavingsamount": tot_sav,
-                "fda_total_amount": fda_total,
-                "pda_total_amount": pda_total,
-                "percentage_savings": round((tot_sav / fda_total * 100), 2) if fda_total > 0 else 0.0,
-                "percentage_savings_fda": round((tot_sav / fda_total * 100), 2) if fda_total > 0 else 0.0,
-                "percentage_savings_pda": round((tot_sav / pda_total * 100), 2) if pda_total > 0 else 0.0,
-                "pda_completed_no_fda": 0
-            }
-        except Exception as e:
-            db.rollback()
-            import traceback
-            with open("/tmp/ankkumam_error.log", "w") as f:
-                f.write(traceback.format_exc())
-            print(f"Error computing deduped ankkumam summary: {e}")
-            return [], 0
+
 
     @staticmethod
     def _merge_summaries(prod_summary, kamba_summary):
@@ -860,8 +696,8 @@ class DashboardRepository:
                     "loss_prevention_fda": lp_fda,
                     "total_loss_prevented": tot_lp,
                     "loss_prevented_reason": r.get("reason"),
-                    "pda_status": r.get("pda_status"),
-                    "fda_status": r.get("fda_status"),
+                    "pda_status": "Completed" if str(r.get("pda_status") or "").strip().lower() == "completed" else "Under process",
+                    "fda_status": "Completed" if str(r.get("fda_status") or "").strip().lower() == "completed" else "Under process",
                     "fda_amount": fda_amt,
                     "pda_amount": pda_amt,
                     "manual_fda_amount": "-",
