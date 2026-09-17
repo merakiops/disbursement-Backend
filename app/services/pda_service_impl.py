@@ -703,15 +703,20 @@ class PDAServiceImpl(PDAService):
         # Handle signature
         signature = dto.signature
         if signature:
+            signature = signature.replace("\r", "")
+            while "\n\n" in signature:
+                signature = signature.replace("\n\n", "\n")
             signature = signature.replace("\n", "<br>")
         
+        import time
         context = {
             "body_text": body_text,
             "upper_text": upper_text,
             "lower_text": lower_text,
             "table_html": table_html,
             "signature": signature,
-            "email_id": MERAKI_DISBURSEMENT_EMAIL_ADDRESS
+            "email_id": MERAKI_DISBURSEMENT_EMAIL_ADDRESS,
+            "timestamp": str(time.time())
         }
         
         subject = dto.subject or "Payment Instruction"
