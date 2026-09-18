@@ -538,6 +538,7 @@ class TxnPdaEditDto(BaseModel):
     file_list:Optional[List[Any]]=[]
     save:Optional[str]=None
     converted_curr_from : Optional[str]=None
+    towage: Optional[bool] = None
     converted_curr_to: Optional[str]=None
     conversion_pda_rate: Optional[float]=None
     pmt_curr_from: Optional[str]=None

@@ -978,14 +978,22 @@ class PDARepository:
                 disbursement.pda.is_re_request='N'
                 db.commit()
 
+        is_towage = pda_dto.towage is True
+
         if pda_dto.pda_submit == 'Y':
             status = StatusRepository.get_status_details_by_name('COMPLETED',db)
-            disbursement_dtl.pda.status = status.status_id
+            if is_towage:
+                disbursement_dtl.pda.towage_status = status.status_id
+            else:
+                disbursement_dtl.pda.status = status.status_id
             disbursement_dtl.pda.pda_processing_date = datetime.now()
 
         if pda_dto.is_re_request == 'Y':
             status = StatusRepository.get_status_details_by_name('RE-REQUESTED',db)
-            disbursement_dtl.pda.status = status.status_id
+            if is_towage:
+                disbursement_dtl.pda.towage_status = status.status_id
+            else:
+                disbursement_dtl.pda.status = status.status_id
         
         try:
             # --- Update PDA vessel details ---

@@ -63,6 +63,7 @@ class PDAModel(Base):
     pmt_curr_to = Column(String)
     state = Column(String,default='Y')
     manual_pda_amount = Column(String)
+    towage_status = Column(Integer, ForeignKey(f"{SCHEMA_NAME}.ma_status.status_id"))
 
     disbursement = relationship("TxnDisbursement", back_populates="pda" )
 
