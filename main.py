@@ -13,6 +13,7 @@ if not hasattr(bcrypt, "_original_hashpw"):
         return bcrypt._original_hashpw(password, salt)
     bcrypt.hashpw = _patched_hashpw
 
+from demurrage.services.demurrage_service import DemurrageService
 from dotenv import load_dotenv
 import os
 import socket
@@ -54,7 +55,7 @@ from app.api.file_upload_controller import file_upload
 from app.api.disbursement_filter_controller import disbursementFilter
 from app.api.dashboard_controller import DashboardController
 from app.api.health_controller import health_controller
-from app.db import engine, Base
+from app.db import SessionLocal, engine, Base
 from app.db import get_db  # your db session generator
 from app.constants.constants import ALLOWED_ORIGINS
 from app.config import Config
@@ -76,7 +77,7 @@ from app.exceptions.AppException import AppException
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.exceptions import RequestValidationError
 from fastapi.encoders import jsonable_encoder
-
+from apscheduler.schedulers.background import BackgroundScheduler
 # === Load environment variables ===
 environment = os.getenv("env", "prod")
 env_files = {
@@ -97,7 +98,19 @@ app.middleware("http")(refresh_token_middleware)
 #Base.metadata.create_all(bind=engine)
 
 #Exception
+def run_daily_soft_delete_cleanup():
+    db = SessionLocal()
+    try:
+        DemurrageService.purge_expired_soft_deleted_cases(db)
+    finally:
+        db.close()
 
+@app.on_event("startup")
+def start_cleanup_scheduler():
+    scheduler = BackgroundScheduler()
+    # Runs the cleanup job once every 24 hours
+    scheduler.add_job(run_daily_soft_delete_cleanup, 'interval', days=1)
+    scheduler.start()
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     logger.error(f"Unhandled Exception: {traceback.format_exc()}")

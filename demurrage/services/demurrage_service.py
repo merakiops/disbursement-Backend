@@ -17,7 +17,7 @@ from demurrage.services.pdf_generator import generate_demurrage_pdf
 from app.repo.file_upload import FileUploadRepository, BUCKET_NAME
 
 logger = logging.getLogger("app_logger")
-
+from datetime import datetime, timedelta
 class DemurrageService:
     @staticmethod
     def upload_report_to_s3(db_voyage: Voyage) -> str:
@@ -250,22 +250,26 @@ class DemurrageService:
     @staticmethod
     def delete_demurrage_case(db: Session, voyage_id: int) -> bool:
         """
-        Deletes a complete demurrage case by Voyage ID.
+        Soft deletes a demurrage case by setting is_deleted=True and deleted_at timestamp.
         """
-        voyage = db.query(Voyage).filter(Voyage.id == voyage_id).first()
+        # 1. Fetch case excluding already deleted records
+        voyage = db.query(Voyage).filter(Voyage.id == voyage_id, Voyage.is_deleted == False).first()
         if not voyage:
             raise DemurrageNotFoundException(f"Demurrage case with Voyage ID {voyage_id} not found.")
 
-        db.delete(voyage)
+        # 2. Mark as soft-deleted
+        voyage.is_deleted = True
+        voyage.deleted_at = datetime.utcnow()
+        
         db.commit()
         return True
 
     @staticmethod
     def get_demurrage_case(db: Session, voyage_id: int) -> dict:
         """
-        Retrieves a complete demurrage case by Voyage ID.
+        Retrieves a complete demurrage case, ignoring soft-deleted cases.
         """
-        voyage = db.query(Voyage).filter(Voyage.id == voyage_id).first()
+        voyage = db.query(Voyage).filter(Voyage.id == voyage_id, Voyage.is_deleted == False).first()
         if not voyage:
             raise DemurrageNotFoundException(f"Demurrage case with Voyage ID {voyage_id} not found.")
 
@@ -294,11 +298,14 @@ class DemurrageService:
     @staticmethod
     def get_all_demurrage_cases(db: Session, page: int = 1, page_size: int = 10, query: str = None) -> dict:
         """
-        Retrieves a paginated list of all demurrage cases.
+        Retrieves a paginated list excluding soft-deleted demurrage cases.
         """
         from sqlalchemy import or_
         from sqlalchemy.orm import selectinload
-        db_query = db.query(Voyage)
+
+        # Filter out soft-deleted records
+        db_query = db.query(Voyage).filter(Voyage.is_deleted == False)
+
         if query:
             search_pattern = f"%{query}%"
             db_query = db_query.filter(
@@ -334,7 +341,7 @@ class DemurrageService:
                 "Undisputed Demurrage Received": voyage.summary.undisputed_demurrage_paid if voyage.summary else 0.0,
                 "Address Commission": voyage.summary.add_commission if voyage.summary else 0.0,
                 "Net Demurrage": voyage.summary.net_demurrage if voyage.summary else 0.0,
-                "Report Sent Date": voyage.final_pdf_date ,
+                "Report Sent Date": voyage.final_pdf_date,
                 "Revised Date": voyage.updated_at,
                 "Action": voyage.report_s3_url,
                 "final_pdf": voyage.final_pdf
@@ -353,6 +360,26 @@ class DemurrageService:
             "page_size": page_size,
             "data": cases_data
         }
+
+    @staticmethod
+    def purge_expired_soft_deleted_cases(db: Session) -> int:
+        """
+        Permanently deletes soft-deleted cases older than 45 days.
+        """
+        expiration_cutoff = datetime.utcnow() - timedelta(days=45)
+
+        expired_voyages = db.query(Voyage).filter(
+            Voyage.is_deleted == True,
+            Voyage.deleted_at <= expiration_cutoff
+        ).all()
+
+        count = len(expired_voyages)
+        for voyage in expired_voyages:
+            db.delete(voyage)
+
+        db.commit()
+        logger.info(f"Successfully purged {count} demurrage cases deleted more than 45 days ago.")
+        return count
 
     @staticmethod
     def save_step_demurrage_case(db: Session, payload: StepSaveRequestSchema) -> dict:

@@ -39,6 +39,9 @@ class Voyage(Base):
     report_s3_url = Column(String(500), nullable=True)
     final_pdf = Column(Boolean, default=False)
     final_pdf_date = Column(DateTime, nullable=True)
+    # Soft delete fields
+    is_deleted = Column(Boolean, default=False, nullable=False, index=True)
+    deleted_at = Column(DateTime, nullable=True)
 
     @property
     def bl_dated(self):
