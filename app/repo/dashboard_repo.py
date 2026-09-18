@@ -118,8 +118,8 @@ class DashboardRepository:
                 "fda_total_amount": fda_total,
                 "pda_total_amount": pda_total,
                 "percentage_savings": round((overall_savings / pda_total * 100), 2) if pda_total > 0 else 0.0,
-                "percentage_savings_fda": round((overall_savings / fda_total * 100), 2) if fda_total > 0 else 0.0,
-                "percentage_savings_pda": round((overall_savings / pda_total * 100), 2) if pda_total > 0 else 0.0,
+                "percentage_savings_fda": round((overall_savings / (fda_total + overall_savings) * 100), 2) if (fda_total + overall_savings) > 0 else 0.0,
+                "percentage_savings_pda": round((overall_savings / (pda_total + overall_savings) * 100), 2) if (pda_total + overall_savings) > 0 else 0.0,
                 "pda_completed_no_fda": 0
             }
         except Exception as e:
@@ -274,8 +274,8 @@ class DashboardRepository:
                 "fda_total_amount": fda_total,
                 "pda_total_amount": pda_total,
                 "percentage_savings": round((tot_sav / fda_total * 100), 2) if fda_total > 0 else 0.0,
-                "percentage_savings_fda": round((tot_sav / fda_total * 100), 2) if fda_total > 0 else 0.0,
-                "percentage_savings_pda": round((tot_sav / pda_total * 100), 2) if pda_total > 0 else 0.0,
+                "percentage_savings_fda": round((fda_sav / (fda_total + fda_sav) * 100), 2) if (fda_total + fda_sav) > 0 else 0.0,
+                "percentage_savings_pda": round((pda_sav / (pda_total + pda_sav) * 100), 2) if (pda_total + pda_sav) > 0 else 0.0,
                 "pda_completed_no_fda": 0
             }
         except Exception as e:
@@ -328,9 +328,11 @@ class DashboardRepository:
         pda_total = float(merged.get("pda_total_amount") or 0)
         fda_total = float(merged.get("fda_total_amount") or 0)
         overall_savings = float(merged.get("overallsavingsamount") or 0)
+        pda_sav = float(merged.get("pdasavings") or 0)
+        fda_sav = float(merged.get("fdasavings") or 0)
         merged["percentage_savings"] = round((overall_savings / pda_total * 100), 2) if pda_total > 0 else 0.0
-        merged["percentage_savings_fda"] = round((overall_savings / fda_total * 100), 2) if fda_total > 0 else 0.0
-        merged["percentage_savings_pda"] = round((overall_savings / pda_total * 100), 2) if pda_total > 0 else 0.0
+        merged["percentage_savings_fda"] = round((fda_sav / (fda_total + fda_sav) * 100), 2) if (fda_total + fda_sav) > 0 else 0.0
+        merged["percentage_savings_pda"] = round((pda_sav / (pda_total + pda_sav) * 100), 2) if (pda_total + pda_sav) > 0 else 0.0
 
         return merged
 
@@ -766,6 +768,14 @@ class DashboardRepository:
             merged.pop("port_list", None)
             
             return merged
+
+        if prod_summary:
+            p_sav = float(prod_summary.get("pdasavings") or 0)
+            f_sav = float(prod_summary.get("fdasavings") or 0)
+            pda_tot = float(prod_summary.get("pda_total_amount") or 0)
+            fda_tot = float(prod_summary.get("fda_total_amount") or 0)
+            prod_summary["percentage_savings_fda"] = round((f_sav / (fda_tot + f_sav) * 100), 2) if (fda_tot + f_sav) > 0 else 0.0
+            prod_summary["percentage_savings_pda"] = round((p_sav / (pda_tot + p_sav) * 100), 2) if (pda_tot + p_sav) > 0 else 0.0
 
         return prod_summary
     

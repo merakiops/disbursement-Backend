@@ -92,8 +92,8 @@ class DashboardServiceImpl(DashboardService):
                 return round(pct, 4)
             return val
 
-        pct_pda = calc_pct(pda_savings, pda_total)
-        pct_fda = calc_pct(fda_savings, fda_total)
+        pct_pda = calc_pct(pda_savings, pda_total + pda_savings)
+        pct_fda = calc_pct(fda_savings, fda_total + fda_savings)
         pct_overall = calc_pct(overall_savings, fda_total)
 
         savings = SavingsDTO(
