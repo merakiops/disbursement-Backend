@@ -472,7 +472,7 @@ class DashboardRepository:
             
             expanded_client_ids = get_all_prod_ids_for_client_list(client_ids) if client_ids else None
             
-            base_where = ["(td.state IS NULL OR td.state <> 'D')"]
+            base_where = ["1=1"]
             params = {}
             if expanded_client_ids:
                 int_cids = [int(x) for x in expanded_client_ids if str(x).isdigit()]
