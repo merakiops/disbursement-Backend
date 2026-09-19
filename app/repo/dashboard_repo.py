@@ -691,7 +691,7 @@ class DashboardRepository:
 
         base_where_sql = " AND ".join(base_where)
 
-        # Standard aggregation query matching hover stats logic
+        # Standard aggregation query matching hover stats logic and updating yet_to_process
         summary_sql = f"""
             SELECT 
                 COUNT(DISTINCT td.country_id) FILTER (WHERE td.country_id IS NOT NULL) as countries,
@@ -703,13 +703,13 @@ class DashboardRepository:
                 COUNT(pda.pda_id) FILTER (WHERE pda.status = 7) as completed_pda,
                 COUNT(pda.pda_id) FILTER (WHERE pda.status <> 7) as under_process_pda,
                 
-                -- FDA Progress
+                -- FDA Progress (total_fda = completed_fda + under_process_fda)
                 COUNT(fda.fda_id) FILTER (WHERE fda.fda_id IS NOT NULL) as total_fda,
                 COUNT(fda.fda_id) FILTER (WHERE fda.status = 7) as completed_fda,
                 COUNT(fda.fda_id) FILTER (WHERE fda.status <> 7) as under_process_fda,
                 
-                -- Awaiting / Yet to process FDA (where PDA exists or port call active, but no FDA recorded)
-                COUNT(td.disbursement_seq) FILTER (WHERE fda.fda_id IS NULL AND pda.pda_id IS NOT NULL) as yet_to_process,
+                -- yet_to_process set to under_process_fda count
+                COUNT(fda.fda_id) FILTER (WHERE fda.status <> 7) as yet_to_process,
                 COUNT(td.disbursement_seq) FILTER (WHERE pda.status = 7 AND fda.fda_id IS NULL) as pda_completed_no_fda,
                 
                 -- Amounts and Savings
