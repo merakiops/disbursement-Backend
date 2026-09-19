@@ -609,7 +609,7 @@ class DashboardRepository:
         Get dashboard summary based on client_ids and data_source.
         For clients with kamba mapping, merges data from both prod and kamba_data_prod schemas.
         Client ID 84 represents X-Platform (mapped to excel_data_dev schema).
-        Client ID 85 represents Kamba.
+        Client ID 85 represents Kamba (all kamba data, kept for backward compatibility).
         """
         is_excel_client = False
         is_kamba_client = False
@@ -624,7 +624,7 @@ class DashboardRepository:
 
         ds = (data_source or "all").lower()
 
-        # Backward compatibility: client_id=85 (Kamba)
+        # Backward compatibility: client_id=85 (Kamba) shows all kamba data plus ALGHAF
         if is_kamba_client or (ds in ["kamba", "mysql"] and client_ids and 85 in [int(x) for x in client_ids if str(x).isdigit()] and len(client_ids) == 1):
             kamba_summary = DashboardRepository._get_kamba_summary_for_companies(None, db)
             ankkumam_summary = DashboardRepository._get_ankkumam_summary_for_companies(["ALGHAF"], db)
@@ -670,28 +670,36 @@ class DashboardRepository:
                 db.rollback()
                 return {}
 
-        # --- Standard Production Flow ---
+        # --- Standard + Kamba merged flow ---
+        # Expand client_ids to include old/merged prod IDs
+        if client_ids is not None and len(client_ids) == 0:
+            client_ids = None
+            
         expanded_client_ids = client_ids
         if client_ids:
             expanded_client_ids = get_all_prod_ids_for_client_list(client_ids)
 
+        # Replaced stored procedure call with direct SQL query for overall progress metrics
         base_where = ["1=1"]
-        params = {}
+        prod_params = {}
         if expanded_client_ids:
-            int_cids = [int(x) for x in expanded_client_ids if str(x).isdigit()]
+            try:
+                int_cids = [int(x) for x in expanded_client_ids if str(x).isdigit()]
+            except:
+                int_cids = list(expanded_client_ids)
             if int_cids:
                 base_where.append("td.client_id = ANY(:cids)")
-                params["cids"] = int_cids
+                prod_params["cids"] = int_cids
+                
         if from_date:
             base_where.append("td.etd::date >= :from_date::date")
-            params["from_date"] = from_date
+            prod_params["from_date"] = from_date
         if to_date:
             base_where.append("td.etd::date <= :to_date::date")
-            params["to_date"] = to_date
-
+            prod_params["to_date"] = to_date
+            
         base_where_sql = " AND ".join(base_where)
 
-        # Updated query: calculates overall progress counts without altering amounts or savings queries
         summary_sql = f"""
             SELECT 
                 COUNT(DISTINCT td.country_id) FILTER (WHERE td.country_id IS NOT NULL) as countries,
@@ -708,7 +716,7 @@ class DashboardRepository:
                 COUNT(fda.fda_id) FILTER (WHERE fda.status = 7) as completed_fda,
                 COUNT(fda.fda_id) FILTER (WHERE fda.status IS NOT NULL AND fda.status <> 7) as under_process_fda,
                 
-                -- Yet to be Received: Pending FDAs > 30 days after PDA completion
+                -- FDA Yet to be Received: PDA completed & no completed FDA after 30 days of PDA completion
                 COUNT(td.disbursement_seq) FILTER (
                     WHERE pda.status = 7 
                       AND (fda.fda_id IS NULL OR fda.status <> 7)
@@ -717,7 +725,7 @@ class DashboardRepository:
                 
                 COUNT(td.disbursement_seq) FILTER (WHERE pda.status = 7 AND fda.fda_id IS NULL) as pda_completed_no_fda,
                 
-                -- Original Amounts and Savings (Preserved)
+                -- Original Amounts and Savings
                 COALESCE(SUM(pda.meraki_pda_amount), 0.0) as pda_total_amount,
                 COALESCE(SUM(fda.fda_amount), 0.0) as fda_total_amount,
                 COALESCE(SUM(td.loss_prevention_pda), 0.0) as pdasavings,
@@ -729,10 +737,10 @@ class DashboardRepository:
             WHERE {base_where_sql}
         """
 
-        result_row = db.execute(text(summary_sql), params).mappings().first()
+        result_row = db.execute(text(summary_sql), prod_params).mappings().first()
         prod_summary = dict(result_row) if result_row else {}
 
-        # Fetch Ankkumam data and merge if applicable
+        # Fetch Ankkumam data instead of Kamba
         prod_cid_to_excel, excel_to_prod_cid = DashboardRepository._get_dynamic_client_mapping(db)
         ankkumam_clients = []
         if client_ids:
@@ -747,6 +755,7 @@ class DashboardRepository:
         if ankkumam_clients:
             ankkumam_summary = DashboardRepository._get_ankkumam_summary_for_companies(ankkumam_clients, db)
             
+            # Optimize: Calculate overlap by only checking the kamba items against standard data
             kamba_vessels = [str(x).upper() for x in ankkumam_summary.get("vessel_list", []) if x]
             kamba_countries = [str(x).upper() for x in ankkumam_summary.get("country_list", []) if x]
             kamba_ports = [str(x).upper() for x in ankkumam_summary.get("port_list", []) if x]
@@ -754,38 +763,40 @@ class DashboardRepository:
             overlap_vessels = overlap_countries = overlap_ports = 0
 
             if kamba_vessels:
-                params["kamba_vessels"] = kamba_vessels
+                prod_params["kamba_vessels"] = kamba_vessels
                 overlap_vessels = db.execute(text(f"""
                     SELECT COUNT(DISTINCT UPPER(v.name)) 
                     FROM {SCHEMA_NAME}.txn_disbursement td
                     JOIN {SCHEMA_NAME}.ma_vessels v ON td.vsl_id = v.vsl_id
                     WHERE {base_where_sql} AND UPPER(v.name) = ANY(:kamba_vessels)
-                """), params).scalar() or 0
+                """), prod_params).scalar() or 0
                 
             if kamba_countries:
-                params["kamba_countries"] = kamba_countries
+                prod_params["kamba_countries"] = kamba_countries
                 overlap_countries = db.execute(text(f"""
                     SELECT COUNT(DISTINCT UPPER(c.name)) 
                     FROM {SCHEMA_NAME}.txn_disbursement td
                     JOIN {SCHEMA_NAME}.ma_country c ON td.country_id = c.country_id
                     WHERE {base_where_sql} AND UPPER(c.name) = ANY(:kamba_countries)
-                """), params).scalar() or 0
+                """), prod_params).scalar() or 0
                 
             if kamba_ports:
-                params["kamba_ports"] = kamba_ports
+                prod_params["kamba_ports"] = kamba_ports
                 overlap_ports = db.execute(text(f"""
                     SELECT COUNT(DISTINCT UPPER(p.name)) 
                     FROM {SCHEMA_NAME}.txn_disbursement td
                     JOIN {SCHEMA_NAME}.ma_port p ON td.port_id = p.port_id
                     WHERE {base_where_sql} AND UPPER(p.name) = ANY(:kamba_ports)
-                """), params).scalar() or 0
+                """), prod_params).scalar() or 0
                 
             merged = DashboardRepository._merge_summaries(prod_summary, ankkumam_summary)
             
+            # Overwrite the lists fallback logic with mathematically correct counts
             merged["vessels"] = float(prod_summary.get("vessels", 0)) + float(ankkumam_summary.get("vessels", 0)) - overlap_vessels
             merged["countries"] = float(prod_summary.get("countries", 0)) + float(ankkumam_summary.get("countries", 0)) - overlap_countries
             merged["ports"] = float(prod_summary.get("ports", 0)) + float(ankkumam_summary.get("ports", 0)) - overlap_ports
             
+            # Remove the lists so they aren't processed accidentally or sent out
             merged.pop("vessel_list", None)
             merged.pop("country_list", None)
             merged.pop("port_list", None)
