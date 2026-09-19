@@ -340,7 +340,10 @@ class DashboardRepository:
     @staticmethod
     def get_dashboard_hover_stats(client_ids: List[int], from_date, to_date, data_source: Optional[str] = "all", db: Session = None):
         from collections import Counter
-        from app.dto.dasboard_response_dto import DashboardHoverStatsResponseDTO, HoverCountriesDTO, HoverPortsDTO, HoverPortCallsDTO, HoverVesselsDTO, HoverFdaDTO, HoverTopItemDTO
+        from app.dto.dasboard_response_dto import (
+            DashboardHoverStatsResponseDTO, HoverCountriesDTO, HoverPortsDTO, 
+            HoverPortCallsDTO, HoverVesselsDTO, HoverFdaDTO, HoverTopItemDTO
+        )
         
         is_excel_client = False
         is_kamba_client = False
@@ -354,21 +357,23 @@ class DashboardRepository:
 
         ds = (data_source or "all").lower()
 
-        # We will collect frequencies for each category
         country_counter = Counter()
         port_counter = Counter()
         vessel_counter = Counter()
         
+        # Unique port calls tracking
+        port_call_seqs = set()
+
         total_pda = 0
         total_fda = 0
         pda_completed = 0
         pda_under_process = 0
         fda_completed = 0
         fda_under_process = 0
+        fda_awaiting = 0
         
-        # Helper to process ankkumam records
         def process_ankkumam(ankkumam_clients):
-            nonlocal total_pda, total_fda, pda_completed, pda_under_process, fda_completed, fda_under_process
+            nonlocal total_pda, total_fda, pda_completed, pda_under_process, fda_completed, fda_under_process, fda_awaiting
             if not ankkumam_clients:
                 return
             
@@ -430,7 +435,6 @@ class DashboardRepository:
             
             prod_keys = {get_record_key(r) for r in prod_dicts}
             
-            # Sort before internal deduplication
             raw_records.sort(key=lambda r: 0 if str(r.get("fda_status") or "").strip().lower() == "completed" else 1)
             raw_records = deduplicate_records(raw_records)
             deduped_ankkumam = [r for r in raw_records if get_record_key(r) not in prod_keys]
@@ -440,22 +444,31 @@ class DashboardRepository:
                 p_name = str(r.get("port_name") or "N/A").strip().upper()
                 v_name = str(r.get("vessel_name") or "N/A").strip().upper()
                 
+                seq = r.get("disbursement_seq")
+                if seq:
+                    port_call_seqs.add(f"ankkumam_{seq}")
+
                 if c_name != "N/A": country_counter[c_name] += 1
                 if p_name != "N/A": port_counter[p_name] += 1
                 if v_name != "N/A": vessel_counter[v_name] += 1
                 
                 total_pda += 1
-                total_fda += 1
-                
-                # Ankkumam PDA is always assumed completed
                 pda_completed += 1
-                    
-                if str(r.get("fda_status") or "").strip().lower() == "completed":
-                    fda_completed += 1
-                else:
-                    fda_under_process += 1
 
-        # Fetch standard data
+                # Check FDA status specifically
+                fda_stat = str(r.get("fda_status") or "").strip().lower()
+                fda_amount = float(r.get("fda_amount") or 0.0)
+                
+                if fda_stat == "completed":
+                    fda_completed += 1
+                    total_fda += 1
+                elif fda_stat == "under process" or fda_amount > 0:
+                    fda_under_process += 1
+                    total_fda += 1
+                else:
+                    fda_awaiting += 1
+
+        # Standard Production Query
         if not is_kamba_client and ds != "kamba" and ds != "excel":
             from sqlalchemy import text
             from app.db import SCHEMA_NAME
@@ -480,11 +493,13 @@ class DashboardRepository:
             
             sql = f'''
                 SELECT 
+                    td.disbursement_seq,
                     UPPER(c.name) as country, 
                     UPPER(p.name) as port, 
                     UPPER(v.name) as vessel,
                     fda.status as fda_status,
-                    pda.status as pda_status
+                    pda.status as pda_status,
+                    fda.fda_id as fda_id
                 FROM {SCHEMA_NAME}.txn_disbursement td
                 LEFT JOIN {SCHEMA_NAME}.ma_country c ON td.country_id = c.country_id
                 LEFT JOIN {SCHEMA_NAME}.ma_port p ON td.port_id = p.port_id
@@ -499,26 +514,36 @@ class DashboardRepository:
                 c_name = r.get("country") or "N/A"
                 p_name = r.get("port") or "N/A"
                 v_name = r.get("vessel") or "N/A"
+                seq = r.get("disbursement_seq")
+
+                # Count each disbursement sequence as 1 Port Call
+                if seq:
+                    port_call_seqs.add(f"std_{seq}")
                 
                 if c_name != "N/A": country_counter[c_name] += 1
                 if p_name != "N/A": port_counter[p_name] += 1
                 if v_name != "N/A": vessel_counter[v_name] += 1
                 
-                total_fda += 1
-                total_pda += 1
+                # Check PDA Status
+                if r.get("pda_status") is not None:
+                    total_pda += 1
+                    if r.get("pda_status") == 7:
+                        pda_completed += 1
+                    else:
+                        pda_under_process += 1
                 
-                # In prod, status=7 means approved/completed
-                if r.get("fda_status") == 7:
-                    fda_completed += 1
+                # Check FDA Status - only increment FDA counters if FDA record exists
+                fda_st = r.get("fda_status")
+                if fda_st is not None or r.get("fda_id") is not None:
+                    total_fda += 1
+                    if fda_st == 7:  # Status 7 = Completed
+                        fda_completed += 1
+                    else:
+                        fda_under_process += 1
                 else:
-                    fda_under_process += 1
-                    
-                if r.get("pda_status") == 7:
-                    pda_completed += 1
-                else:
-                    pda_under_process += 1
+                    fda_awaiting += 1
 
-        # Fetch ankkumam data
+        # Fetch Ankkumam Data
         if not is_excel_client and ds != "excel" and ds != "standard":
             prod_cid_to_excel, excel_to_prod_cid = DashboardRepository._get_dynamic_client_mapping(db)
             ankkumam_clients = []
@@ -533,7 +558,6 @@ class DashboardRepository:
                 
             process_ankkumam(ankkumam_clients)
             
-        # Top 5 mappings
         top_countries = [HoverTopItemDTO(name=k, count=v) for k, v in country_counter.most_common(5)]
         top_ports = [HoverTopItemDTO(name=k, count=v) for k, v in port_counter.most_common(5)]
         top_vessels = [HoverTopItemDTO(name=k, count=v) for k, v in vessel_counter.most_common(5)]
@@ -541,7 +565,9 @@ class DashboardRepository:
         unique_countries = len(country_counter)
         unique_ports = len(port_counter)
         unique_vessels = len(vessel_counter)
-        total_port_calls = sum(port_counter.values())
+
+        # Correct calculation: Number of unique port call disbursements
+        total_port_calls = len(port_call_seqs) if port_call_seqs else sum(port_counter.values())
         avg_calls_per_port = round(total_port_calls / unique_ports, 2) if unique_ports > 0 else 0.0
         
         fda_completion_pct = round((fda_completed / total_fda) * 100, 2) if total_fda > 0 else 0.0
@@ -570,7 +596,7 @@ class DashboardRepository:
                 total_fda=total_fda,
                 completed=fda_completed,
                 in_progress=fda_under_process,
-                awaiting_fda=0,
+                awaiting_fda=fda_awaiting,
                 completion_percentage=fda_completion_pct
             )
         )
