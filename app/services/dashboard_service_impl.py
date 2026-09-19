@@ -75,9 +75,12 @@ class DashboardServiceImpl(DashboardService):
             fda=fda_progress
         )
         
-        # --- Savings & Total Amount Metrics (Unchanged) ---
-        pda_total = int(round(float(result.get("pda_total_amount") or 0.0)))
-        fda_total = int(round(float(result.get("fda_total_amount") or 0.0)))
+        # Safely extract values checking dictionary keys properly
+        raw_pda_total = result.get("pda_total_amount")
+        raw_fda_total = result.get("fda_total_amount")
+        
+        pda_total = int(round(float(raw_pda_total))) if raw_pda_total is not None else 0
+        fda_total = int(round(float(raw_fda_total))) if raw_fda_total is not None else 0
         
         pda_savings = int(round(float(result.get("pdasavings") or 0.0)))
         fda_savings = int(round(float(result.get("fdasavings") or 0.0)))
@@ -95,15 +98,18 @@ class DashboardServiceImpl(DashboardService):
 
         pct_pda = calc_pct(pda_savings, pda_total + pda_savings)
         pct_fda = calc_pct(fda_savings, fda_total + fda_savings)
+        
+        # Recalculate percentage if pct_overall is zero or fallback to DB percentage
         pct_overall = calc_pct(overall_savings, fda_total)
+        final_savings_pct = pct_overall if pct_overall > 0 else round(float(result.get("percentage_savings") or 0.0), 2)
 
         savings = SavingsDTO(
-            savingsPercentage=pct_overall if pct_overall > 0 else round(float(result.get("percentage_savings") or 0.0), 2),
+            savingsPercentage=final_savings_pct,
             overallSavingsAmount=overall_savings,
             pdaSavings=pda_savings,
             fdaSavings=fda_savings,
-            percentage_savings_fda=pct_fda,
-            percentage_savings_pda=pct_pda,
+            percentage_savings_fda=pct_fda if pct_fda > 0 else round(float(result.get("percentage_savings_fda") or 0.0), 2),
+            percentage_savings_pda=pct_pda if pct_pda > 0 else round(float(result.get("percentage_savings_pda") or 0.0), 2),
             pda_total_amount=pda_total,
             fda_total_amount=fda_total,
         )
