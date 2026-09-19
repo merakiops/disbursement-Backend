@@ -43,8 +43,12 @@ class DashboardServiceImpl(DashboardService):
         
         fda_completed = result.get("completed_fda") or 0
         fda_under_process = result.get("under_process_fda") or 0
-        fda_yet_to_process = result.get("yet_to_process") or 0
-        fda_total_count = fda_completed + fda_under_process + fda_yet_to_process
+        
+        # FDA Total = Completed + Under Process (e.g. 13 + 2 = 15)
+        fda_total_count = fda_completed + fda_under_process
+        
+        # Yet to be Received count (filtered for > 30 days pending from database result)
+        yet_to_process = result.get("yet_to_process") or 0
 
         summary_cards = SummaryCardsDTO(
             countries=result.get("countries") or 0,
@@ -64,7 +68,7 @@ class DashboardServiceImpl(DashboardService):
         fda_progress = FDAProgressDetailDTO(
             Completed=fda_completed,
             Underprogress=fda_under_process,
-            yetToProcess=fda_yet_to_process,
+            yetToProcess=yet_to_process,  # Displays pending > 30 days count
             total=fda_total_count
         )
         
@@ -76,11 +80,9 @@ class DashboardServiceImpl(DashboardService):
         pda_total = int(round(float(result.get("pda_total_amount") or 0.0)))
         fda_total = int(round(float(result.get("fda_total_amount") or 0.0)))
         
-        # Original logic for saving percentages
         pda_savings = int(round(float(result.get("pdasavings") or 0.0)))
         fda_savings = int(round(float(result.get("fdasavings") or 0.0)))
         
-        # Enforce overall_savings = pda_savings + fda_savings across the project
         overall_savings = pda_savings + fda_savings
 
         def calc_pct(savings, total):
