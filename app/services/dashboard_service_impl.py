@@ -17,110 +17,103 @@ from fastapi import HTTPException, status
 class DashboardServiceImpl(DashboardService):
     
     def get_dashboard_summary(self, payload: DashboardRequestDTO, db: Session) -> DashboardResponseDTO:
-        """
-        Get dashboard summary for a single client or all clients if client_id is not provided.
-        """
-        from_date = payload.monthRange.from_date if payload.monthRange else None
-        to_date = payload.monthRange.to_date if payload.monthRange else None
-        
-        result = DashboardRepository.get_dashboard_summary(
-            payload.clientId,
-            from_date,
-            to_date,
-            getattr(payload, 'dataSource', 'all'),
-            db
-        )
-        
-        if not result:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Dashboard data not found"
+            """
+            Get dashboard summary for a single client or all clients if client_id is not provided.
+            """
+            from_date = payload.monthRange.from_date if payload.monthRange else None
+            to_date = payload.monthRange.to_date if payload.monthRange else None
+            
+            result = DashboardRepository.get_dashboard_summary(
+                payload.clientId,
+                from_date,
+                to_date,
+                getattr(payload, 'dataSource', 'all'),
+                db
             )
-        
-        # --- Progress Metrics Only ---
-        pda_completed = result.get("completed_pda") or 0
-        pda_under_process = result.get("under_process_pda") or 0
-        pda_total_count = pda_completed + pda_under_process
-        
-        fda_completed = result.get("completed_fda") or 0
-        fda_under_process = result.get("under_process_fda") or 0
-        fda_total_count = fda_completed + fda_under_process
-        
-        yet_to_process = result.get("yet_to_process") or 0
-
-        summary_cards = SummaryCardsDTO(
-            countries=result.get("countries") or 0,
-            ports=result.get("ports") or 0,
-            vessels=result.get("vessels") or 0,
-            totalPDA=pda_total_count,
-            totalFDA=fda_total_count
-        )
-
-        pda_progress = ProgressDetailDTO(
-            Completed=pda_completed,
-            Underprogress=pda_under_process,
-            total=pda_total_count,
-            pdaCompletedNoFda=result.get("pda_completed_no_fda") or 0
-        )
-
-        fda_progress = FDAProgressDetailDTO(
-            Completed=fda_completed,
-            Underprogress=fda_under_process,
-            yetToProcess=yet_to_process,
-            total=fda_total_count
-        )
-        
-        overall_progress = OverallProgressDTO(
-            pda=pda_progress,
-            fda=fda_progress
-        )
-        
-        # Safely extract values checking dictionary keys properly
-        raw_pda_total = result.get("pda_total_amount")
-        raw_fda_total = result.get("fda_total_amount")
-        
-        pda_total = int(round(float(raw_pda_total))) if raw_pda_total is not None else 0
-        fda_total = int(round(float(raw_fda_total))) if raw_fda_total is not None else 0
-        
-        pda_savings = int(round(float(result.get("pdasavings") or 0.0)))
-        fda_savings = int(round(float(result.get("fdasavings") or 0.0)))
-        
-        overall_savings = pda_savings + fda_savings
-
-        def calc_pct(savings, total):
-            if not total or total <= 0:
-                return 0.0
-            pct = (savings * 100.0) / total
-            val = round(pct, 2)
-            if val == 0.0 and pct != 0:
-                return round(pct, 4)
-            return val
-
-        pct_pda = calc_pct(pda_savings, pda_total + pda_savings)
-        pct_fda = calc_pct(fda_savings, fda_total + fda_savings)
-        
-        # Recalculate percentage if pct_overall is zero or fallback to DB percentage
-        pct_overall = calc_pct(overall_savings, fda_total)
-        final_savings_pct = pct_overall if pct_overall > 0 else round(float(result.get("percentage_savings") or 0.0), 2)
-
-        savings = SavingsDTO(
-            savingsPercentage=final_savings_pct,
-            overallSavingsAmount=overall_savings,
-            pdaSavings=pda_savings,
-            fdaSavings=fda_savings,
-            percentage_savings_fda=pct_fda if pct_fda > 0 else round(float(result.get("percentage_savings_fda") or 0.0), 2),
-            percentage_savings_pda=pct_pda if pct_pda > 0 else round(float(result.get("percentage_savings_pda") or 0.0), 2),
-            pda_total_amount=pda_total,
-            fda_total_amount=fda_total,
-        )
-        
-        overall_summary = OverallSummaryDTO(
-            summaryCards=summary_cards,
-            overallProgress=overall_progress,
-            savings=savings
-        )
-
-        return DashboardResponseDTO(overallSummary=overall_summary)
+            
+            if not result:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Dashboard data not found"
+                )
+            
+            pda_completed = result.get("completed_pda") or 0
+            pda_under_process = result.get("under_process_pda") or 0
+            pda_total_count = pda_completed + pda_under_process
+            
+            fda_completed = result.get("completed_fda") or 0
+            fda_under_process = result.get("under_process_fda") or 0
+            fda_yet_to_process = result.get("yet_to_process") or 0
+            fda_total_count = fda_completed + fda_under_process + fda_yet_to_process
+    
+            summary_cards = SummaryCardsDTO(
+                countries=result.get("countries") or 0,
+                ports=result.get("ports") or 0,
+                vessels=result.get("vessels") or 0,
+                totalPDA=pda_total_count,
+                totalFDA=fda_total_count
+            )
+    
+            pda_progress = ProgressDetailDTO(
+                Completed=pda_completed,
+                Underprogress=pda_under_process,
+                total=pda_total_count,
+                pdaCompletedNoFda=result.get("pda_completed_no_fda") or 0
+            )
+    
+            fda_progress = FDAProgressDetailDTO(
+                Completed=fda_completed,
+                Underprogress=fda_under_process,
+                yetToProcess=fda_yet_to_process,
+                total=fda_total_count
+            )
+            
+            overall_progress = OverallProgressDTO(
+                pda=pda_progress,
+                fda=fda_progress
+            )
+            
+            pda_total = int(round(float(result.get("pda_total_amount") or 0.0)))
+            fda_total = int(round(float(result.get("fda_total_amount") or 0.0)))
+            
+            # Original logic for saving percentages
+            pda_savings = int(round(float(result.get("pdasavings") or 0.0)))
+            fda_savings = int(round(float(result.get("fdasavings") or 0.0)))
+            
+            # Enforce overall_savings = pda_savings + fda_savings across the project
+            overall_savings = pda_savings + fda_savings
+    
+            def calc_pct(savings, total):
+                if not total or total <= 0:
+                    return 0.0
+                pct = (savings * 100.0) / total
+                val = round(pct, 2)
+                if val == 0.0 and pct != 0:
+                    return round(pct, 4)
+                return val
+    
+            pct_pda = calc_pct(pda_savings, pda_total + pda_savings)
+            pct_fda = calc_pct(fda_savings, fda_total + fda_savings)
+            pct_overall = calc_pct(overall_savings, fda_total)
+    
+            savings = SavingsDTO(
+                savingsPercentage=pct_overall if pct_overall > 0 else round(float(result.get("percentage_savings") or 0.0), 2),
+                overallSavingsAmount=overall_savings,
+                pdaSavings=pda_savings,
+                fdaSavings=fda_savings,
+                percentage_savings_fda=pct_fda,
+                percentage_savings_pda=pct_pda,
+                pda_total_amount=pda_total,
+                fda_total_amount=fda_total,
+            )
+            
+            overall_summary = OverallSummaryDTO(
+                summaryCards=summary_cards,
+                overallProgress=overall_progress,
+                savings=savings
+            )
+    
+            return DashboardResponseDTO(overallSummary=overall_summary)
 
     def get_dashboard_hover_stats(self, payload: DashboardRequestDTO, db: Session):
         """
