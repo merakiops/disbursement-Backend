@@ -707,6 +707,8 @@ class PDAServiceImpl(PDAService):
             while "\n\n" in signature:
                 signature = signature.replace("\n\n", "\n")
             signature = signature.replace("\n", "<br>")
+            # Wrap signature with Sans Serif inline styling for email client compatibility
+            signature = f'<div style="font-family: sans-serif;">{signature}</div>'
         
         import time
         context = {
