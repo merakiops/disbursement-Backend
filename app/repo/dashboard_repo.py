@@ -671,7 +671,6 @@ class DashboardRepository:
                 return {}
 
         # --- Standard + Kamba merged flow ---
-        # Expand client_ids to include old/merged prod IDs
         if client_ids is not None and len(client_ids) == 0:
             client_ids = None
             
@@ -679,7 +678,6 @@ class DashboardRepository:
         if client_ids:
             expanded_client_ids = get_all_prod_ids_for_client_list(client_ids)
 
-        # Replaced stored procedure call with direct SQL query for overall progress metrics
         base_where = ["1=1"]
         prod_params = {}
         if expanded_client_ids:
@@ -726,11 +724,11 @@ class DashboardRepository:
                 COUNT(td.disbursement_seq) FILTER (WHERE pda.status = 7 AND fda.fda_id IS NULL) as pda_completed_no_fda,
                 
                 -- Original Amounts and Savings
-                COALESCE(SUM(pda.meraki_pda_amount), 0.0) as pda_total_amount,
-                COALESCE(SUM(fda.fda_amount), 0.0) as fda_total_amount,
-                COALESCE(SUM(td.loss_prevention_pda), 0.0) as pdasavings,
-                COALESCE(SUM(td.loss_prevention_fda), 0.0) as fdasavings,
-                COALESCE(SUM(td.total_loss_prevented), 0.0) as overallsavingsamount
+                COALESCE(SUM(CAST(pda.meraki_pda_amount AS NUMERIC)), 0.0) as pda_total_amount,
+                COALESCE(SUM(CAST(fda.fda_amount AS NUMERIC)), 0.0) as fda_total_amount,
+                COALESCE(SUM(CAST(td.loss_prevention_pda AS NUMERIC)), 0.0) as pdasavings,
+                COALESCE(SUM(CAST(td.loss_prevention_fda AS NUMERIC)), 0.0) as fdasavings,
+                COALESCE(SUM(CAST(td.total_loss_prevented AS NUMERIC)), 0.0) as overallsavingsamount
             FROM {SCHEMA_NAME}.txn_disbursement td
             LEFT JOIN {SCHEMA_NAME}.txn_fda fda ON td.disbursement_seq = fda.disbursement_seq AND (fda.state IS NULL OR fda.state <> 'D')
             LEFT JOIN {SCHEMA_NAME}.txn_pda pda ON td.disbursement_seq = pda.disbursement_seq AND (pda.state IS NULL OR pda.state <> 'D')
@@ -755,7 +753,6 @@ class DashboardRepository:
         if ankkumam_clients:
             ankkumam_summary = DashboardRepository._get_ankkumam_summary_for_companies(ankkumam_clients, db)
             
-            # Optimize: Calculate overlap by only checking the kamba items against standard data
             kamba_vessels = [str(x).upper() for x in ankkumam_summary.get("vessel_list", []) if x]
             kamba_countries = [str(x).upper() for x in ankkumam_summary.get("country_list", []) if x]
             kamba_ports = [str(x).upper() for x in ankkumam_summary.get("port_list", []) if x]
@@ -791,12 +788,10 @@ class DashboardRepository:
                 
             merged = DashboardRepository._merge_summaries(prod_summary, ankkumam_summary)
             
-            # Overwrite the lists fallback logic with mathematically correct counts
             merged["vessels"] = float(prod_summary.get("vessels", 0)) + float(ankkumam_summary.get("vessels", 0)) - overlap_vessels
             merged["countries"] = float(prod_summary.get("countries", 0)) + float(ankkumam_summary.get("countries", 0)) - overlap_countries
             merged["ports"] = float(prod_summary.get("ports", 0)) + float(ankkumam_summary.get("ports", 0)) - overlap_ports
             
-            # Remove the lists so they aren't processed accidentally or sent out
             merged.pop("vessel_list", None)
             merged.pop("country_list", None)
             merged.pop("port_list", None)
