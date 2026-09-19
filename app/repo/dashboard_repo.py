@@ -691,7 +691,7 @@ class DashboardRepository:
 
         base_where_sql = " AND ".join(base_where)
 
-        # Standard aggregation query matching hover stats logic and updating yet_to_process
+        # Updated query: calculates overall progress counts without altering amounts or savings queries
         summary_sql = f"""
             SELECT 
                 COUNT(DISTINCT td.country_id) FILTER (WHERE td.country_id IS NOT NULL) as countries,
@@ -703,20 +703,21 @@ class DashboardRepository:
                 COUNT(pda.pda_id) FILTER (WHERE pda.status = 7) as completed_pda,
                 COUNT(pda.pda_id) FILTER (WHERE pda.status <> 7) as under_process_pda,
                 
-                -- FDA Progress (total_fda = completed_fda + under_process_fda)
-                COUNT(fda.fda_id) FILTER (WHERE fda.fda_id IS NOT NULL) as total_fda,
+                -- FDA Progress
+                COUNT(fda.fda_id) FILTER (WHERE fda.fda_id IS NOT NULL AND fda.status IS NOT NULL) as total_fda,
                 COUNT(fda.fda_id) FILTER (WHERE fda.status = 7) as completed_fda,
-                COUNT(fda.fda_id) FILTER (WHERE fda.status <> 7) as under_process_fda,
+                COUNT(fda.fda_id) FILTER (WHERE fda.status IS NOT NULL AND fda.status <> 7) as under_process_fda,
                 
-                -- yet_to_process set to under_process_fda count
-                COUNT(fda.fda_id) FILTER (
-                    WHERE (fda.status IS NULL OR fda.status <> 7) 
-                      AND td.etd < CURRENT_DATE - INTERVAL '30 days'
+                -- Yet to be Received: Pending FDAs > 30 days after PDA completion
+                COUNT(td.disbursement_seq) FILTER (
+                    WHERE pda.status = 7 
+                      AND (fda.fda_id IS NULL OR fda.status <> 7)
+                      AND COALESCE(pda.updated_on, pda.created_on) < CURRENT_DATE - INTERVAL '30 days'
                 ) as yet_to_process,
                 
                 COUNT(td.disbursement_seq) FILTER (WHERE pda.status = 7 AND fda.fda_id IS NULL) as pda_completed_no_fda,
                 
-                -- Amounts and Savings
+                -- Original Amounts and Savings (Preserved)
                 COALESCE(SUM(pda.meraki_pda_amount), 0.0) as pda_total_amount,
                 COALESCE(SUM(fda.fda_amount), 0.0) as fda_total_amount,
                 COALESCE(SUM(td.loss_prevention_pda), 0.0) as pdasavings,

@@ -37,17 +37,15 @@ class DashboardServiceImpl(DashboardService):
                 detail="Dashboard data not found"
             )
         
+        # --- Progress Metrics Only ---
         pda_completed = result.get("completed_pda") or 0
         pda_under_process = result.get("under_process_pda") or 0
         pda_total_count = pda_completed + pda_under_process
         
         fda_completed = result.get("completed_fda") or 0
         fda_under_process = result.get("under_process_fda") or 0
-        
-        # FDA Total = Completed + Under Process (e.g. 13 + 2 = 15)
         fda_total_count = fda_completed + fda_under_process
         
-        # Yet to be Received count (filtered for > 30 days pending from database result)
         yet_to_process = result.get("yet_to_process") or 0
 
         summary_cards = SummaryCardsDTO(
@@ -68,7 +66,7 @@ class DashboardServiceImpl(DashboardService):
         fda_progress = FDAProgressDetailDTO(
             Completed=fda_completed,
             Underprogress=fda_under_process,
-            yetToProcess=yet_to_process,  # Displays pending > 30 days count
+            yetToProcess=yet_to_process,
             total=fda_total_count
         )
         
@@ -77,6 +75,7 @@ class DashboardServiceImpl(DashboardService):
             fda=fda_progress
         )
         
+        # --- Savings & Total Amount Metrics (Unchanged) ---
         pda_total = int(round(float(result.get("pda_total_amount") or 0.0)))
         fda_total = int(round(float(result.get("fda_total_amount") or 0.0)))
         
