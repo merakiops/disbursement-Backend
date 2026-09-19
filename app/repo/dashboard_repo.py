@@ -698,6 +698,7 @@ class DashboardRepository:
             
         base_where_sql = " AND ".join(base_where)
 
+        # Calculates total progress counts and isolated scalar sums to prevent fda_total_amount = 0
         summary_sql = f"""
             SELECT 
                 COUNT(DISTINCT td.country_id) FILTER (WHERE td.country_id IS NOT NULL) as countries,
@@ -705,30 +706,42 @@ class DashboardRepository:
                 COUNT(DISTINCT td.vsl_id) FILTER (WHERE td.vsl_id IS NOT NULL) as vessels,
                 
                 -- PDA Progress
-                COUNT(pda.pda_id) FILTER (WHERE pda.pda_id IS NOT NULL) as total_pda,
-                COUNT(pda.pda_id) FILTER (WHERE pda.status = 7) as completed_pda,
-                COUNT(pda.pda_id) FILTER (WHERE pda.status <> 7) as under_process_pda,
+                COUNT(DISTINCT pda.pda_id) FILTER (WHERE pda.pda_id IS NOT NULL) as total_pda,
+                COUNT(DISTINCT pda.pda_id) FILTER (WHERE pda.status = 7) as completed_pda,
+                COUNT(DISTINCT pda.pda_id) FILTER (WHERE pda.status <> 7) as under_process_pda,
                 
                 -- FDA Progress
-                COUNT(fda.fda_id) FILTER (WHERE fda.fda_id IS NOT NULL AND fda.status IS NOT NULL) as total_fda,
-                COUNT(fda.fda_id) FILTER (WHERE fda.status = 7) as completed_fda,
-                COUNT(fda.fda_id) FILTER (WHERE fda.status IS NOT NULL AND fda.status <> 7) as under_process_fda,
+                COUNT(DISTINCT fda.fda_id) FILTER (WHERE fda.fda_id IS NOT NULL AND fda.status IS NOT NULL) as total_fda,
+                COUNT(DISTINCT fda.fda_id) FILTER (WHERE fda.status = 7) as completed_fda,
+                COUNT(DISTINCT fda.fda_id) FILTER (WHERE fda.status IS NOT NULL AND fda.status <> 7) as under_process_fda,
                 
-                -- FDA Yet to be Received: PDA completed & no completed FDA after 30 days of PDA completion
-                COUNT(td.disbursement_seq) FILTER (
+                -- Yet to be Received: PDA completed & no completed FDA after 30 days of PDA completion
+                COUNT(DISTINCT td.disbursement_seq) FILTER (
                     WHERE pda.status = 7 
                       AND (fda.fda_id IS NULL OR fda.status <> 7)
                       AND COALESCE(pda.updated_on, pda.created_on) < CURRENT_DATE - INTERVAL '30 days'
                 ) as yet_to_process,
                 
-                COUNT(td.disbursement_seq) FILTER (WHERE pda.status = 7 AND fda.fda_id IS NULL) as pda_completed_no_fda,
+                COUNT(DISTINCT td.disbursement_seq) FILTER (WHERE pda.status = 7 AND fda.fda_id IS NULL) as pda_completed_no_fda,
                 
-                -- Original Amounts and Savings
-                COALESCE(SUM(CAST(pda.meraki_pda_amount AS NUMERIC)), 0.0) as pda_total_amount,
-                COALESCE(SUM(CAST(fda.fda_amount AS NUMERIC)), 0.0) as fda_total_amount,
-                COALESCE(SUM(CAST(td.loss_prevention_pda AS NUMERIC)), 0.0) as pdasavings,
-                COALESCE(SUM(CAST(td.loss_prevention_fda AS NUMERIC)), 0.0) as fdasavings,
-                COALESCE(SUM(CAST(td.total_loss_prevented AS NUMERIC)), 0.0) as overallsavingsamount
+                -- Amounts & Savings computed via scalar subqueries to prevent duplicate multiplication or zeroing
+                COALESCE((
+                    SELECT SUM(p.meraki_pda_amount)
+                    FROM {SCHEMA_NAME}.txn_pda p
+                    JOIN {SCHEMA_NAME}.txn_disbursement td_sub ON p.disbursement_seq = td_sub.disbursement_seq
+                    WHERE (p.state IS NULL OR p.state <> 'D') AND {base_where_sql.replace('td.', 'td_sub.')}
+                ), 0.0) as pda_total_amount,
+                
+                COALESCE((
+                    SELECT SUM(f.fda_amount)
+                    FROM {SCHEMA_NAME}.txn_fda f
+                    JOIN {SCHEMA_NAME}.txn_disbursement td_sub ON f.disbursement_seq = td_sub.disbursement_seq
+                    WHERE (f.state IS NULL OR f.state <> 'D') AND {base_where_sql.replace('td.', 'td_sub.')}
+                ), 0.0) as fda_total_amount,
+                
+                COALESCE(SUM(td.loss_prevention_pda), 0.0) as pdasavings,
+                COALESCE(SUM(td.loss_prevention_fda), 0.0) as fdasavings,
+                COALESCE(SUM(td.total_loss_prevented), 0.0) as overallsavingsamount
             FROM {SCHEMA_NAME}.txn_disbursement td
             LEFT JOIN {SCHEMA_NAME}.txn_fda fda ON td.disbursement_seq = fda.disbursement_seq AND (fda.state IS NULL OR fda.state <> 'D')
             LEFT JOIN {SCHEMA_NAME}.txn_pda pda ON td.disbursement_seq = pda.disbursement_seq AND (pda.state IS NULL OR pda.state <> 'D')
