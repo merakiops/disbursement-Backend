@@ -44,7 +44,7 @@ class DashboardServiceImpl(DashboardService):
             fda_completed = result.get("completed_fda") or 0
             fda_under_process = result.get("under_process_fda") or 0
             fda_yet_to_process = result.get("yet_to_process") or 0
-            fda_total_count = fda_completed + fda_under_process + fda_yet_to_process
+            fda_total_count = fda_completed + fda_under_process
     
             summary_cards = SummaryCardsDTO(
                 countries=result.get("countries") or 0,
