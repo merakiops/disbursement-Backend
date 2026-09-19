@@ -358,22 +358,20 @@ class DashboardRepository:
         ds = (data_source or "all").lower()
 
         country_counter = Counter()
-        port_counter = Counter()
+        port_counter = Counter()        # Counts occurrences of EACH port call
         vessel_counter = Counter()
         
-        # Unique port calls tracking
-        port_call_seqs = set()
-
         total_pda = 0
         total_fda = 0
         pda_completed = 0
         pda_under_process = 0
         fda_completed = 0
         fda_under_process = 0
-        fda_awaiting = 0
         
+        total_valid_port_calls = 0
+
         def process_ankkumam(ankkumam_clients):
-            nonlocal total_pda, total_fda, pda_completed, pda_under_process, fda_completed, fda_under_process, fda_awaiting
+            nonlocal total_pda, total_fda, pda_completed, pda_under_process, fda_completed, fda_under_process, total_valid_port_calls
             if not ankkumam_clients:
                 return
             
@@ -444,29 +442,28 @@ class DashboardRepository:
                 p_name = str(r.get("port_name") or "N/A").strip().upper()
                 v_name = str(r.get("vessel_name") or "N/A").strip().upper()
                 
-                seq = r.get("disbursement_seq")
-                if seq:
-                    port_call_seqs.add(f"ankkumam_{seq}")
-
-                if c_name != "N/A": country_counter[c_name] += 1
-                if p_name != "N/A": port_counter[p_name] += 1
-                if v_name != "N/A": vessel_counter[v_name] += 1
+                fda_stat = str(r.get("fda_status") or "").strip().lower()
+                pda_stat = str(r.get("pda_status") or "").strip().lower()
+                
+                # Check if this port call has a completed/processed PDA or FDA
+                has_active_pda_or_fda = (fda_stat in ["completed", "under process"]) or (pda_stat in ["completed", "under process"])
+                
+                if has_active_pda_or_fda:
+                    total_valid_port_calls += 1
+                    if c_name != "N/A": country_counter[c_name] += 1
+                    if p_name != "N/A": port_counter[p_name] += 1
+                    if v_name != "N/A": vessel_counter[v_name] += 1
                 
                 total_pda += 1
                 pda_completed += 1
 
-                # Check FDA status specifically
-                fda_stat = str(r.get("fda_status") or "").strip().lower()
                 fda_amount = float(r.get("fda_amount") or 0.0)
-                
                 if fda_stat == "completed":
                     fda_completed += 1
                     total_fda += 1
                 elif fda_stat == "under process" or fda_amount > 0:
                     fda_under_process += 1
                     total_fda += 1
-                else:
-                    fda_awaiting += 1
 
         # Standard Production Query
         if not is_kamba_client and ds != "kamba" and ds != "excel":
@@ -475,7 +472,7 @@ class DashboardRepository:
             
             expanded_client_ids = get_all_prod_ids_for_client_list(client_ids) if client_ids else None
             
-            base_where = ["1=1"]
+            base_where = ["(td.state IS NULL OR td.state <> 'D')"]
             params = {}
             if expanded_client_ids:
                 int_cids = [int(x) for x in expanded_client_ids if str(x).isdigit()]
@@ -514,34 +511,35 @@ class DashboardRepository:
                 c_name = r.get("country") or "N/A"
                 p_name = r.get("port") or "N/A"
                 v_name = r.get("vessel") or "N/A"
-                seq = r.get("disbursement_seq")
-
-                # Count each disbursement sequence as 1 Port Call
-                if seq:
-                    port_call_seqs.add(f"std_{seq}")
                 
-                if c_name != "N/A": country_counter[c_name] += 1
-                if p_name != "N/A": port_counter[p_name] += 1
-                if v_name != "N/A": vessel_counter[v_name] += 1
+                pda_st = r.get("pda_status")
+                fda_st = r.get("fda_status")
+                has_fda = fda_st is not None or r.get("fda_id") is not None
+
+                # Only include in Port Calls if there is an active/completed PDA or FDA
+                has_pda_or_fda = (pda_st is not None) or has_fda
+                
+                if has_pda_or_fda:
+                    total_valid_port_calls += 1
+                    if c_name != "N/A": country_counter[c_name] += 1
+                    if p_name != "N/A": port_counter[p_name] += 1   # Every visit increments the counter
+                    if v_name != "N/A": vessel_counter[v_name] += 1
                 
                 # Check PDA Status
-                if r.get("pda_status") is not None:
+                if pda_st is not None:
                     total_pda += 1
-                    if r.get("pda_status") == 7:
+                    if pda_st == 7:
                         pda_completed += 1
                     else:
                         pda_under_process += 1
                 
-                # Check FDA Status - only increment FDA counters if FDA record exists
-                fda_st = r.get("fda_status")
-                if fda_st is not None or r.get("fda_id") is not None:
+                # Check FDA Status
+                if has_fda:
                     total_fda += 1
-                    if fda_st == 7:  # Status 7 = Completed
+                    if fda_st == 7:
                         fda_completed += 1
                     else:
                         fda_under_process += 1
-                else:
-                    fda_awaiting += 1
 
         # Fetch Ankkumam Data
         if not is_excel_client and ds != "excel" and ds != "standard":
@@ -562,13 +560,17 @@ class DashboardRepository:
         top_ports = [HoverTopItemDTO(name=k, count=v) for k, v in port_counter.most_common(5)]
         top_vessels = [HoverTopItemDTO(name=k, count=v) for k, v in vessel_counter.most_common(5)]
         
-        unique_countries = len(country_counter)
+        # Unique Ports = count of distinct keys in port_counter
         unique_ports = len(port_counter)
+        unique_countries = len(country_counter)
         unique_vessels = len(vessel_counter)
 
-        # Correct calculation: Number of unique port call disbursements
-        total_port_calls = len(port_call_seqs) if port_call_seqs else sum(port_counter.values())
+        # Total Port Calls = sum of all occurrences across all ports
+        total_port_calls = total_valid_port_calls
         avg_calls_per_port = round(total_port_calls / unique_ports, 2) if unique_ports > 0 else 0.0
+        
+        # Awaiting FDA = Port Calls that don't have an FDA completed or in-progress yet
+        fda_awaiting = max(0, total_port_calls - (fda_completed + fda_under_process))
         
         fda_completion_pct = round((fda_completed / total_fda) * 100, 2) if total_fda > 0 else 0.0
 
@@ -578,11 +580,11 @@ class DashboardRepository:
                 top_countries=top_countries
             ),
             ports=HoverPortsDTO(
-                total_ports=unique_ports,
+                total_ports=unique_ports,       # Unique distinct ports visited
                 top_ports=top_ports
             ),
             port_calls=HoverPortCallsDTO(
-                total_port_calls=total_port_calls,
+                total_port_calls=total_port_calls, # Total port call visits (includes repeats)
                 average_calls_per_port=avg_calls_per_port,
                 top_ports=top_ports
             ),
