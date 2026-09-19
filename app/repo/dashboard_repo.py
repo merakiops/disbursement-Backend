@@ -609,7 +609,7 @@ class DashboardRepository:
         Get dashboard summary based on client_ids and data_source.
         For clients with kamba mapping, merges data from both prod and kamba_data_prod schemas.
         Client ID 84 represents X-Platform (mapped to excel_data_dev schema).
-        Client ID 85 represents Kamba (all kamba data, kept for backward compatibility).
+        Client ID 85 represents Kamba.
         """
         is_excel_client = False
         is_kamba_client = False
@@ -624,7 +624,7 @@ class DashboardRepository:
 
         ds = (data_source or "all").lower()
 
-        # Backward compatibility: client_id=85 (Kamba) shows all kamba data plus ALGHAF
+        # Backward compatibility: client_id=85 (Kamba)
         if is_kamba_client or (ds in ["kamba", "mysql"] and client_ids and 85 in [int(x) for x in client_ids if str(x).isdigit()] and len(client_ids) == 1):
             kamba_summary = DashboardRepository._get_kamba_summary_for_companies(None, db)
             ankkumam_summary = DashboardRepository._get_ankkumam_summary_for_companies(["ALGHAF"], db)
@@ -670,33 +670,64 @@ class DashboardRepository:
                 db.rollback()
                 return {}
 
-        # --- Standard + Kamba merged flow ---
-        # Expand client_ids to include old/merged prod IDs
-        if client_ids is not None and len(client_ids) == 0:
-            client_ids = None
-            
+        # --- Standard Production Flow ---
         expanded_client_ids = client_ids
         if client_ids:
             expanded_client_ids = get_all_prod_ids_for_client_list(client_ids)
 
-        # Get prod summary via existing function
-        query = text(f"""
-            SELECT *
-            FROM {SCHEMA_NAME}.fn_dashboard_summary(:client_ids, :from_date, :to_date)
-        """)
-        
-        result = db.execute(
-            query,
-            {
-                "client_ids": expanded_client_ids,
-                "from_date": from_date,
-                "to_date": to_date
-            }
-        ).mappings().first()
-        
-        prod_summary = dict(result) if result else {}
+        base_where = ["1=1"]
+        params = {}
+        if expanded_client_ids:
+            int_cids = [int(x) for x in expanded_client_ids if str(x).isdigit()]
+            if int_cids:
+                base_where.append("td.client_id = ANY(:cids)")
+                params["cids"] = int_cids
+        if from_date:
+            base_where.append("td.etd::date >= :from_date::date")
+            params["from_date"] = from_date
+        if to_date:
+            base_where.append("td.etd::date <= :to_date::date")
+            params["to_date"] = to_date
 
-        # Fetch Ankkumam data instead of Kamba
+        base_where_sql = " AND ".join(base_where)
+
+        # Standard aggregation query matching hover stats logic
+        summary_sql = f"""
+            SELECT 
+                COUNT(DISTINCT td.country_id) FILTER (WHERE td.country_id IS NOT NULL) as countries,
+                COUNT(DISTINCT td.port_id) FILTER (WHERE td.port_id IS NOT NULL) as ports,
+                COUNT(DISTINCT td.vsl_id) FILTER (WHERE td.vsl_id IS NOT NULL) as vessels,
+                
+                -- PDA Progress
+                COUNT(pda.pda_id) FILTER (WHERE pda.pda_id IS NOT NULL) as total_pda,
+                COUNT(pda.pda_id) FILTER (WHERE pda.status = 7) as completed_pda,
+                COUNT(pda.pda_id) FILTER (WHERE pda.status <> 7) as under_process_pda,
+                
+                -- FDA Progress
+                COUNT(fda.fda_id) FILTER (WHERE fda.fda_id IS NOT NULL) as total_fda,
+                COUNT(fda.fda_id) FILTER (WHERE fda.status = 7) as completed_fda,
+                COUNT(fda.fda_id) FILTER (WHERE fda.status <> 7) as under_process_fda,
+                
+                -- Awaiting / Yet to process FDA (where PDA exists or port call active, but no FDA recorded)
+                COUNT(td.disbursement_seq) FILTER (WHERE fda.fda_id IS NULL AND pda.pda_id IS NOT NULL) as yet_to_process,
+                COUNT(td.disbursement_seq) FILTER (WHERE pda.status = 7 AND fda.fda_id IS NULL) as pda_completed_no_fda,
+                
+                -- Amounts and Savings
+                COALESCE(SUM(pda.meraki_pda_amount), 0.0) as pda_total_amount,
+                COALESCE(SUM(fda.fda_amount), 0.0) as fda_total_amount,
+                COALESCE(SUM(td.loss_prevention_pda), 0.0) as pdasavings,
+                COALESCE(SUM(td.loss_prevention_fda), 0.0) as fdasavings,
+                COALESCE(SUM(td.total_loss_prevented), 0.0) as overallsavingsamount
+            FROM {SCHEMA_NAME}.txn_disbursement td
+            LEFT JOIN {SCHEMA_NAME}.txn_fda fda ON td.disbursement_seq = fda.disbursement_seq AND (fda.state IS NULL OR fda.state <> 'D')
+            LEFT JOIN {SCHEMA_NAME}.txn_pda pda ON td.disbursement_seq = pda.disbursement_seq AND (pda.state IS NULL OR pda.state <> 'D')
+            WHERE {base_where_sql}
+        """
+
+        result_row = db.execute(text(summary_sql), params).mappings().first()
+        prod_summary = dict(result_row) if result_row else {}
+
+        # Fetch Ankkumam data and merge if applicable
         prod_cid_to_excel, excel_to_prod_cid = DashboardRepository._get_dynamic_client_mapping(db)
         ankkumam_clients = []
         if client_ids:
@@ -711,86 +742,45 @@ class DashboardRepository:
         if ankkumam_clients:
             ankkumam_summary = DashboardRepository._get_ankkumam_summary_for_companies(ankkumam_clients, db)
             
-            # Fetch actual unique lists for primary data to merge properly
-            prod_where = ["1=1"]
-            prod_params = {}
-            if expanded_client_ids:
-                try:
-                    int_cids = [int(x) for x in expanded_client_ids if str(x).isdigit()]
-                except:
-                    int_cids = list(expanded_client_ids)
-                if int_cids:
-                    prod_where.append("client_id = ANY(:cids)")
-                    prod_params["cids"] = int_cids
-                    
-            if from_date:
-                prod_where.append("etd::date >= :from_date::date")
-                prod_params["from_date"] = from_date
-            if to_date:
-                prod_where.append("etd::date <= :to_date::date")
-                prod_params["to_date"] = to_date
-                
-            prod_where_sql = " AND ".join(prod_where)
-            
-            # Optimize: Calculate overlap by only checking the kamba items against standard data
             kamba_vessels = [str(x).upper() for x in ankkumam_summary.get("vessel_list", []) if x]
             kamba_countries = [str(x).upper() for x in ankkumam_summary.get("country_list", []) if x]
             kamba_ports = [str(x).upper() for x in ankkumam_summary.get("port_list", []) if x]
             
             overlap_vessels = overlap_countries = overlap_ports = 0
-            
-            # Rewrite overlap logic to use base tables (td, v, c, p) instead of vw_dashboard_data 
-            # because Postgres cannot push down ANY(...) filters through the view efficiently.
-            base_where = ["1=1"]
-            if expanded_client_ids:
-                try:
-                    int_cids = [int(x) for x in expanded_client_ids if str(x).isdigit()]
-                except:
-                    int_cids = list(expanded_client_ids)
-                if int_cids:
-                    base_where.append("td.client_id = ANY(:cids)")
-                    prod_params["cids"] = int_cids
-            if from_date:
-                base_where.append("td.etd::date >= :from_date::date")
-            if to_date:
-                base_where.append("td.etd::date <= :to_date::date")
-            base_where_sql = " AND ".join(base_where)
 
             if kamba_vessels:
-                prod_params["kamba_vessels"] = kamba_vessels
+                params["kamba_vessels"] = kamba_vessels
                 overlap_vessels = db.execute(text(f"""
                     SELECT COUNT(DISTINCT UPPER(v.name)) 
                     FROM {SCHEMA_NAME}.txn_disbursement td
                     JOIN {SCHEMA_NAME}.ma_vessels v ON td.vsl_id = v.vsl_id
                     WHERE {base_where_sql} AND UPPER(v.name) = ANY(:kamba_vessels)
-                """), prod_params).scalar() or 0
+                """), params).scalar() or 0
                 
             if kamba_countries:
-                prod_params["kamba_countries"] = kamba_countries
+                params["kamba_countries"] = kamba_countries
                 overlap_countries = db.execute(text(f"""
                     SELECT COUNT(DISTINCT UPPER(c.name)) 
                     FROM {SCHEMA_NAME}.txn_disbursement td
                     JOIN {SCHEMA_NAME}.ma_country c ON td.country_id = c.country_id
                     WHERE {base_where_sql} AND UPPER(c.name) = ANY(:kamba_countries)
-                """), prod_params).scalar() or 0
+                """), params).scalar() or 0
                 
             if kamba_ports:
-                prod_params["kamba_ports"] = kamba_ports
+                params["kamba_ports"] = kamba_ports
                 overlap_ports = db.execute(text(f"""
                     SELECT COUNT(DISTINCT UPPER(p.name)) 
                     FROM {SCHEMA_NAME}.txn_disbursement td
                     JOIN {SCHEMA_NAME}.ma_port p ON td.port_id = p.port_id
                     WHERE {base_where_sql} AND UPPER(p.name) = ANY(:kamba_ports)
-                """), prod_params).scalar() or 0
+                """), params).scalar() or 0
                 
             merged = DashboardRepository._merge_summaries(prod_summary, ankkumam_summary)
             
-            # Overwrite the lists fallback logic with mathematically correct counts
             merged["vessels"] = float(prod_summary.get("vessels", 0)) + float(ankkumam_summary.get("vessels", 0)) - overlap_vessels
             merged["countries"] = float(prod_summary.get("countries", 0)) + float(ankkumam_summary.get("countries", 0)) - overlap_countries
             merged["ports"] = float(prod_summary.get("ports", 0)) + float(ankkumam_summary.get("ports", 0)) - overlap_ports
             
-            # Remove the lists so they aren't processed accidentally or sent out
             merged.pop("vessel_list", None)
             merged.pop("country_list", None)
             merged.pop("port_list", None)
