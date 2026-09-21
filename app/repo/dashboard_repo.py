@@ -395,9 +395,9 @@ class DashboardRepository:
                 page = 1
                 clientId = None
             
-            # Fetch strictly Excel DB records ONLY (no production DB cross-checking)
+            # Fetch strictly completed FDA records for Ankkumam clients
             raw_records, _ = DashboardRepository._get_ankkumam_records(
-                ankkumam_cls, DummyDataRequest(), False, True, 0, db
+                ankkumam_cls, DummyDataRequest(), False, True, 0, db, only_completed_fda=True
             )
 
             UNDER_PROCESS_STATUSES = {"under process", "in process", "in processs", "unixting"}
@@ -410,12 +410,6 @@ class DashboardRepository:
                 fda_stat = str(r.get("fda_status") or "").strip().lower()
                 pda_stat = str(r.get("pda_status") or "").strip().lower()
                 
-                # Exclude null or zero FDA entries from FDA counts
-                try:
-                    fda_amount = float(r.get("fda_amount") or 0.0)
-                except (ValueError, TypeError):
-                    fda_amount = 0.0
-
                 has_active_pda_or_fda = (fda_stat == "completed" or fda_stat in UNDER_PROCESS_STATUSES) or \
                                         (pda_stat == "completed" or pda_stat in UNDER_PROCESS_STATUSES)
                 
@@ -433,15 +427,14 @@ class DashboardRepository:
                     total_pda += 1
                     pda_under_process += 1
 
-                # --- FDA Stats (Ignore null or zero FDA entries) ---
-                if fda_stat == "completed" and fda_amount > 0:
+                # --- FDA Stats ---
+                if fda_stat == "completed":
                     total_fda += 1
                     fda_completed += 1
                 elif fda_stat in UNDER_PROCESS_STATUSES:
                     total_fda += 1
                     fda_under_process += 1
 
-        # FIX: Route Excel clients directly without executing production queries
         if ankkumam_clients and not is_kamba_client and ds not in ["standard", "excel"]:
             process_ankkumam(ankkumam_clients)
         else:
