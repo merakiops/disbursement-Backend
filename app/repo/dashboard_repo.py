@@ -376,7 +376,7 @@ class DashboardRepository:
         
         total_valid_port_calls = 0
 
-        # Determine if this client maps to an Ankkumam dataset
+        # Check if the requested client_ids map to an Ankkumam / Excel client (e.g., ALGHAF)
         prod_cid_to_excel, excel_to_prod_cid = DashboardRepository._get_dynamic_client_mapping(db)
         ankkumam_clients = []
         if client_ids:
@@ -385,8 +385,6 @@ class DashboardRepository:
                     ankkumam_clients.append(prod_cid_to_excel[int(cid)])
                 elif str(cid) == '85' and "ALGHAF" in excel_to_prod_cid:
                     ankkumam_clients.append("ALGHAF")
-        elif ds not in ["excel", "standard"]:
-            ankkumam_clients = list(excel_to_prod_cid.keys())
 
         def process_ankkumam(ankkumam_cls):
             nonlocal total_pda, total_fda, pda_completed, pda_under_process, fda_completed, fda_under_process, total_valid_port_calls
@@ -487,7 +485,7 @@ class DashboardRepository:
                     total_fda += 1
                     fda_under_process += 1
 
-        # Execute only Ankkumam logic if client is purely an Ankkumam client
+        # CRITICAL FIX: If this client's data is exclusively from Ankkumam/Excel, run ONLY process_ankkumam
         if ankkumam_clients and not is_kamba_client and ds not in ["standard", "excel"]:
             process_ankkumam(ankkumam_clients)
         else:
@@ -566,10 +564,9 @@ class DashboardRepository:
                         else:
                             fda_under_process += 1
 
-            # Process Ankkumam Data for mixed/all clients fallback
-            if not is_excel_client and ds != "excel" and ds != "standard" and not ankkumam_clients:
-                ankkumam_clients = list(excel_to_prod_cid.keys())
-                process_ankkumam(ankkumam_clients)
+            if not is_excel_client and ds != "excel" and ds != "standard":
+                ankkumam_cls = list(excel_to_prod_cid.keys())
+                process_ankkumam(ankkumam_cls)
             
         top_countries = [HoverTopItemDTO(name=k, count=v) for k, v in country_counter.most_common(5)]
         top_ports = [HoverTopItemDTO(name=k, count=v) for k, v in port_counter.most_common(5)]
@@ -918,6 +915,7 @@ class DashboardRepository:
 
             rows = db.execute(text(data_sql), params).mappings().all()
             
+            # Fetch vessel stats from PROD schema (using normalized matching)
             vessel_names = list(set([r.get("vessel_name") for r in rows if r.get("vessel_name")]))
             vessel_stats_map = {}
             if vessel_names:
@@ -943,8 +941,7 @@ class DashboardRepository:
                     }
 
             _, excel_to_prod_cid = DashboardRepository._get_dynamic_client_mapping(db)
-            UNDER_PROCESS_STATUSES = {"under process", "in process", "in processs", "unixting"}
-
+            
             for r in rows:
                 v_name = r.get("vessel_name")
                 norm_v = str(v_name).upper().split(" EX ")[0].replace(" ", "") if v_name else ""
@@ -970,12 +967,6 @@ class DashboardRepository:
 
                 c_id = excel_to_prod_cid.get(str(r.get("client")), 85)
 
-                raw_pda_stat = str(r.get("pda_status") or "").strip().lower()
-                raw_fda_stat = str(r.get("fda_status") or "").strip().lower()
-
-                formatted_pda_status = "Completed" if raw_pda_stat == "completed" else ("Under process" if raw_pda_stat in UNDER_PROCESS_STATUSES else "N/A")
-                formatted_fda_status = "Completed" if raw_fda_stat == "completed" else "Under process"
-
                 ankkumam_records.append({
                     "disbursement_seq": r['disbursement_seq'],
                     "client_id": c_id,
@@ -990,8 +981,8 @@ class DashboardRepository:
                     "loss_prevention_fda": lp_fda,
                     "total_loss_prevented": tot_lp,
                     "loss_prevented_reason": r.get("reason"),
-                    "pda_status": formatted_pda_status,
-                    "fda_status": formatted_fda_status,
+                    "pda_status": "Completed" if str(r.get("pda_status") or "").strip().lower() == "completed" else "N/A",
+                    "fda_status": "Completed" if str(r.get("fda_status") or "").strip().lower() == "completed" else "Under process",
                     "fda_amount": fda_amt,
                     "pda_amount": pda_amt,
                     "manual_fda_amount": "-",
