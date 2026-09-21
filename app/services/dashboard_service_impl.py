@@ -123,11 +123,12 @@ class DashboardServiceImpl(DashboardService):
         to_date = payload.monthRange.to_date if payload.monthRange else None
         
         result = DashboardRepository.get_dashboard_hover_stats(
-            payload.clientId,
-            from_date,
-            to_date,
-            getattr(payload, 'dataSource', 'all'),
-            db
+            client_ids=payload.clientId or payload.client_id,
+            from_date=from_date,
+            to_date=to_date,
+            data_source=getattr(payload, 'dataSource', None) or getattr(payload, 'data_source', 'all'),
+            payload=payload,
+            db=db
         )
         
         if not result:
