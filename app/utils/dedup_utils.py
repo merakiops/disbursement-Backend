@@ -51,6 +51,7 @@ def extract_field(record: Any, field_names: List[str]) -> Any:
     return None
 
 def get_record_key(record: Any) -> Tuple:
+    client_id = extract_field(record, ["client_id", "client", "company_id"])
     vessel = extract_field(record, ["vessel_name", "vessel"])
     port = extract_field(record, ["port_name", "port"])
     port_agent = extract_field(record, ["port_agent", "agent", "vendor_short_name"])
@@ -59,6 +60,7 @@ def get_record_key(record: Any) -> Tuple:
     purpose = extract_field(record, ["purpose", "purpose_name"])
     
     return (
+        normalize_string(client_id),
         normalize_string(vessel),
         normalize_string(port),
         normalize_agent_name(port_agent),
