@@ -285,7 +285,7 @@ class DashboardRepository:
 
 
     @staticmethod
-    def get_dashboard_hover_stats(client_ids: List[int], from_date, to_date, data_source: Optional[str] = "all", db: Session = None):
+    def get_dashboard_hover_stats(client_ids: List[int], from_date, to_date, data_source: Optional[str] = "all", payload=None, db: Session = None):
         from collections import Counter
         from app.dto.dasboard_response_dto import (
             DashboardHoverStatsResponseDTO, HoverCountriesDTO, HoverPortsDTO, 
@@ -319,7 +319,11 @@ class DashboardRepository:
         prod_cid_to_excel, excel_to_prod_cid = DashboardRepository._get_dynamic_client_mapping(db)
         ankkumam_clients = []
         if client_ids:
-            for cid in client_ids:
+            if isinstance(client_ids, list):
+                c_list = client_ids
+            else:
+                c_list = [client_ids]
+            for cid in c_list:
                 if cid and str(cid).isdigit() and int(cid) in prod_cid_to_excel:
                     ankkumam_clients.append(prod_cid_to_excel[int(cid)])
                 elif str(cid) == '85' and "ALGHAF" in excel_to_prod_cid:
@@ -330,15 +334,17 @@ class DashboardRepository:
             if not ankkumam_cls:
                 return
             
-            class DummyDataRequest:
-                tableFilter = None
+            # Construct Filter Request carrying tableFilter, monthRange, and yearRange from request payload
+            class FilteredDataRequest:
+                tableFilter = getattr(payload, 'tableFilter', None) if payload else None
+                monthRange = getattr(payload, 'monthRange', None) if payload else None
+                yearRange = getattr(payload, 'yearRange', None) if payload else None
                 pageSize = -1
                 page = 1
                 clientId = None
             
-            # Fetch strictly completed FDA records for Ankkumam clients
             raw_records, _ = DashboardRepository._get_ankkumam_records(
-                ankkumam_cls, DummyDataRequest(), False, True, 0, db, only_completed_fda=True
+                ankkumam_cls, FilteredDataRequest(), False, True, 0, db, only_completed_fda=True
             )
 
             UNDER_PROCESS_STATUSES = {"under process", "in process", "in processs", "unixting"}
@@ -398,7 +404,20 @@ class DashboardRepository:
                 if to_date:
                     base_where.append("td.etd::date <= :to_date::date")
                     params["to_date"] = to_date
-                    
+                
+                # Apply table filters (vessel, country, port) on standard SQL queries
+                if payload and getattr(payload, 'tableFilter', None):
+                    tf = payload.tableFilter
+                    if getattr(tf, 'vessel', None) and len(tf.vessel) > 0:
+                        base_where.append("UPPER(v.name) = ANY(:vessel_names)")
+                        params["vessel_names"] = [str(x).upper() for x in tf.vessel]
+                    if getattr(tf, 'country', None) and len(tf.country) > 0:
+                        base_where.append("UPPER(c.name) = ANY(:country_names)")
+                        params["country_names"] = [str(x).upper() for x in tf.country]
+                    if getattr(tf, 'port', None) and len(tf.port) > 0:
+                        base_where.append("UPPER(p.name) = ANY(:port_names)")
+                        params["port_names"] = [str(x).upper() for x in tf.port]
+
                 base_where_sql = " AND ".join(base_where)
                 
                 sql = f'''
