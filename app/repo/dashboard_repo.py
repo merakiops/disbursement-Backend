@@ -200,7 +200,7 @@ class DashboardRepository:
             raw_records.sort(key=lambda r: 0 if str(r.get("fda_status") or "").strip().lower() == "completed" else 1)
             
             # Deduplicate internally within Ankkumam first
-            raw_records = deduplicate_records(raw_records)
+            # raw_records = deduplicate_records(raw_records)
             
             # Filter back to only ankkumam records that survived
             deduped_ankkumam = [r for r in raw_records if get_record_key(r) not in prod_keys]
@@ -440,7 +440,7 @@ class DashboardRepository:
             prod_keys = {get_record_key(r) for r in prod_dicts}
             
             raw_records.sort(key=lambda r: 0 if str(r.get("fda_status") or "").strip().lower() == "completed" else 1)
-            raw_records = deduplicate_records(raw_records)
+            # raw_records = deduplicate_records(raw_records)
             deduped_ankkumam = [r for r in raw_records if get_record_key(r) not in prod_keys]
             UNDER_PROCESS_STATUSES = {"under process", "in process", "in processs", "unixting"}
             for r in deduped_ankkumam:
@@ -1337,7 +1337,7 @@ class DashboardRepository:
             from app.utils.dedup_utils import get_record_key, deduplicate_records
 
             # Deduplicate internally within Ankkumam first
-            ankkumam_records = deduplicate_records(ankkumam_records)
+            # ankkumam_records = deduplicate_records(ankkumam_records)
 
             # Fetch all Prod keys for proper deduplication (regardless of completed status)
             prod_keys_sql = f'''
