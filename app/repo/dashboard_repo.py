@@ -220,7 +220,7 @@ class DashboardRepository:
             under_process_pda = 0
             completed_fda = 0
             under_process_fda = 0
-            
+            UNDER_PROCESS_STATUSES = {"under process", "in process", "in processs", "unixting"}
             for r in deduped_ankkumam:
                 if r.get("country_name") and r["country_name"] != "N/A": c_set.add(str(r["country_name"]).strip().upper())
                 if r.get("port_name") and r["port_name"] != "N/A": p_set.add(str(r["port_name"]).strip().upper())
@@ -242,12 +242,18 @@ class DashboardRepository:
                 fda_sav += float(r.get("loss_prevention_fda") or 0.0)
                 tot_sav += float(r.get("total_loss_prevented") or 0.0)
                 
-                # Ankkumam PDA is always assumed completed
-                completed_pda += 1
+                # --- PDA Status Handling ---
+                pda_stat = str(r.get("pda_status") or "").strip().lower()
+                if pda_stat == "completed":
+                    completed_pda += 1
+                elif pda_stat in UNDER_PROCESS_STATUSES:
+                    under_process_pda += 1
                 
-                if str(r.get("fda_status") or "").strip().lower() == "completed":
+                # --- FDA Status Handling ---
+                fda_stat = str(r.get("fda_status") or "").strip().lower()
+                if fda_stat == "completed":
                     completed_fda += 1
-                else:
+                elif fda_stat in UNDER_PROCESS_STATUSES:
                     under_process_fda += 1
                 
             tot_disb = len(deduped_ankkumam)
@@ -436,7 +442,7 @@ class DashboardRepository:
             raw_records.sort(key=lambda r: 0 if str(r.get("fda_status") or "").strip().lower() == "completed" else 1)
             raw_records = deduplicate_records(raw_records)
             deduped_ankkumam = [r for r in raw_records if get_record_key(r) not in prod_keys]
-            
+            UNDER_PROCESS_STATUSES = {"under process", "in process", "in processs", "unixting"}
             for r in deduped_ankkumam:
                 c_name = str(r.get("country_name") or "N/A").strip().upper()
                 p_name = str(r.get("port_name") or "N/A").strip().upper()
@@ -458,12 +464,21 @@ class DashboardRepository:
                 pda_completed += 1
 
                 fda_amount = float(r.get("fda_amount") or 0.0)
+                # --- PDA Stats ---
+                if pda_stat == "completed":
+                    total_pda += 1
+                    pda_completed += 1
+                elif pda_stat in UNDER_PROCESS_STATUSES:
+                    total_pda += 1
+                    pda_under_process += 1
+
+                # --- FDA Stats ---
                 if fda_stat == "completed":
+                    total_fda += 1
                     fda_completed += 1
+                elif fda_stat in UNDER_PROCESS_STATUSES:
                     total_fda += 1
-                elif fda_stat == "under process" or fda_amount > 0:
                     fda_under_process += 1
-                    total_fda += 1
 
         # Standard Production Query
         if not is_kamba_client and ds != "kamba" and ds != "excel":
