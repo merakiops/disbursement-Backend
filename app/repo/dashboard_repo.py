@@ -136,7 +136,7 @@ class DashboardRepository:
             if not ankkumam_clients:
                 return None
             
-            # Fetch raw ankkumam records filtering strictly for completed FDA records
+            # Fetch strictly completed FDA records for Ankkumam/Excel data
             class DummyDataRequest:
                 tableFilter = None
                 pageSize = -1
@@ -147,7 +147,6 @@ class DashboardRepository:
                 ankkumam_clients, DummyDataRequest(), False, True, 0, db, only_completed_fda=True
             )
             
-            # Compute summary strictly on deduped_ankkumam
             c_set = set()
             p_set = set()
             v_set = set()
@@ -524,7 +523,7 @@ class DashboardRepository:
     def get_dashboard_summary(client_ids: List[int], from_date, to_date, data_source: Optional[str] = "all", db: Session = None):
         """
         Get dashboard summary based on client_ids and data_source.
-        For clients with kamba/excel mapping, evaluates strictly matching records.
+        When client_ids is null/empty ("All Clients"), merges production DB summary with clean Ankkumam summary.
         """
         is_excel_client = False
         is_kamba_client = False
@@ -588,14 +587,18 @@ class DashboardRepository:
         prod_cid_to_excel, excel_to_prod_cid = DashboardRepository._get_dynamic_client_mapping(db)
         ankkumam_clients = []
         if client_ids:
-            for cid in client_ids:
+            c_list = client_ids if isinstance(client_ids, list) else [client_ids]
+            for cid in c_list:
                 if cid and str(cid).isdigit() and int(cid) in prod_cid_to_excel:
                     ankkumam_clients.append(prod_cid_to_excel[int(cid)])
                 elif str(cid) == '85' and "ALGHAF" in excel_to_prod_cid:
                     ankkumam_clients.append("ALGHAF")
+        else:
+            # Client selection is NULL ("All Clients")
+            ankkumam_clients = list(excel_to_prod_cid.keys())
 
-        # Directly route Ankkumam/Excel clients without merging production DB summary
-        if ankkumam_clients and not is_kamba_client and ds not in ["standard", "excel"]:
+        # If a single specific Excel client is requested, return strictly its summary
+        if client_ids and ankkumam_clients and not is_kamba_client and ds not in ["standard", "excel"]:
             ankkumam_summary = DashboardRepository._get_ankkumam_summary_for_companies(ankkumam_clients, db)
             if ankkumam_summary:
                 ankkumam_summary.pop("vessel_list", None)
@@ -623,6 +626,16 @@ class DashboardRepository:
         ).mappings().first()
         
         prod_summary = dict(result) if result else {}
+
+        # Merge with clean Ankkumam dataset if "All Clients" (client_ids is null)
+        if ankkumam_clients and client_ids is None:
+            ankkumam_summary = DashboardRepository._get_ankkumam_summary_for_companies(ankkumam_clients, db)
+            if ankkumam_summary:
+                merged = DashboardRepository._merge_summaries(prod_summary, ankkumam_summary)
+                merged.pop("vessel_list", None)
+                merged.pop("country_list", None)
+                merged.pop("port_list", None)
+                return merged
 
         if prod_summary:
             p_sav = float(prod_summary.get("pdasavings") or 0)
