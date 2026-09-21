@@ -364,7 +364,7 @@ class DashboardRepository:
         ds = (data_source or "all").lower()
 
         country_counter = Counter()
-        port_counter = Counter()        # Counts occurrences of EACH port call
+        port_counter = Counter()
         vessel_counter = Counter()
         
         total_pda = 0
@@ -376,7 +376,7 @@ class DashboardRepository:
         
         total_valid_port_calls = 0
 
-        # Check if the requested client_ids map to an Ankkumam / Excel client (e.g., ALGHAF)
+        # Check if the requested client maps to an Excel/Ankkumam client
         prod_cid_to_excel, excel_to_prod_cid = DashboardRepository._get_dynamic_client_mapping(db)
         ankkumam_clients = []
         if client_ids:
@@ -397,62 +397,14 @@ class DashboardRepository:
                 page = 1
                 clientId = None
             
+            # Fetch strictly Excel DB records ONLY (no production DB queries)
             raw_records, _ = DashboardRepository._get_ankkumam_records(
                 ankkumam_cls, DummyDataRequest(), False, True, 0, db
             )
-            
-            prod_cids = [excel_to_prod_cid[c] for c in ankkumam_cls if c in excel_to_prod_cid]
-            
-            from sqlalchemy import text
-            from app.db import SCHEMA_NAME
-            
-            raw_vessel_names = list(set([str(r.get("vessel_name")).strip().lower() for r in raw_records if r.get("vessel_name")]))
-            vessels_str = ",".join(f"'{v.replace(chr(39), chr(39)+chr(39))}'" for v in raw_vessel_names) if raw_vessel_names else "''"
-            
-            expanded_cids = get_all_prod_ids_for_client_list(prod_cids) if prod_cids else []
-            cids_str = ",".join(str(c) for c in expanded_cids) if expanded_cids else "'-1'"
-            
-            prod_keys_sql = f'''
-                SELECT 
-                    vw.vessel_name, 
-                    vw.country_name as country, 
-                    vw.port_name as port, 
-                    vw.etd, 
-                    td.eta,
-                    td.voyage as voyage_no, 
-                    mac.name as port_agent,
-                    purp.name as purpose
-                FROM {SCHEMA_NAME}.vw_dashboard_data vw
-                LEFT JOIN {SCHEMA_NAME}.txn_disbursement td ON vw.disbursement_seq = td.disbursement_seq
-                LEFT JOIN {SCHEMA_NAME}.ma_company mac ON td.portagent_id = mac.company_id
-                LEFT JOIN {SCHEMA_NAME}.ma_purpose purp ON td.purpose_id = purp.purpose_id
-                WHERE vw.client_id IN ({cids_str}) 
-                  AND LOWER(vw.vessel_name) IN ({vessels_str})
-            '''
-            prod_records = db.execute(text(prod_keys_sql)).mappings().all()
-            
-            prod_dicts = [
-                {
-                    "vessel_name": r["vessel_name"],
-                    "country": r["country"],
-                    "port": r["port"],
-                    "etd": r["etd"],
-                    "eta": r["eta"],
-                    "purpose": r["purpose"],
-                    "voyage_no": r["voyage_no"],
-                    "port_agent": r["port_agent"]
-                } for r in prod_records
-            ]
-            
-            from app.utils.dedup_utils import get_record_key
-            
-            prod_keys = {get_record_key(r) for r in prod_dicts}
-            
-            raw_records.sort(key=lambda r: 0 if str(r.get("fda_status") or "").strip().lower() == "completed" else 1)
-            deduped_ankkumam = [r for r in raw_records if get_record_key(r) not in prod_keys]
+
             UNDER_PROCESS_STATUSES = {"under process", "in process", "in processs", "unixting"}
 
-            for r in deduped_ankkumam:
+            for r in raw_records:
                 c_name = str(r.get("country_name") or "N/A").strip().upper()
                 p_name = str(r.get("port_name") or "N/A").strip().upper()
                 v_name = str(r.get("vessel_name") or "N/A").strip().upper()
@@ -460,8 +412,8 @@ class DashboardRepository:
                 fda_stat = str(r.get("fda_status") or "").strip().lower()
                 pda_stat = str(r.get("pda_status") or "").strip().lower()
                 
-                has_active_pda_or_fda = (fda_stat in ["completed", "under process"] or fda_stat in UNDER_PROCESS_STATUSES) or \
-                                        (pda_stat in ["completed", "under process"] or pda_stat in UNDER_PROCESS_STATUSES)
+                has_active_pda_or_fda = (fda_stat == "completed" or fda_stat in UNDER_PROCESS_STATUSES) or \
+                                        (pda_stat == "completed" or pda_stat in UNDER_PROCESS_STATUSES)
                 
                 if has_active_pda_or_fda:
                     total_valid_port_calls += 1
@@ -485,11 +437,11 @@ class DashboardRepository:
                     total_fda += 1
                     fda_under_process += 1
 
-        # CRITICAL FIX: If this client's data is exclusively from Ankkumam/Excel, run ONLY process_ankkumam
+        # Direct Routing: Evaluate strict Excel DB records for Excel clients
         if ankkumam_clients and not is_kamba_client and ds not in ["standard", "excel"]:
             process_ankkumam(ankkumam_clients)
         else:
-            # Standard Production Query
+            # Standard Production Query for non-Excel clients
             if not is_kamba_client and ds != "kamba" and ds != "excel":
                 from sqlalchemy import text
                 from app.db import SCHEMA_NAME
@@ -564,7 +516,7 @@ class DashboardRepository:
                         else:
                             fda_under_process += 1
 
-            if not is_excel_client and ds != "excel" and ds != "standard":
+            if not is_excel_client and ds != "excel" and ds != "standard" and not ankkumam_clients:
                 ankkumam_cls = list(excel_to_prod_cid.keys())
                 process_ankkumam(ankkumam_cls)
             
