@@ -376,9 +376,21 @@ class DashboardRepository:
         
         total_valid_port_calls = 0
 
-        def process_ankkumam(ankkumam_clients):
+        # Determine if this client maps to an Ankkumam dataset
+        prod_cid_to_excel, excel_to_prod_cid = DashboardRepository._get_dynamic_client_mapping(db)
+        ankkumam_clients = []
+        if client_ids:
+            for cid in client_ids:
+                if cid and str(cid).isdigit() and int(cid) in prod_cid_to_excel:
+                    ankkumam_clients.append(prod_cid_to_excel[int(cid)])
+                elif str(cid) == '85' and "ALGHAF" in excel_to_prod_cid:
+                    ankkumam_clients.append("ALGHAF")
+        elif ds not in ["excel", "standard"]:
+            ankkumam_clients = list(excel_to_prod_cid.keys())
+
+        def process_ankkumam(ankkumam_cls):
             nonlocal total_pda, total_fda, pda_completed, pda_under_process, fda_completed, fda_under_process, total_valid_port_calls
-            if not ankkumam_clients:
+            if not ankkumam_cls:
                 return
             
             class DummyDataRequest:
@@ -388,11 +400,10 @@ class DashboardRepository:
                 clientId = None
             
             raw_records, _ = DashboardRepository._get_ankkumam_records(
-                ankkumam_clients, DummyDataRequest(), False, True, 0, db
+                ankkumam_cls, DummyDataRequest(), False, True, 0, db
             )
             
-            _, excel_to_prod_cid = DashboardRepository._get_dynamic_client_mapping(db)
-            prod_cids = [excel_to_prod_cid[c] for c in ankkumam_clients if c in excel_to_prod_cid]
+            prod_cids = [excel_to_prod_cid[c] for c in ankkumam_cls if c in excel_to_prod_cid]
             
             from sqlalchemy import text
             from app.db import SCHEMA_NAME
@@ -435,14 +446,14 @@ class DashboardRepository:
                 } for r in prod_records
             ]
             
-            from app.utils.dedup_utils import get_record_key, deduplicate_records
+            from app.utils.dedup_utils import get_record_key
             
             prod_keys = {get_record_key(r) for r in prod_dicts}
             
             raw_records.sort(key=lambda r: 0 if str(r.get("fda_status") or "").strip().lower() == "completed" else 1)
-            # raw_records = deduplicate_records(raw_records)
             deduped_ankkumam = [r for r in raw_records if get_record_key(r) not in prod_keys]
             UNDER_PROCESS_STATUSES = {"under process", "in process", "in processs", "unixting"}
+
             for r in deduped_ankkumam:
                 c_name = str(r.get("country_name") or "N/A").strip().upper()
                 p_name = str(r.get("port_name") or "N/A").strip().upper()
@@ -451,19 +462,15 @@ class DashboardRepository:
                 fda_stat = str(r.get("fda_status") or "").strip().lower()
                 pda_stat = str(r.get("pda_status") or "").strip().lower()
                 
-                # Check if this port call has a completed/processed PDA or FDA
-                has_active_pda_or_fda = (fda_stat in ["completed", "under process"]) or (pda_stat in ["completed", "under process"])
+                has_active_pda_or_fda = (fda_stat in ["completed", "under process"] or fda_stat in UNDER_PROCESS_STATUSES) or \
+                                        (pda_stat in ["completed", "under process"] or pda_stat in UNDER_PROCESS_STATUSES)
                 
                 if has_active_pda_or_fda:
                     total_valid_port_calls += 1
                     if c_name != "N/A": country_counter[c_name] += 1
                     if p_name != "N/A": port_counter[p_name] += 1
                     if v_name != "N/A": vessel_counter[v_name] += 1
-                
-                total_pda += 1
-                pda_completed += 1
 
-                fda_amount = float(r.get("fda_amount") or 0.0)
                 # --- PDA Stats ---
                 if pda_stat == "completed":
                     total_pda += 1
@@ -480,113 +487,102 @@ class DashboardRepository:
                     total_fda += 1
                     fda_under_process += 1
 
-        # Standard Production Query
-        if not is_kamba_client and ds != "kamba" and ds != "excel":
-            from sqlalchemy import text
-            from app.db import SCHEMA_NAME
-            
-            expanded_client_ids = get_all_prod_ids_for_client_list(client_ids) if client_ids else None
-            
-            base_where = ["1=1"]
-            params = {}
-            if expanded_client_ids:
-                int_cids = [int(x) for x in expanded_client_ids if str(x).isdigit()]
-                if int_cids:
-                    base_where.append("td.client_id = ANY(:cids)")
-                    params["cids"] = int_cids
-            if from_date:
-                base_where.append("td.etd::date >= :from_date::date")
-                params["from_date"] = from_date
-            if to_date:
-                base_where.append("td.etd::date <= :to_date::date")
-                params["to_date"] = to_date
-                
-            base_where_sql = " AND ".join(base_where)
-            
-            sql = f'''
-                SELECT 
-                    td.disbursement_seq,
-                    UPPER(c.name) as country, 
-                    UPPER(p.name) as port, 
-                    UPPER(v.name) as vessel,
-                    fda.status as fda_status,
-                    pda.status as pda_status,
-                    fda.fda_id as fda_id
-                FROM {SCHEMA_NAME}.txn_disbursement td
-                LEFT JOIN {SCHEMA_NAME}.ma_country c ON td.country_id = c.country_id
-                LEFT JOIN {SCHEMA_NAME}.ma_port p ON td.port_id = p.port_id
-                LEFT JOIN {SCHEMA_NAME}.ma_vessels v ON td.vsl_id = v.vsl_id
-                LEFT JOIN {SCHEMA_NAME}.txn_fda fda ON td.disbursement_seq = fda.disbursement_seq AND (fda.state IS NULL OR fda.state <> 'D')
-                LEFT JOIN {SCHEMA_NAME}.txn_pda pda ON td.disbursement_seq = pda.disbursement_seq AND (pda.state IS NULL OR pda.state <> 'D')
-                WHERE {base_where_sql}
-            '''
-            
-            prod_records = db.execute(text(sql), params).mappings().all()
-            for r in prod_records:
-                c_name = r.get("country") or "N/A"
-                p_name = r.get("port") or "N/A"
-                v_name = r.get("vessel") or "N/A"
-                
-                pda_st = r.get("pda_status")
-                fda_st = r.get("fda_status")
-                has_fda = fda_st is not None or r.get("fda_id") is not None
-
-                # Only include in Port Calls if there is an active/completed PDA or FDA
-                has_pda_or_fda = (pda_st is not None) or has_fda
-                
-                if has_pda_or_fda:
-                    total_valid_port_calls += 1
-                    if c_name != "N/A": country_counter[c_name] += 1
-                    if p_name != "N/A": port_counter[p_name] += 1   # Every visit increments the counter
-                    if v_name != "N/A": vessel_counter[v_name] += 1
-                
-                # Check PDA Status
-                if pda_st is not None:
-                    total_pda += 1
-                    if pda_st == 7:
-                        pda_completed += 1
-                    else:
-                        pda_under_process += 1
-                
-                # Check FDA Status
-                if has_fda:
-                    total_fda += 1
-                    if fda_st == 7:
-                        fda_completed += 1
-                    else:
-                        fda_under_process += 1
-
-        # Fetch Ankkumam Data
-        if not is_excel_client and ds != "excel" and ds != "standard":
-            prod_cid_to_excel, excel_to_prod_cid = DashboardRepository._get_dynamic_client_mapping(db)
-            ankkumam_clients = []
-            if client_ids:
-                for cid in client_ids:
-                    if cid and int(cid) in prod_cid_to_excel:
-                        ankkumam_clients.append(prod_cid_to_excel[int(cid)])
-                    elif str(cid) == '85' and "ALGHAF" in excel_to_prod_cid:
-                        ankkumam_clients.append("ALGHAF")
-            else:
-                ankkumam_clients = list(excel_to_prod_cid.keys())
-                
+        # Execute only Ankkumam logic if client is purely an Ankkumam client
+        if ankkumam_clients and not is_kamba_client and ds not in ["standard", "excel"]:
             process_ankkumam(ankkumam_clients)
+        else:
+            # Standard Production Query
+            if not is_kamba_client and ds != "kamba" and ds != "excel":
+                from sqlalchemy import text
+                from app.db import SCHEMA_NAME
+                
+                expanded_client_ids = get_all_prod_ids_for_client_list(client_ids) if client_ids else None
+                
+                base_where = ["1=1"]
+                params = {}
+                if expanded_client_ids:
+                    int_cids = [int(x) for x in expanded_client_ids if str(x).isdigit()]
+                    if int_cids:
+                        base_where.append("td.client_id = ANY(:cids)")
+                        params["cids"] = int_cids
+                if from_date:
+                    base_where.append("td.etd::date >= :from_date::date")
+                    params["from_date"] = from_date
+                if to_date:
+                    base_where.append("td.etd::date <= :to_date::date")
+                    params["to_date"] = to_date
+                    
+                base_where_sql = " AND ".join(base_where)
+                
+                sql = f'''
+                    SELECT 
+                        td.disbursement_seq,
+                        UPPER(c.name) as country, 
+                        UPPER(p.name) as port, 
+                        UPPER(v.name) as vessel,
+                        fda.status as fda_status,
+                        pda.status as pda_status,
+                        fda.fda_id as fda_id
+                    FROM {SCHEMA_NAME}.txn_disbursement td
+                    LEFT JOIN {SCHEMA_NAME}.ma_country c ON td.country_id = c.country_id
+                    LEFT JOIN {SCHEMA_NAME}.ma_port p ON td.port_id = p.port_id
+                    LEFT JOIN {SCHEMA_NAME}.ma_vessels v ON td.vsl_id = v.vsl_id
+                    LEFT JOIN {SCHEMA_NAME}.txn_fda fda ON td.disbursement_seq = fda.disbursement_seq AND (fda.state IS NULL OR fda.state <> 'D')
+                    LEFT JOIN {SCHEMA_NAME}.txn_pda pda ON td.disbursement_seq = pda.disbursement_seq AND (pda.state IS NULL OR pda.state <> 'D')
+                    WHERE {base_where_sql}
+                '''
+                
+                prod_records = db.execute(text(sql), params).mappings().all()
+                for r in prod_records:
+                    c_name = r.get("country") or "N/A"
+                    p_name = r.get("port") or "N/A"
+                    v_name = r.get("vessel") or "N/A"
+                    
+                    pda_st = r.get("pda_status")
+                    fda_st = r.get("fda_status")
+                    has_fda = fda_st is not None or r.get("fda_id") is not None
+
+                    has_pda_or_fda = (pda_st is not None) or has_fda
+                    
+                    if has_pda_or_fda:
+                        total_valid_port_calls += 1
+                        if c_name != "N/A": country_counter[c_name] += 1
+                        if p_name != "N/A": port_counter[p_name] += 1
+                        if v_name != "N/A": vessel_counter[v_name] += 1
+                    
+                    # Check PDA Status
+                    if pda_st is not None:
+                        total_pda += 1
+                        if pda_st == 7:
+                            pda_completed += 1
+                        else:
+                            pda_under_process += 1
+                    
+                    # Check FDA Status
+                    if has_fda:
+                        total_fda += 1
+                        if fda_st == 7:
+                            fda_completed += 1
+                        else:
+                            fda_under_process += 1
+
+            # Process Ankkumam Data for mixed/all clients fallback
+            if not is_excel_client and ds != "excel" and ds != "standard" and not ankkumam_clients:
+                ankkumam_clients = list(excel_to_prod_cid.keys())
+                process_ankkumam(ankkumam_clients)
             
         top_countries = [HoverTopItemDTO(name=k, count=v) for k, v in country_counter.most_common(5)]
         top_ports = [HoverTopItemDTO(name=k, count=v) for k, v in port_counter.most_common(5)]
         top_vessels = [HoverTopItemDTO(name=k, count=v) for k, v in vessel_counter.most_common(5)]
         
-        # Unique Ports = count of distinct keys in port_counter
         unique_ports = len(port_counter)
         unique_countries = len(country_counter)
         unique_vessels = len(vessel_counter)
 
-        # Total Port Calls = sum of all occurrences across all ports
         total_port_calls = total_valid_port_calls
         avg_calls_per_port = round(total_port_calls / unique_ports, 2) if unique_ports > 0 else 0.0
         
-        # Awaiting FDA = Port Calls that don't have an FDA completed or in-progress yet
         fda_awaiting = max(0, total_port_calls - (fda_completed + fda_under_process))
-        
         fda_completion_pct = round((fda_completed / total_fda) * 100, 2) if total_fda > 0 else 0.0
 
         return DashboardHoverStatsResponseDTO(
@@ -595,11 +591,11 @@ class DashboardRepository:
                 top_countries=top_countries
             ),
             ports=HoverPortsDTO(
-                total_ports=unique_ports,       # Unique distinct ports visited
+                total_ports=unique_ports,
                 top_ports=top_ports
             ),
             port_calls=HoverPortCallsDTO(
-                total_port_calls=total_port_calls, # Total port call visits (includes repeats)
+                total_port_calls=total_port_calls,
                 average_calls_per_port=avg_calls_per_port,
                 top_ports=top_ports
             ),
@@ -922,7 +918,6 @@ class DashboardRepository:
 
             rows = db.execute(text(data_sql), params).mappings().all()
             
-            # Fetch vessel stats from PROD schema (using normalized matching)
             vessel_names = list(set([r.get("vessel_name") for r in rows if r.get("vessel_name")]))
             vessel_stats_map = {}
             if vessel_names:
@@ -948,7 +943,8 @@ class DashboardRepository:
                     }
 
             _, excel_to_prod_cid = DashboardRepository._get_dynamic_client_mapping(db)
-            
+            UNDER_PROCESS_STATUSES = {"under process", "in process", "in processs", "unixting"}
+
             for r in rows:
                 v_name = r.get("vessel_name")
                 norm_v = str(v_name).upper().split(" EX ")[0].replace(" ", "") if v_name else ""
@@ -974,6 +970,12 @@ class DashboardRepository:
 
                 c_id = excel_to_prod_cid.get(str(r.get("client")), 85)
 
+                raw_pda_stat = str(r.get("pda_status") or "").strip().lower()
+                raw_fda_stat = str(r.get("fda_status") or "").strip().lower()
+
+                formatted_pda_status = "Completed" if raw_pda_stat == "completed" else ("Under process" if raw_pda_stat in UNDER_PROCESS_STATUSES else "N/A")
+                formatted_fda_status = "Completed" if raw_fda_stat == "completed" else "Under process"
+
                 ankkumam_records.append({
                     "disbursement_seq": r['disbursement_seq'],
                     "client_id": c_id,
@@ -988,8 +990,8 @@ class DashboardRepository:
                     "loss_prevention_fda": lp_fda,
                     "total_loss_prevented": tot_lp,
                     "loss_prevented_reason": r.get("reason"),
-                    "pda_status": "Completed" if str(r.get("pda_status") or "").strip().lower() == "completed" else "N/A",
-                    "fda_status": "Completed" if str(r.get("fda_status") or "").strip().lower() == "completed" else "Under process",
+                    "pda_status": formatted_pda_status,
+                    "fda_status": formatted_fda_status,
                     "fda_amount": fda_amt,
                     "pda_amount": pda_amt,
                     "manual_fda_amount": "-",
