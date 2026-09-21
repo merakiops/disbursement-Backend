@@ -373,10 +373,8 @@ class DashboardRepository:
         pda_under_process = 0
         fda_completed = 0
         fda_under_process = 0
-        
         total_valid_port_calls = 0
 
-        # Check if the requested client maps to an Excel/Ankkumam client
         prod_cid_to_excel, excel_to_prod_cid = DashboardRepository._get_dynamic_client_mapping(db)
         ankkumam_clients = []
         if client_ids:
@@ -397,7 +395,7 @@ class DashboardRepository:
                 page = 1
                 clientId = None
             
-            # Fetch strictly Excel DB records ONLY (no production DB queries)
+            # Fetch strictly Excel DB records ONLY (no production DB cross-checking)
             raw_records, _ = DashboardRepository._get_ankkumam_records(
                 ankkumam_cls, DummyDataRequest(), False, True, 0, db
             )
@@ -412,6 +410,12 @@ class DashboardRepository:
                 fda_stat = str(r.get("fda_status") or "").strip().lower()
                 pda_stat = str(r.get("pda_status") or "").strip().lower()
                 
+                # Exclude null or zero FDA entries from FDA counts
+                try:
+                    fda_amount = float(r.get("fda_amount") or 0.0)
+                except (ValueError, TypeError):
+                    fda_amount = 0.0
+
                 has_active_pda_or_fda = (fda_stat == "completed" or fda_stat in UNDER_PROCESS_STATUSES) or \
                                         (pda_stat == "completed" or pda_stat in UNDER_PROCESS_STATUSES)
                 
@@ -429,19 +433,18 @@ class DashboardRepository:
                     total_pda += 1
                     pda_under_process += 1
 
-                # --- FDA Stats ---
-                if fda_stat == "completed":
+                # --- FDA Stats (Ignore null or zero FDA entries) ---
+                if fda_stat == "completed" and fda_amount > 0:
                     total_fda += 1
                     fda_completed += 1
                 elif fda_stat in UNDER_PROCESS_STATUSES:
                     total_fda += 1
                     fda_under_process += 1
 
-        # Direct Routing: Evaluate strict Excel DB records for Excel clients
+        # FIX: Route Excel clients directly without executing production queries
         if ankkumam_clients and not is_kamba_client and ds not in ["standard", "excel"]:
             process_ankkumam(ankkumam_clients)
         else:
-            # Standard Production Query for non-Excel clients
             if not is_kamba_client and ds != "kamba" and ds != "excel":
                 from sqlalchemy import text
                 from app.db import SCHEMA_NAME
@@ -500,7 +503,6 @@ class DashboardRepository:
                         if p_name != "N/A": port_counter[p_name] += 1
                         if v_name != "N/A": vessel_counter[v_name] += 1
                     
-                    # Check PDA Status
                     if pda_st is not None:
                         total_pda += 1
                         if pda_st == 7:
@@ -508,7 +510,6 @@ class DashboardRepository:
                         else:
                             pda_under_process += 1
                     
-                    # Check FDA Status
                     if has_fda:
                         total_fda += 1
                         if fda_st == 7:
