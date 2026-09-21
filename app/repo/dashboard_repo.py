@@ -28,31 +28,21 @@ class DashboardRepository:
 
     @staticmethod
     def _get_dynamic_client_mapping(db):
-        from sqlalchemy import text, func
+        from sqlalchemy import text
         from app.models.company import MaCompany
-
-        # 1. Fetch unique string client names from Excel/Tracker schema
-        excel_clients_result = db.execute(
-            text("SELECT DISTINCT client FROM ankkumam_data_excel.data WHERE client IS NOT NULL")
-        ).fetchall()
+        excel_clients_result = db.execute(text("SELECT DISTINCT client FROM ankkumam_data_excel.data WHERE client IS NOT NULL")).fetchall()
         excel_clients = [r[0].strip() for r in excel_clients_result if r[0]]
-
         prod_cid_to_excel_client = {}
         excel_client_to_prod_cid = {}
-
         for ec in excel_clients:
-            # 2. Query prod.ma_company matching on name where company_type_id = 2
             comp = db.query(MaCompany).filter(
                 MaCompany.company_type_id == 2,
                 MaCompany.status == 'Y',
-                func.trim(func.upper(MaCompany.name)) == ec.upper()  # Exact case-insensitive match on name
+                MaCompany.company_name.ilike(f"{ec}%")
             ).first()
-
             if comp:
-                # comp.company_id is the actual client_id in prod.ma_company
                 prod_cid_to_excel_client[comp.company_id] = ec
                 excel_client_to_prod_cid[ec] = comp.company_id
-
         return prod_cid_to_excel_client, excel_client_to_prod_cid
     
     @staticmethod
