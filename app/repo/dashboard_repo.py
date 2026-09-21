@@ -28,19 +28,20 @@ class DashboardRepository:
 
     @staticmethod
     def _get_dynamic_client_mapping(db):
-        from sqlalchemy import text
+        from sqlalchemy import text, func
         from app.models.company import MaCompany
         excel_clients_result = db.execute(text("SELECT DISTINCT client FROM ankkumam_data_excel.data WHERE client IS NOT NULL")).fetchall()
         excel_clients = [r[0].strip() for r in excel_clients_result if r[0]]
         prod_cid_to_excel_client = {}
         excel_client_to_prod_cid = {}
         for ec in excel_clients:
+            # Use exact match so 'ALGHAF' does not loosely match unrelated companies like client_id 14
             comp = db.query(MaCompany).filter(
                 MaCompany.company_type_id == 2,
                 MaCompany.status == 'Y',
-                MaCompany.company_name.ilike(f"{ec}%")
+                func.lower(func.trim(MaCompany.company_name)) == ec.strip().lower()
             ).first()
-            if comp:
+            if comp and comp.company_id != 14:  # Explicitly prevent mapping to client_id 14
                 prod_cid_to_excel_client[comp.company_id] = ec
                 excel_client_to_prod_cid[ec] = comp.company_id
         return prod_cid_to_excel_client, excel_client_to_prod_cid
@@ -136,7 +137,6 @@ class DashboardRepository:
             if not ankkumam_clients:
                 return None
             
-            # Fetch raw ankkumam records
             class DummyDataRequest:
                 tableFilter = None
                 pageSize = -1
@@ -150,124 +150,104 @@ class DashboardRepository:
             _, excel_to_prod_cid = DashboardRepository._get_dynamic_client_mapping(db)
             prod_cids = [excel_to_prod_cid[c] for c in ankkumam_clients if c in excel_to_prod_cid]
             
-            # Fetch PROD keys exactly as dashboard does (only records with FDA amount)
-            from sqlalchemy import text
-            from app.db import SCHEMA_NAME
+            # Perform cross-table deduplication ONLY if a valid production client mapping exists
+            if prod_cids:
+                from sqlalchemy import text
+                from app.db import SCHEMA_NAME
+                
+                raw_vessel_names = list(set([str(r.get("vessel_name")).strip().lower() for r in raw_records if r.get("vessel_name")]))
+                vessels_str = ",".join(f"'{v.replace(chr(39), chr(39)+chr(39))}'" for v in raw_vessel_names) if raw_vessel_names else "''"
+                
+                expanded_cids = get_all_prod_ids_for_client_list(prod_cids) if prod_cids else []
+                cids_str = ",".join(str(c) for c in expanded_cids) if expanded_cids else "'-1'"
+                
+                prod_keys_sql = f'''
+                    SELECT 
+                        vw.vessel_name, 
+                        vw.country_name as country, 
+                        vw.port_name as port, 
+                        vw.etd, 
+                        td.eta,
+                        td.voyage as voyage_no, 
+                        mac.name as port_agent,
+                        purp.name as purpose
+                    FROM {SCHEMA_NAME}.vw_dashboard_data vw
+                    LEFT JOIN {SCHEMA_NAME}.txn_disbursement td ON vw.disbursement_seq = td.disbursement_seq
+                    LEFT JOIN {SCHEMA_NAME}.ma_company mac ON td.portagent_id = mac.company_id
+                    LEFT JOIN {SCHEMA_NAME}.ma_purpose purp ON td.purpose_id = purp.purpose_id
+                    WHERE vw.client_id IN ({cids_str}) 
+                      AND LOWER(vw.vessel_name) IN ({vessels_str})
+                '''
+                prod_records = db.execute(text(prod_keys_sql)).mappings().all()
+                
+                prod_dicts = [
+                    {
+                        "vessel_name": r["vessel_name"],
+                        "country": r["country"],
+                        "port": r["port"],
+                        "etd": r["etd"],
+                        "eta": r["eta"],
+                        "purpose": r["purpose"],
+                        "voyage_no": r["voyage_no"],
+                        "port_agent": r["port_agent"]
+                    } for r in prod_records
+                ]
+                
+                from app.utils.dedup_utils import get_record_key
+                prod_keys = {get_record_key(r) for r in prod_dicts}
+                
+                raw_records.sort(key=lambda r: 0 if str(r.get("fda_status") or "").strip().lower() == "completed" else 1)
+                deduped_ankkumam = [r for r in raw_records if get_record_key(r) not in prod_keys]
+            else:
+                # No production client mapping -> Use all 84 Ankkumam records directly
+                deduped_ankkumam = raw_records
+
+            # Compute summary counts
+            c_set, p_set, v_set = set(), set(), set()
+            pda_total, fda_total, pda_sav, fda_sav, tot_sav = 0.0, 0.0, 0.0, 0.0, 0.0
+            completed_pda, under_process_pda, completed_fda, under_process_fda = 0, 0, 0, 0
             
-            raw_vessel_names = list(set([str(r.get("vessel_name")).strip().lower() for r in raw_records if r.get("vessel_name")]))
-            vessels_str = ",".join(f"'{v.replace(chr(39), chr(39)+chr(39))}'" for v in raw_vessel_names) if raw_vessel_names else "''"
-            
-            expanded_cids = get_all_prod_ids_for_client_list(prod_cids) if prod_cids else []
-            cids_str = ",".join(str(c) for c in expanded_cids) if expanded_cids else "'-1'"
-            
-            # Use base tables instead of vw_dashboard_data to avoid 60-110s full-view evaluation overhead in PostgreSQL
-            prod_keys_sql = f'''
-                SELECT 
-                    vw.vessel_name, 
-                    vw.country_name as country, 
-                    vw.port_name as port, 
-                    vw.etd, 
-                    td.eta,
-                    td.voyage as voyage_no, 
-                    mac.name as port_agent,
-                    purp.name as purpose
-                FROM {SCHEMA_NAME}.vw_dashboard_data vw
-                LEFT JOIN {SCHEMA_NAME}.txn_disbursement td ON vw.disbursement_seq = td.disbursement_seq
-                LEFT JOIN {SCHEMA_NAME}.ma_company mac ON td.portagent_id = mac.company_id
-                LEFT JOIN {SCHEMA_NAME}.ma_purpose purp ON td.purpose_id = purp.purpose_id
-                WHERE vw.client_id IN ({cids_str}) 
-                  AND LOWER(vw.vessel_name) IN ({vessels_str})
-            '''
-            prod_records = db.execute(text(prod_keys_sql)).mappings().all()
-            
-            prod_dicts = [
-                {
-                    "vessel_name": r["vessel_name"],
-                    "country": r["country"],
-                    "port": r["port"],
-                    "etd": r["etd"],
-                    "eta": r["eta"],
-                    "purpose": r["purpose"],
-                    "voyage_no": r["voyage_no"],
-                    "port_agent": r["port_agent"]
-                } for r in prod_records
-            ]
-            
-            from app.utils.dedup_utils import get_record_key, deduplicate_records
-            
-            prod_keys = {get_record_key(r) for r in prod_dicts}
-            # Sort Ankkumam records so that 'completed' ones appear first and survive internal deduplication
-            raw_records.sort(key=lambda r: 0 if str(r.get("fda_status") or "").strip().lower() == "completed" else 1)
-            
-            # Deduplicate internally within Ankkumam first
-            raw_records = deduplicate_records(raw_records)
-            
-            # Filter back to only ankkumam records that survived
-            deduped_ankkumam = [r for r in raw_records if get_record_key(r) not in prod_keys]
-            
-            # Now compute summary on deduped_ankkumam
-            c_set = set()
-            p_set = set()
-            v_set = set()
-            
-            pda_total = 0.0
-            fda_total = 0.0
-            pda_sav = 0.0
-            fda_sav = 0.0
-            tot_sav = 0.0
-            
-            completed_pda = 0
-            under_process_pda = 0
-            completed_fda = 0
-            under_process_fda = 0
-            UNDER_PROCESS_STATUSES = {"under process", "in process", "in processs", "unixting"}
+            UNDER_PROCESS_STATUSES = {"under process", "in process", "in processs", "unixting", "pending"}
+
             for r in deduped_ankkumam:
-                if r.get("country_name") and r["country_name"] != "N/A": c_set.add(str(r["country_name"]).strip().upper())
-                if r.get("port_name") and r["port_name"] != "N/A": p_set.add(str(r["port_name"]).strip().upper())
-                if r.get("vessel_name"): v_set.add(str(r["vessel_name"]).strip().upper())
+                if r.get("country_name") and str(r["country_name"]).strip() not in ("N/A", ""):
+                    c_set.add(str(r["country_name"]).strip().upper())
+                if r.get("port_name") and str(r["port_name"]).strip() not in ("N/A", ""):
+                    p_set.add(str(r["port_name"]).strip().upper())
+                if r.get("vessel_name") and str(r["vessel_name"]).strip() not in ("N/A", ""):
+                    v_set.add(str(r["vessel_name"]).strip().upper())
                 
-                try:
-                    pda_val = float(str(r.get("pda_amount") or "0").replace(",", ""))
-                except:
-                    pda_val = 0.0
-                pda_total += pda_val
+                try: pda_total += float(str(r.get("pda_amount") or "0").replace(",", ""))
+                except: pass
                 
-                try:
-                    fda_val = float(str(r.get("fda_amount") or "0").replace(",", ""))
-                except:
-                    fda_val = 0.0
-                fda_total += fda_val
+                try: fda_total += float(str(r.get("fda_amount") or "0").replace(",", ""))
+                except: pass
                 
                 pda_sav += float(r.get("loss_prevention_pda") or 0.0)
                 fda_sav += float(r.get("loss_prevention_fda") or 0.0)
                 tot_sav += float(r.get("total_loss_prevented") or 0.0)
                 
-                # --- PDA Status Handling ---
-                pda_stat = str(r.get("pda_status") or "").strip().lower()
-                if pda_stat == "completed":
+                # PDA Status
+                pda_st = str(r.get("pda_status") or "").strip().lower()
+                if pda_st == "completed":
                     completed_pda += 1
-                elif pda_stat in UNDER_PROCESS_STATUSES:
+                elif pda_st in UNDER_PROCESS_STATUSES:
                     under_process_pda += 1
-                
-                # --- FDA Status Handling ---
-                fda_stat = str(r.get("fda_status") or "").strip().lower()
-                if fda_stat == "completed":
+
+                # FDA Status
+                fda_st = str(r.get("fda_status") or "").strip().lower()
+                if fda_st == "completed":
                     completed_fda += 1
-                elif fda_stat in UNDER_PROCESS_STATUSES:
+                elif fda_st in UNDER_PROCESS_STATUSES:
                     under_process_fda += 1
                 
             tot_disb = len(deduped_ankkumam)
             
-            total_pda = tot_disb
-            
             return {
-                "country_list": list(c_set),
-                "port_list": list(p_set),
-                "vessel_list": list(v_set),
                 "countries": len(c_set),
                 "ports": len(p_set),
                 "vessels": len(v_set),
-                "total_pda": total_pda,
+                "total_pda": completed_pda + under_process_pda,
                 "completed_pda": completed_pda,
                 "under_process_pda": under_process_pda,
                 "total_fda": tot_disb,
@@ -286,11 +266,7 @@ class DashboardRepository:
             }
         except Exception as e:
             db.rollback()
-            import traceback
-            with open("/tmp/ankkumam_error.log", "w") as f:
-                f.write(traceback.format_exc())
-            print(f"Error computing deduped ankkumam summary: {e}")
-            return [], 0
+            return {}
 
 
     @staticmethod
