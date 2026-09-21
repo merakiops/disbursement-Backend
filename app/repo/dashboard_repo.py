@@ -286,6 +286,9 @@ class DashboardRepository:
 
     @staticmethod
     def get_dashboard_hover_stats(client_ids: List[int], from_date, to_date, data_source: Optional[str] = "all", payload=None, db: Session = None):
+        if db is None:
+            raise ValueError("Database session (db) cannot be None")
+
         from collections import Counter
         from app.dto.dasboard_response_dto import (
             DashboardHoverStatsResponseDTO, HoverCountriesDTO, HoverPortsDTO, 
@@ -296,7 +299,8 @@ class DashboardRepository:
         is_kamba_client = False
         if client_ids:
             try:
-                c_ids = [int(x) for x in client_ids if str(x).isdigit()]
+                c_list = client_ids if isinstance(client_ids, list) else [client_ids]
+                c_ids = [int(x) for x in c_list if str(x).isdigit()]
                 is_excel_client = 84 in c_ids and len(c_ids) == 1
                 is_kamba_client = 85 in c_ids and len(c_ids) == 1
             except (ValueError, TypeError):
@@ -316,13 +320,11 @@ class DashboardRepository:
         fda_under_process = 0
         total_valid_port_calls = 0
 
+        # Check for Excel/Ankkumam client mapping
         prod_cid_to_excel, excel_to_prod_cid = DashboardRepository._get_dynamic_client_mapping(db)
         ankkumam_clients = []
         if client_ids:
-            if isinstance(client_ids, list):
-                c_list = client_ids
-            else:
-                c_list = [client_ids]
+            c_list = client_ids if isinstance(client_ids, list) else [client_ids]
             for cid in c_list:
                 if cid and str(cid).isdigit() and int(cid) in prod_cid_to_excel:
                     ankkumam_clients.append(prod_cid_to_excel[int(cid)])
@@ -334,7 +336,6 @@ class DashboardRepository:
             if not ankkumam_cls:
                 return
             
-            # Construct Filter Request carrying tableFilter, monthRange, and yearRange from request payload
             class FilteredDataRequest:
                 tableFilter = getattr(payload, 'tableFilter', None) if payload else None
                 monthRange = getattr(payload, 'monthRange', None) if payload else None
@@ -366,7 +367,6 @@ class DashboardRepository:
                     if p_name != "N/A": port_counter[p_name] += 1
                     if v_name != "N/A": vessel_counter[v_name] += 1
 
-                # --- PDA Stats ---
                 if pda_stat == "completed":
                     total_pda += 1
                     pda_completed += 1
@@ -374,7 +374,6 @@ class DashboardRepository:
                     total_pda += 1
                     pda_under_process += 1
 
-                # --- FDA Stats ---
                 if fda_stat == "completed":
                     total_fda += 1
                     fda_completed += 1
@@ -382,9 +381,11 @@ class DashboardRepository:
                     total_fda += 1
                     fda_under_process += 1
 
+        # Direct Routing: Pure Ankkumam/Excel Clients
         if ankkumam_clients and not is_kamba_client and ds not in ["standard", "excel"]:
             process_ankkumam(ankkumam_clients)
         else:
+            # Standard Production Database Query
             if not is_kamba_client and ds != "kamba" and ds != "excel":
                 from sqlalchemy import text
                 from app.db import SCHEMA_NAME
@@ -405,7 +406,7 @@ class DashboardRepository:
                     base_where.append("td.etd::date <= :to_date::date")
                     params["to_date"] = to_date
                 
-                # Apply table filters (vessel, country, port) on standard SQL queries
+                # Apply payload tableFilters
                 if payload and getattr(payload, 'tableFilter', None):
                     tf = payload.tableFilter
                     if getattr(tf, 'vessel', None) and len(tf.vessel) > 0:
@@ -446,7 +447,7 @@ class DashboardRepository:
                     
                     pda_st = r.get("pda_status")
                     fda_st = r.get("fda_status")
-                    has_fda = fda_st is not None or r.get("fda_id") is not None
+                    has_fda = fda_st is not None and r.get("fda_id") is not None
 
                     has_pda_or_fda = (pda_st is not None) or has_fda
                     
@@ -463,6 +464,7 @@ class DashboardRepository:
                         else:
                             pda_under_process += 1
                     
+                    # Strictly count valid FDA records matching fn_dashboard_summary
                     if has_fda:
                         total_fda += 1
                         if fda_st == 7:
@@ -470,7 +472,8 @@ class DashboardRepository:
                         else:
                             fda_under_process += 1
 
-            if not is_excel_client and ds != "excel" and ds != "standard" and not ankkumam_clients:
+            # Execute fallback ONLY when query is global and not specific to a production client
+            if not is_excel_client and ds != "excel" and ds != "standard" and not client_ids:
                 ankkumam_cls = list(excel_to_prod_cid.keys())
                 process_ankkumam(ankkumam_cls)
             
