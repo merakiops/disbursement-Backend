@@ -1,4 +1,5 @@
 from app.api import dynamic_table_controller
+from app.api import dynamic_table_controller
 from sqlalchemy.orm import Session, joinedload 
 from sqlalchemy import or_, and_,select,desc
 from sqlalchemy.sql import func
@@ -620,19 +621,23 @@ class DisbursementRepository:
             .all()
         )
 
-        # Safely fetch agency_nomination_date directly from table txn_disbursement
-        seqs = [r.disbursement_seq for r in data if r.disbursement_seq]
-        if seqs:
+        disb_ids = [r.disbursement_id for r in data if getattr(r, "disbursement_id", None)]
+
+        if disb_ids:
+            # Query TxnDisbursement table directly by disbursement_id
             disb_records = db.query(
-                TxnDisbursement.disbursement_seq, 
+                TxnDisbursement.disbursement_id, 
                 TxnDisbursement.agency_nomination_date
-            ).filter(TxnDisbursement.disbursement_seq.in_(seqs)).all()
+            ).filter(TxnDisbursement.disbursement_id.in_(disb_ids)).all()
             
-            nomination_map = {rec.disbursement_seq: rec.agency_nomination_date for rec in disb_records}
+            # Map disbursement_id to agency_nomination_date
+            nomination_map = {rec.disbursement_id: rec.agency_nomination_date for rec in disb_records}
             
             for r in data:
-                # Dynamically attach agency_nomination_date to view object in memory
-                setattr(r, "agency_nomination_date", nomination_map.get(r.disbursement_seq))
+                disb_id = getattr(r, "disbursement_id", None)
+                if disb_id:
+                    # Bind agency_nomination_date using disbursement_id lookup
+                    setattr(r, "agency_nomination_date", nomination_map.get(disb_id))
 
         data_dtos = [DisbursementTrackerDTO.model_validate(r) for r in data]
         DisbursementRepository._populate_fda_completed_dates(data_dtos, db)
