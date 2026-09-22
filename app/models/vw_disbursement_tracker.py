@@ -53,3 +53,4 @@ class DisbursementTracker(Base):
     outstanding_balance=Column(Float, nullable=True)
     remark=Column(String, nullable=True)
     created_on=Column(DateTime, nullable=True)
+    agency_nomination_date = Column(DateTime, nullable=True)

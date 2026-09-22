@@ -50,6 +50,7 @@ class DisbursementTrackerDTO(BaseModel):
     remark: Optional[str] = None
     created_on: Optional[datetime] = None
     fda_completed_date: Optional[datetime] = None
+    agency_nomination_date: Optional[datetime] = None
     model_config = {
         "from_attributes": True
     }
