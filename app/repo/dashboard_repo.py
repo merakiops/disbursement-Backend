@@ -1092,6 +1092,7 @@ class DashboardRepository:
             SELECT COUNT(DISTINCT vw.disbursement_seq)
             FROM {SCHEMA_NAME}.vw_dashboard_data vw
             LEFT JOIN {SCHEMA_NAME}.txn_disbursement td ON vw.disbursement_seq = td.disbursement_seq
+            LEFT JOIN {SCHEMA_NAME}.ma_purpose purp ON td.purpose_id = purp.purpose_id
             WHERE {where_sql}
         """)
 
