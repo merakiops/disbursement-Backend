@@ -632,6 +632,7 @@ class DisbursementRepository:
         # Fetch agency_nomination_date mapped by disbursement_id
         disb_ids = [r.disbursement_id for r in data if getattr(r, "disbursement_id", None)]
 
+        nomination_map = {}
         if disb_ids:
             disb_records = db.query(
                 TxnDisbursement.disbursement_id, 
@@ -639,13 +640,18 @@ class DisbursementRepository:
             ).filter(TxnDisbursement.disbursement_id.in_(disb_ids)).all()
             
             nomination_map = {rec.disbursement_id: rec.agency_nomination_date for rec in disb_records}
-            
-            for r in data:
-                disb_id = getattr(r, "disbursement_id", None)
-                if disb_id:
-                    setattr(r, "agency_nomination_date", nomination_map.get(disb_id))
 
-        data_dtos = [DisbursementTrackerDTO.model_validate(r) for r in data]
+        # Convert ORM objects to dicts and inject agency_nomination_date
+        data_dicts = []
+        for r in data:
+            # Get dictionary of ORM attributes
+            item_dict = {c.name: getattr(r, c.name) for c in r.__table__.columns}
+            # Explicitly set agency_nomination_date in the dict
+            item_dict["agency_nomination_date"] = nomination_map.get(r.disbursement_id)
+            data_dicts.append(item_dict)
+
+        # Validate using dictionaries instead of ORM objects
+        data_dtos = [DisbursementTrackerDTO.model_validate(d) for d in data_dicts]
         DisbursementRepository._populate_fda_completed_dates(data_dtos, db)
 
         return {
