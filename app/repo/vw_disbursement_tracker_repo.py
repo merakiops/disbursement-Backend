@@ -579,7 +579,8 @@ class DisbursementRepository:
     
 
 
-    def get_disbursement_client_list(username:str, request_dto: DisbursementTrackerRequestDTO, db: Session):
+    @staticmethod
+    def get_disbursement_client_list(username: str, request_dto: DisbursementTrackerRequestDTO, db: Session):
         """
         Fetch paginated list of disbursements for the logged-in user.
         Supports filtering and pagination.
@@ -594,11 +595,18 @@ class DisbursementRepository:
         # Base query filtered by company name
         company_id_subq = db.query(User.companyid).filter(User.username == username).first()
         
+        if not company_id_subq:
+            return {"total_count": 0, "data": []}
+
         company_name = db.query(MaCompany.company_name).filter(MaCompany.company_id == company_id_subq[0]).first()
-       
         
-        base_query = db.query(DisbursementTracker).filter(DisbursementTracker.client_name == company_name[0]
-)
+        if not company_name:
+            return {"total_count": 0, "data": []}
+
+        base_query = db.query(DisbursementTracker).filter(
+            DisbursementTracker.client_name == company_name[0]
+        )
+
         # Optional text-based search
         if request_dto.query:
             search_pattern = f"%{request_dto.query.strip()}%"
@@ -609,34 +617,32 @@ class DisbursementRepository:
                 DisbursementTracker.port.ilike(search_pattern) |
                 DisbursementTracker.status.ilike(search_pattern) |
                 DisbursementTracker.disbursement_id.ilike(search_pattern)
-
             )
 
         # Ordering, counting, pagination
         total_count = base_query.count()
         data = (
             base_query
+            .order_by(DisbursementTracker.disbursement_seq.desc())
             .offset(offset)
             .limit(request_dto.page_size)
             .all()
         )
 
+        # Fetch agency_nomination_date mapped by disbursement_id
         disb_ids = [r.disbursement_id for r in data if getattr(r, "disbursement_id", None)]
 
         if disb_ids:
-            # Query TxnDisbursement table directly by disbursement_id
             disb_records = db.query(
                 TxnDisbursement.disbursement_id, 
                 TxnDisbursement.agency_nomination_date
             ).filter(TxnDisbursement.disbursement_id.in_(disb_ids)).all()
             
-            # Map disbursement_id to agency_nomination_date
             nomination_map = {rec.disbursement_id: rec.agency_nomination_date for rec in disb_records}
             
             for r in data:
                 disb_id = getattr(r, "disbursement_id", None)
                 if disb_id:
-                    # Bind agency_nomination_date using disbursement_id lookup
                     setattr(r, "agency_nomination_date", nomination_map.get(disb_id))
 
         data_dtos = [DisbursementTrackerDTO.model_validate(r) for r in data]
