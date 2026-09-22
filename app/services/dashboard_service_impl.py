@@ -361,6 +361,7 @@ class DashboardServiceImpl(DashboardService):
                 "vessel": vessel_name.upper() if vessel_name else "",
                 "country": country_name.upper(),
                 "port": port_name.upper(),
+                "purpose": get_val(r, 'purpose') or "",
                 "loa": safe_float(loa_val),
                 "grt": safe_float(grt_val),
                 "rgrt": safe_float(rgrt_val),
