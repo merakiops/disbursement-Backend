@@ -624,75 +624,81 @@ class PDAServiceImpl(PDAService):
                         pass
             return val_str
 
-        # 1. Primary Focus: Upper Details Table (Bolder styling & larger font)
+        # 1. Primary Upper Details Table (Modern Indigo/Navy palette)
         if has_table_data:
             table_html += """
-            <table cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#ffffff; border-collapse:collapse; border:2px solid #0b192c; font-family: Arial, sans-serif; margin:0 0 20px 0; width:100%;">
+            <table cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#ffffff; border-collapse:separate; border-spacing:0; border:1px solid #cbd5e1; border-radius:8px; overflow:hidden; font-family: 'Segoe UI', Arial, sans-serif; margin:0 0 20px 0; width:100%;">
                 <colgroup>
                     <col style="width:40%;" />
                     <col style="width:60%;" />
                 </colgroup>
             """
             table_data = dto.body["table"]
-            for key, value in table_data.items():
+            items = list(table_data.items())
+            total_items = len(items)
+
+            for idx, (key, value) in enumerate(items):
                 formatted_val = format_value(key, value)
                 val_upper = formatted_val.upper()
+                bg_color = "#f8fafc" if idx % 2 == 0 else "#ffffff"
+                border_bottom = "border-bottom:1px solid #e2e8f0;" if idx < total_items - 1 else ""
+
                 table_html += f"""
-                <tr>
-                    <td style="font-size:14px; font-weight:bold; color:#0b192c; background-color:#f8fafc; padding:11px 14px; vertical-align:middle; border:1px solid #cbd5e1;">
+                <tr style="background-color:{bg_color};">
+                    <td style="font-size:13px; font-weight:700; color:#1e3a8a; padding:12px 16px; vertical-align:middle; {border_bottom}">
                         {key}
                     </td>
-                    <td style="font-size:14px; font-weight:bold; color:#0f172a; background-color:#ffffff; padding:11px 14px; vertical-align:middle; border:1px solid #cbd5e1; text-transform:uppercase;">
+                    <td style="font-size:13px; font-weight:700; color:#0f172a; padding:12px 16px; vertical-align:middle; {border_bottom} text-transform:uppercase;">
                         {val_upper}
                     </td>
                 </tr>
                 """
             table_html += "</table>"
 
-        # 2. Secondary Focus: Bank Details Table (Kept separate with a clean title header)
+        # 2. Bank Details: Combined into a single inline row with non-empty values only
         if bank_details is not None and isinstance(bank_details, dict):
-            table_html += """
-            <table cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#ffffff; border-collapse:collapse; border:1px solid #e2e8f0; font-family: Arial, sans-serif; margin:0 0 16px 0; width:100%;">
-                <colgroup>
-                    <col style="width:40%;" />
-                    <col style="width:60%;" />
-                </colgroup>
-                <tr>
-                    <td colspan="2" style="font-size:13px; font-weight:bold; color:#475569; background-color:#f1f5f9; text-align:center; padding:8px 12px; border:1px solid #e2e8f0; letter-spacing:0.5px;">
-                        BANK DETAILS
-                    </td>
-                </tr>
-            """
             bank_label_map = {
-                "account_holder_name": "Account Holder Name",
-                "account_no": "Account No",
-                "swift_code": "Swift Code",
-                "bank_name": "Bank Name",
+                "account_holder_name": "Account Holder",
+                "bank_name": "Bank",
+                "account_no": "A/C No",
+                "swift_code": "SWIFT",
                 "iban": "IBAN",
-                "branch": "Branch"
+                "branch": "Branch",
+                "ifsc_code": "IFSC"
             }
-            
-            keys_to_render = ["account_holder_name", "bank_name", "account_no", "swift_code"]
+
+            # Predefined display order
+            keys_to_render = ["account_holder_name", "bank_name", "account_no", "swift_code", "iban", "branch", "ifsc_code"]
             for k in bank_details.keys():
                 if k not in keys_to_render:
                     keys_to_render.append(k)
 
+            inline_items = []
             for b_key in keys_to_render:
                 b_val = bank_details.get(b_key)
-                label = bank_label_map.get(b_key, b_key.replace("_", " ").title())
-                b_val_upper = str(b_val).upper() if (b_val is not None and str(b_val).strip() != "") else ""
+                # Only include item if value exists and is not blank
+                if b_val is not None and str(b_val).strip() != "":
+                    label = bank_label_map.get(b_key, b_key.replace("_", " ").title())
+                    val_str = str(b_val).strip().upper()
+                    inline_items.append(
+                        f'<span style="display:inline-block; margin:2px 0;">'
+                        f'<strong style="color:#475569;">{label}:</strong> '
+                        f'<span style="color:#0f172a; font-weight:700;">{val_str}</span>'
+                        f'</span>'
+                    )
+
+            # Build single-line bank details box if any valid bank values exist
+            if inline_items:
+                bank_line = ' <span style="color:#cbd5e1; margin:0 8px;">•</span> '.join(inline_items)
                 table_html += f"""
-                <tr>
-                    <td style="font-size:12px; font-weight:600; color:#64748b; background-color:#ffffff; padding:8px 12px; vertical-align:middle; border:1px solid #e2e8f0;">
-                        {label}
-                    </td>
-                    <td style="font-size:12px; font-weight:600; color:#334155; background-color:#ffffff; padding:8px 12px; vertical-align:middle; border:1px solid #e2e8f0; text-transform:uppercase;">
-                        {b_val_upper}
-                    </td>
-                </tr>
+                <div style="background-color:#f1f5f9; border:1px solid #cbd5e1; border-radius:6px; padding:12px 16px; font-size:12px; line-height:1.8; color:#334155; margin-bottom:16px;">
+                    <div style="font-size:11px; font-weight:800; color:#1e3a8a; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:4px;">
+                        BANK ACCOUNT DETAILS
+                    </div>
+                    {bank_line}
+                </div>
                 """
-            table_html += "</table>"
-        
+
         body_text = dto.body.get("text", "").replace("\n", "<br>") if dto.body else ""
         upper_text = dto.body.get("upper_text", "").replace("\n", "<br>") if dto.body else ""
         lower_text = dto.body.get("lower_text", "").replace("\n", "<br>") if dto.body else ""
