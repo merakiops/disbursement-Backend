@@ -56,12 +56,10 @@ class DisbursementTrackerDTO(BaseModel):
 
     @model_validator(mode='before')
     @classmethod
-    def bind_agency_nomination_date_to_created_on(cls, data: Any) -> Any:
-        # Handle dictionary payload
+    def force_agency_nomination_date_to_created_on(cls, data: Any) -> Any:
         if isinstance(data, dict):
-            if "agency_nomination_date" in data and data["agency_nomination_date"] is not None:
+            if "agency_nomination_date" in data:
                 data["created_on"] = data["agency_nomination_date"]
-        # Handle SQLAlchemy ORM / view model object
         else:
             nomination_date = getattr(data, "agency_nomination_date", None)
             if nomination_date is not None:

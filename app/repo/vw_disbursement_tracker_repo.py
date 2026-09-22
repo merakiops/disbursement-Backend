@@ -1,3 +1,4 @@
+from app.api import dynamic_table_controller
 from sqlalchemy.orm import Session, joinedload 
 from sqlalchemy import or_, and_,select,desc
 from sqlalchemy.sql import func
@@ -516,6 +517,19 @@ class DisbursementRepository:
                 .limit(request_dto.page_size)
                 .all()
             )
+            seqs = [r.disbursement_seq for r in data if r.disbursement_seq]
+            if seqs:
+                disb_nomination_dates = db.query(
+                    TxnDisbursement.disbursement_seq, 
+                    TxnDisbursement.agency_nomination_date
+                ).filter(TxnDisbursement.disbursement_seq.in_(seqs)).all()
+                
+                nomination_map = {seq: nom_date for seq, nom_date in disb_nomination_dates}
+                
+                for r in data:
+                    nom_date = nomination_map.get(r.disbursement_seq) or getattr(r, "agency_nomination_date", None)
+                    setattr(r, "agency_nomination_date", nom_date)
+                    setattr(r, "created_on", nom_date)
             data_dtos = [DisbursementTrackerDTO.model_validate(r) for r in data]
             DisbursementRepository._populate_fda_completed_dates(data_dtos, db)
             return {
