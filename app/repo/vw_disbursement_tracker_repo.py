@@ -177,7 +177,7 @@ class DisbursementRepository:
                 ankkumam_records.append(DisbursementTrackerDTO(
                     disbursement_seq=r['disbursement_seq'],
                     disbursement_id=r['disbursement_seq'],
-                    created_on=r["created_on"],
+                    created_on=r.get("agency_nomination_date") or r.get("created_on"),
                     source="Ankkumam",
                     pic=None,
                     client_name=r["client_name"],
