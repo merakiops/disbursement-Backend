@@ -97,6 +97,7 @@ class FdaProcessingDetailDTO(BaseModel):
     vessel: Optional[str] = None
     country: Optional[str] = None
     port: Optional[str] = None
+    purpose: Optional[str] = None
     loa: Optional[Union[float, str]] = None
     grt: Optional[Union[float, str]] = None
     rgrt: Optional[Union[float, str]] = None
