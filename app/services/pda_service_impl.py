@@ -592,74 +592,73 @@ class PDAServiceImpl(PDAService):
     def check_inactive_or_deleted(self,disbursement):
         return PDARepository.check_inactive_or_deleted(disbursement)
     
-    def payment_instruction_mail(self,dto:PtmInstrMailRequestDTO,username, background_tasks, db):
+    def payment_instruction_mail(self, dto: PtmInstrMailRequestDTO, username, background_tasks, db):
         if not dto.email_to:
             raise HTTPException(status_code=400, detail="No recipient email addresses provided.")
         
-        # Update signature if requested
         if dto.update_signature == 'Y' and dto.signature:
-            PDARepository.payment_instruction_mail(dto,username,db)
+            PDARepository.payment_instruction_mail(dto, username, db)
 
-        # Build table HTML from body.table and bank_details
         table_html = ""
         has_table_data = dto.body and dto.body.get("table")
         bank_details = dto.bank_details or (dto.body.get("bank_details") if dto.body else None)
         
+        def format_value(k, v):
+            val_str = str(v) if v is not None else ""
+            if any(x in k.lower() for x in ["amount", "pay", "balance", "cost", "total", "remit", "savings"]):
+                parts = val_str.split(" ", 1)
+                if len(parts) == 2 and parts[0].isalpha() and len(parts[0]) == 3:
+                    currency = parts[0]
+                    num_str = parts[1].replace(',', '')
+                    try:
+                        num = float(num_str)
+                        return f"{currency} {num:,.2f}"
+                    except ValueError:
+                        pass
+                else:
+                    num_str = val_str.replace(',', '')
+                    try:
+                        num = float(num_str)
+                        return f"{num:,.2f}"
+                    except ValueError:
+                        pass
+            return val_str
+
+        # 1. Primary Focus: Upper Details Table (Bolder styling & larger font)
         if has_table_data:
             table_html += """
-            <table cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#ffffff; border-collapse:collapse; border:1px solid #000000; font-family: Arial, sans-serif; margin:0 0 16px 0; width:100%;">
+            <table cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#ffffff; border-collapse:collapse; border:2px solid #0b192c; font-family: Arial, sans-serif; margin:0 0 20px 0; width:100%;">
                 <colgroup>
                     <col style="width:40%;" />
                     <col style="width:60%;" />
                 </colgroup>
             """
-            
-            def format_value(k, v):
-                val_str = str(v) if v is not None else ""
-                if any(x in k.lower() for x in ["amount", "pay", "balance", "cost", "total", "remit", "savings"]):
-                    parts = val_str.split(" ", 1)
-                    if len(parts) == 2 and parts[0].isalpha() and len(parts[0]) == 3:
-                        currency = parts[0]
-                        num_str = parts[1].replace(',', '')
-                        try:
-                            num = float(num_str)
-                            return f"{currency} {num:,.2f}"
-                        except ValueError:
-                            pass
-                    else:
-                        num_str = val_str.replace(',', '')
-                        try:
-                            num = float(num_str)
-                            return f"{num:,.2f}"
-                        except ValueError:
-                            pass
-                return val_str
-
             table_data = dto.body["table"]
             for key, value in table_data.items():
                 formatted_val = format_value(key, value)
                 val_upper = formatted_val.upper()
                 table_html += f"""
                 <tr>
-                    <td style="font-size:13px; font-weight:bold; color:#0b192c; background-color:#ffffff; padding:10px 14px; vertical-align:middle; border:1px solid #000000;">
+                    <td style="font-size:14px; font-weight:bold; color:#0b192c; background-color:#f8fafc; padding:11px 14px; vertical-align:middle; border:1px solid #cbd5e1;">
                         {key}
                     </td>
-                    <td style="font-size:13px; font-weight:bold; color:#0f172a; background-color:#ffffff; padding:10px 14px; vertical-align:middle; border:1px solid #000000; text-transform:uppercase;">
+                    <td style="font-size:14px; font-weight:bold; color:#0f172a; background-color:#ffffff; padding:11px 14px; vertical-align:middle; border:1px solid #cbd5e1; text-transform:uppercase;">
                         {val_upper}
                     </td>
                 </tr>
                 """
             table_html += "</table>"
 
+        # 2. Secondary Focus: Bank Details Table (Kept separate with a clean title header)
         if bank_details is not None and isinstance(bank_details, dict):
             table_html += """
-            <table cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#ffffff; border-collapse:collapse; border:1px solid #000000; font-family: Arial, sans-serif; margin:0 0 16px 0; width:100%;">
+            <table cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#ffffff; border-collapse:collapse; border:1px solid #e2e8f0; font-family: Arial, sans-serif; margin:0 0 16px 0; width:100%;">
                 <colgroup>
                     <col style="width:40%;" />
                     <col style="width:60%;" />
                 </colgroup>
                 <tr>
-                    <td colspan="2" style="font-size:16px; font-weight:bold; color:#0b192c; background-color:#ffffff; text-align:center; padding:12px 14px; border:1px solid #000000; letter-spacing:0.5px;">
+                    <td colspan="2" style="font-size:13px; font-weight:bold; color:#475569; background-color:#f1f5f9; text-align:center; padding:8px 12px; border:1px solid #e2e8f0; letter-spacing:0.5px;">
                         BANK DETAILS
                     </td>
                 </tr>
@@ -673,7 +672,6 @@ class PDAServiceImpl(PDAService):
                 "branch": "Branch"
             }
             
-            # Standard order of fields to render
             keys_to_render = ["account_holder_name", "bank_name", "account_no", "swift_code"]
             for k in bank_details.keys():
                 if k not in keys_to_render:
@@ -685,29 +683,26 @@ class PDAServiceImpl(PDAService):
                 b_val_upper = str(b_val).upper() if (b_val is not None and str(b_val).strip() != "") else ""
                 table_html += f"""
                 <tr>
-                    <td style="font-size:13px; font-weight:bold; color:#0b192c; background-color:#ffffff; padding:10px 14px; vertical-align:middle; border:1px solid #000000;">
+                    <td style="font-size:12px; font-weight:600; color:#64748b; background-color:#ffffff; padding:8px 12px; vertical-align:middle; border:1px solid #e2e8f0;">
                         {label}
                     </td>
-                    <td style="font-size:13px; font-weight:bold; color:#0f172a; background-color:#ffffff; padding:10px 14px; vertical-align:middle; border:1px solid #000000; text-transform:uppercase;">
+                    <td style="font-size:12px; font-weight:600; color:#334155; background-color:#ffffff; padding:8px 12px; vertical-align:middle; border:1px solid #e2e8f0; text-transform:uppercase;">
                         {b_val_upper}
                     </td>
                 </tr>
                 """
             table_html += "</table>"
         
-        # Build email body
         body_text = dto.body.get("text", "").replace("\n", "<br>") if dto.body else ""
         upper_text = dto.body.get("upper_text", "").replace("\n", "<br>") if dto.body else ""
         lower_text = dto.body.get("lower_text", "").replace("\n", "<br>") if dto.body else ""
         
-        # Handle signature
         signature = dto.signature
         if signature:
             signature = signature.replace("\r", "")
             while "\n\n" in signature:
                 signature = signature.replace("\n\n", "\n")
             signature = signature.replace("\n", "<br>")
-            # Wrap signature with Sans Serif inline styling for email client compatibility
             signature = f'<div style="font-family: sans-serif;">{signature}</div>'
         
         import time
@@ -723,7 +718,6 @@ class PDAServiceImpl(PDAService):
         
         subject = dto.subject or "Payment Instruction"
         
-        # Pre-process attachments using DB and S3 resolution
         processed_attachments = []
         if dto.attachments:
             for att in dto.attachments:
