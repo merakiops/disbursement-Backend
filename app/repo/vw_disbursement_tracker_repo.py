@@ -1,5 +1,6 @@
 from app.api import dynamic_table_controller
 from app.api import dynamic_table_controller
+from app.api import dynamic_table_controller
 from sqlalchemy.orm import Session, joinedload 
 from sqlalchemy import or_, and_,select,desc
 from sqlalchemy.sql import func
@@ -518,21 +519,40 @@ class DisbursementRepository:
                 .limit(request_dto.page_size)
                 .all()
             )
-            seqs = [r.disbursement_seq for r in data if r.disbursement_seq]
+            seqs = []
+            for r in data:
+                seq = getattr(r, "disbursement_seq", None)
+                if seq is not None:
+                    try:
+                        # Clean sequence ID if it comes formatted as 'MDA937' or 937
+                        clean_seq = int(str(seq).upper().replace("MDA", "").strip())
+                        seqs.append(clean_seq)
+                    except ValueError:
+                        pass
+
             if seqs:
-                disb_records = db.query(
-                    TxnDisbursement.disbursement_seq, 
+                # Query the underlying table explicitly
+                disb_nomination_dates = db.query(
+                    TxnDisbursement.disbursement_seq,
                     TxnDisbursement.agency_nomination_date
                 ).filter(TxnDisbursement.disbursement_seq.in_(seqs)).all()
-                
-                # Map disbursement_seq to agency_nomination_date
-                nomination_map = {seq: nom_date for seq, nom_date in disb_records}
-                
+
+                # Create an explicit integer lookup map
+                nomination_map = {rec.disbursement_seq: rec.agency_nomination_date for rec in disb_nomination_dates}
+
                 for r in data:
-                    # Strictly override with agency_nomination_date from DB
-                    nom_date = nomination_map.get(r.disbursement_seq)
-                    setattr(r, "agency_nomination_date", nom_date)
-                    setattr(r, "created_on", nom_date)
+                    seq = getattr(r, "disbursement_seq", None)
+                    if seq is not None:
+                        try:
+                            clean_seq = int(str(seq).upper().replace("MDA", "").strip())
+                            nom_date = nomination_map.get(clean_seq)
+                            
+                            # Set agency_nomination_date and strictly override created_on
+                            setattr(r, "agency_nomination_date", nom_date)
+                            setattr(r, "created_on", nom_date)
+                        except ValueError:
+                            pass
+
             data_dtos = [DisbursementTrackerDTO.model_validate(r) for r in data]
             DisbursementRepository._populate_fda_completed_dates(data_dtos, db)
             return {

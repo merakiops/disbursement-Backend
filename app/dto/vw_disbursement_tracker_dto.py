@@ -56,14 +56,14 @@ class DisbursementTrackerDTO(BaseModel):
 
     @model_validator(mode='before')
     @classmethod
-    def strict_bind_agency_nomination_date(cls, data: Any) -> Any:
+    def strict_agency_nomination_date_to_created_on(cls, data: Any) -> Any:
         if isinstance(data, dict):
-            # Strictly bind created_on to agency_nomination_date only
-            data["created_on"] = data.get("agency_nomination_date")
+            if "agency_nomination_date" in data:
+                data["created_on"] = data.get("agency_nomination_date")
         else:
-            # Strictly bind for ORM / View objects
-            nomination_date = getattr(data, "agency_nomination_date", None)
-            setattr(data, "created_on", nomination_date)
+            nom_date = getattr(data, "agency_nomination_date", None)
+            if nom_date is not None:
+                setattr(data, "created_on", nom_date)
         return data
 
     @model_validator(mode='after')
