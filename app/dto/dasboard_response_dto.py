@@ -161,6 +161,7 @@ class FilterDataDTO(BaseModel):
     vessel_name: List[str] = []
     country_name: List[str] = []
     port_name: List[str] = []
+    purpose_name: List[str] = []
     loa: Optional[RangeDataDTO] = None
     nrt: Optional[RangeDataDTO] = None
     grt: Optional[RangeDataDTO] = None

@@ -25,6 +25,7 @@ class TableFilterDTO(BaseModel):
     vessel: Optional[List[str]] = []
     country: Optional[List[str]] = []
     port: Optional[List[str]] = []
+    purpose: Optional[List[str]] = []
     loa: Optional[RangeFilterDTO] = None
     nrt: Optional[RangeFilterDTO] = None
     grt: Optional[RangeFilterDTO] = None

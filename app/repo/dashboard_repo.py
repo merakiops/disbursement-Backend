@@ -1,3 +1,5 @@
+from app.models.purpose import MaPurpose
+from _typeshed import importlib
 from sqlalchemy.orm import Session
 from sqlalchemy import func, desc, text, extract
 from app.models.vw_fda_processing_details import VwFdaProcessingDetails
@@ -728,6 +730,7 @@ class DashboardRepository:
                     d.vessel AS vessel_name,
                     d.country AS country_name,
                     d.port AS port_name,
+                    d.purpose AS purpose_name,
                     d.etd AS etd,
                     d.pda_amount,
                     d.fda_amount_usd,
@@ -808,6 +811,7 @@ class DashboardRepository:
                     "country_name": r["country_name"] or "N/A",
                     "port_id": None,
                     "port_name": r["port_name"] or "N/A",
+                    "purpose": r.get("purpose_name") or "-",
                     "loa": v_stats["loa"], "grt": v_stats["grt"], "rgrt": v_stats["rgrt"], "nrt": v_stats["nrt"],
                     "loss_prevention_pda": lp_pda,
                     "loss_prevention_fda": lp_fda,
@@ -1051,6 +1055,9 @@ class DashboardRepository:
             if tf.port:
                 where_clauses.append("UPPER(vw.port_name) = ANY(:port_names)")
                 params["port_names"] = [str(x).upper() for x in tf.port]
+            if getattr(tf, 'purpose', None) and len(tf.purpose) > 0:
+                where_clauses.append("UPPER(purp.name) = ANY(:purpose_names)")
+                params["purpose_names"] = [str(x).upper() for x in tf.purpose]    
             if getattr(tf, 'loa', None):
                 if tf.loa.min_value is not None:
                     where_clauses.append("vw.loa >= :loa_min")
@@ -1128,7 +1135,7 @@ class DashboardRepository:
                 td.advance_amount_remitted,
                 td.outstanding_balance,
                 td.remark,
-                purp.name AS purpose
+                COALESCE(purp.name, '-') AS purpose
             FROM {SCHEMA_NAME}.vw_dashboard_data vw
             LEFT JOIN {SCHEMA_NAME}.txn_disbursement td ON vw.disbursement_seq = td.disbursement_seq
             LEFT JOIN {SCHEMA_NAME}.ma_company mac ON td.portagent_id = mac.company_id
@@ -1318,7 +1325,7 @@ class DashboardRepository:
                 vessel_names = sorted([v[0] for v in db.execute(text("SELECT DISTINCT vessel FROM kamba_data_prod.vessels WHERE vessel IS NOT NULL AND vessel != ''")).all() if v[0]])
                 country_names = sorted([c[0] for c in db.execute(text("SELECT DISTINCT country FROM kamba_data_prod.countries WHERE country IS NOT NULL AND country != ''")).all() if c[0]])
                 port_names = sorted([p[0] for p in db.execute(text("SELECT DISTINCT port FROM kamba_data_prod.ports WHERE port IS NOT NULL AND port != ''")).all() if p[0]])
-
+                purpose_names = sorted([p[0] for p in db.query(MaPurpose.name).distinct().all() if p[0]])
                 grt_res = db.execute(text("SELECT MIN(grt), MAX(grt) FROM kamba_data_prod.vessels WHERE grt IS NOT NULL")).first()
                 min_grt = float(grt_res[0]) if grt_res and grt_res[0] is not None else None
                 max_grt = float(grt_res[1]) if grt_res and grt_res[1] is not None else None
@@ -1385,6 +1392,7 @@ class DashboardRepository:
                         "vessel_name": vessel_names,
                         "country_name": country_names,
                         "port_name": port_names,
+                        "purpose_name": purpose_names,
                         "loa": None,
                         "nrt": None,
                         "grt": {"min_value": float(grt_stats.min_grt), "max_value": float(grt_stats.max_grt)} if grt_stats and grt_stats.min_grt is not None else None,
