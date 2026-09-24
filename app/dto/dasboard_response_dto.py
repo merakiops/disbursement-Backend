@@ -88,6 +88,14 @@ class DashboardResponseDTO(BaseModel):
     overallSummary: OverallSummaryDTO
     savingsInsights: Optional[SavingsInsightsDTO] = None
 
+class MonthlySavingsItemDTO(BaseModel):
+    month: str
+    pda_savings: float
+    fda_savings: float
+
+class SavingsGraphResponseDTO(BaseModel):
+    data: List[MonthlySavingsItemDTO]
+
 # FDA Processing Details Response DTOs
 class FdaProcessingDetailDTO(BaseModel):
     sno: int

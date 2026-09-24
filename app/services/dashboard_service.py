@@ -26,3 +26,7 @@ class DashboardService(ABC):
     @abstractmethod
     def get_dashboard_hover_stats(self, payload: DashboardRequestDTO, db: Session):
         pass
+
+    @abstractmethod
+    def get_savings_graph(self, payload: DashboardRequestDTO, db: Session):
+        pass

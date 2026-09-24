@@ -191,3 +191,35 @@ async def get_dashboard_hover_stats(request: Request, payload: DashboardRequestD
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e)
         )
+from app.dto.dasboard_response_dto import SavingsGraphResponseDTO
+
+@DashboardController.post("/api/v1/dashboard/savings-graph", response_model=SavingsGraphResponseDTO)
+@jwt_required
+async def get_savings_graph(request: Request, payload: DashboardRequestDTO, db: Session = Depends(get_db)):
+    """
+    Get month-wise PDA and FDA savings for the last 6 months.
+    """
+    try:
+        user_info = getattr(request.state, 'user', {}) or {}
+        user_role = user_info.get('roleId', '')
+        raw_username = str(user_info.get('username') or user_info.get('user') or '').lower()
+        is_meraki_user = ("meraki" in raw_username) or (user_role == 1 or user_role == '1')
+        
+        if not payload.clientId and not payload.client_id:
+            if not is_meraki_user:
+                company_id = user_info.get('company')
+                if company_id:
+                    payload.clientId = [company_id]
+                else:
+                    user_id = user_info.get('user_id')
+                    if user_id:
+                        payload.clientId = [user_id]
+
+        return dashboard_service.get_savings_graph(payload, db)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )

@@ -115,6 +115,23 @@ class DashboardServiceImpl(DashboardService):
     
             return DashboardResponseDTO(overallSummary=overall_summary)
 
+    def get_savings_graph(self, payload: DashboardRequestDTO, db: Session):
+        """
+        Get month-wise PDA and FDA savings for the last 6 months.
+        """
+        from_date = payload.monthRange.from_date if payload.monthRange else None
+        to_date = payload.monthRange.to_date if payload.monthRange else None
+        
+        result = DashboardRepository.get_savings_graph(
+            client_ids=payload.clientId or payload.client_id,
+            from_date=from_date,
+            to_date=to_date,
+            data_source=getattr(payload, 'dataSource', None) or getattr(payload, 'data_source', 'all'),
+            db=db
+        )
+        
+        return result
+
     def get_dashboard_hover_stats(self, payload: DashboardRequestDTO, db: Session):
         """
         Get dashboard hover stats for a single client or all clients.

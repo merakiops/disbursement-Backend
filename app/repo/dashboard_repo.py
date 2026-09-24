@@ -285,6 +285,111 @@ class DashboardRepository:
 
 
     @staticmethod
+    def get_savings_graph(client_ids: List[int], from_date, to_date, data_source: Optional[str] = "all", db: Session = None):
+        """
+        Get month-wise PDA and FDA savings for the last 6 months.
+        """
+        if db is None:
+            raise ValueError("Database session (db) cannot be None")
+
+        from sqlalchemy import text
+        from datetime import datetime
+        from dateutil.relativedelta import relativedelta
+        from dateutil import parser
+        from app.db import SCHEMA_NAME
+
+        is_excel_client = False
+        is_kamba_client = False
+        if client_ids:
+            try:
+                c_ids = [int(x) for x in client_ids if str(x).isdigit()]
+                is_excel_client = 84 in c_ids and len(c_ids) == 1
+                is_kamba_client = 85 in c_ids and len(c_ids) == 1
+            except (ValueError, TypeError):
+                pass
+                
+        ds = (data_source or "all").lower()
+        six_months_ago = (datetime.now() - relativedelta(months=5)).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        
+        prod_cid_to_excel, excel_to_prod_cid = DashboardRepository._get_dynamic_client_mapping(db)
+        ankkumam_clients = []
+        if client_ids:
+            c_list = client_ids if isinstance(client_ids, list) else [client_ids]
+            for cid in c_list:
+                if cid and str(cid).isdigit() and int(cid) in prod_cid_to_excel:
+                    ankkumam_clients.append(prod_cid_to_excel[int(cid)])
+                elif str(cid) == '85' and "ALGHAF" in excel_to_prod_cid:
+                    ankkumam_clients.append("ALGHAF")
+        else:
+            ankkumam_clients = list(excel_to_prod_cid.keys())
+
+        expanded_client_ids = get_all_prod_ids_for_client_list(client_ids) if client_ids else None
+        
+        # Initialize last 6 months
+        monthly_data = {}
+        for i in range(5, -1, -1):
+            month_date = datetime.now() - relativedelta(months=i)
+            month_str = month_date.strftime("%b")
+            month_key = month_date.strftime("%Y-%m")
+            monthly_data[month_key] = {
+                "month": month_str,
+                "pda_savings": 0.0,
+                "fda_savings": 0.0
+            }
+
+        # Query standard production data (vw_dashboard_data)
+        if not is_kamba_client and not is_excel_client and ds not in ["kamba", "excel"]:
+            base_where = ["etd >= :six_months_ago"]
+            params = {"six_months_ago": six_months_ago}
+            
+            if expanded_client_ids:
+                int_cids = [int(x) for x in expanded_client_ids if str(x).isdigit()]
+                if int_cids:
+                    base_where.append("client_id = ANY(:cids)")
+                    params["cids"] = int_cids
+            
+            where_clause = " AND ".join(base_where)
+            sql = f'''
+                SELECT 
+                    to_char(etd, 'YYYY-MM') as month_key,
+                    SUM(COALESCE(loss_prevention_pda, 0)) as pda_savings,
+                    SUM(COALESCE(loss_prevention_fda, 0)) as fda_savings
+                FROM {SCHEMA_NAME}.vw_dashboard_data
+                WHERE {where_clause}
+                GROUP BY to_char(etd, 'YYYY-MM')
+            '''
+            
+            records = db.execute(text(sql), params).mappings().all()
+            for r in records:
+                mk = r["month_key"]
+                if mk in monthly_data:
+                    monthly_data[mk]["pda_savings"] += float(r["pda_savings"] or 0)
+                    monthly_data[mk]["fda_savings"] += float(r["fda_savings"] or 0)
+
+        # Query excel/ankkumam data using dedup logic
+        if (ankkumam_clients and ds in ["all", "excel"]) or is_excel_client or (is_kamba_client and "ALGHAF" in ankkumam_clients):
+            from app.utils.dedup_utils import get_deduped_ankkumam_data
+            deduped = get_deduped_ankkumam_data(db, ankkumam_clients)
+            for r in deduped:
+                raw_date = str(r.get("date") or "").strip()
+                if not raw_date or raw_date.lower() == "n/a" or raw_date.lower() == "none":
+                    continue
+                try:
+                    parsed_date = parser.parse(raw_date, dayfirst=True)
+                    if parsed_date >= six_months_ago:
+                        mk = parsed_date.strftime("%Y-%m")
+                        if mk in monthly_data:
+                            monthly_data[mk]["pda_savings"] += float(r.get("loss_prevention_pda") or 0.0)
+                            monthly_data[mk]["fda_savings"] += float(r.get("loss_prevention_fda") or 0.0)
+                except Exception:
+                    pass
+        
+        sorted_keys = sorted(list(monthly_data.keys()))
+        result_list = [monthly_data[k] for k in sorted_keys]
+        
+        return {"data": result_list}
+
+    @staticmethod
     def get_dashboard_hover_stats(client_ids: List[int], from_date, to_date, data_source: Optional[str] = "all", payload=None, db: Session = None):
         if db is None:
             raise ValueError("Database session (db) cannot be None")
