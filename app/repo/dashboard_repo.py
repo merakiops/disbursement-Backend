@@ -368,8 +368,15 @@ class DashboardRepository:
 
         # Query excel/ankkumam data using dedup logic
         if (ankkumam_clients and ds in ["all", "excel"]) or is_excel_client or (is_kamba_client and "ALGHAF" in ankkumam_clients):
-            from app.utils.dedup_utils import get_deduped_ankkumam_data
-            deduped = get_deduped_ankkumam_data(db, ankkumam_clients)
+            class DummyDataRequest:
+                tableFilter = None
+                pageSize = -1
+                page = 1
+                clientId = None
+            
+            deduped, _ = DashboardRepository._get_ankkumam_records(
+                ankkumam_clients, DummyDataRequest(), False, True, 0, db, only_completed_fda=True
+            )
             for r in deduped:
                 raw_date = str(r.get("date") or "").strip()
                 if not raw_date or raw_date.lower() == "n/a" or raw_date.lower() == "none":
