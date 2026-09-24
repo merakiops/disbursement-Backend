@@ -229,6 +229,33 @@ class DisbursementRepository:
                 dto.fda_completed_date = fda_date_map.get(dto.disbursement_seq)
 
     @staticmethod
+    def _populate_agency_nomination_dates(dtos: list, db: Session):
+        """Enrich DTOs with agency_nomination_date and purpose from txn_disbursement."""
+        # Only enrich production records (integer disbursement_seq)
+        seq_list = [d.disbursement_seq for d in dtos if isinstance(d.disbursement_seq, int)]
+        if not seq_list:
+            return
+        
+        records = db.query(
+            TxnDisbursement.disbursement_seq,
+            TxnDisbursement.agency_nomination_date,
+            MaPurpose.name.label("purpose_name")
+        ).outerjoin(
+            MaPurpose, TxnDisbursement.purpose_id == MaPurpose.purpose_id
+        ).filter(
+            TxnDisbursement.disbursement_seq.in_(seq_list)
+        ).all()
+        
+        lookup = {r.disbursement_seq: r for r in records}
+        
+        for dto in dtos:
+            rec = lookup.get(dto.disbursement_seq)
+            if rec:
+                dto.agency_nomination_date = rec.agency_nomination_date
+                if rec.purpose_name:
+                    dto.purpose = rec.purpose_name
+
+    @staticmethod
     def get_disbursement_list(user: str, request_dto: DisbursementTrackerRequestDTO, db: Session):
         """
         Fetch paginated list of disbursement.
@@ -480,6 +507,7 @@ class DisbursementRepository:
             standard_dtos = [DisbursementTrackerDTO.model_validate(r) for r in standard_records]
             
             DisbursementRepository._populate_fda_completed_dates(standard_dtos, db)
+            DisbursementRepository._populate_agency_nomination_dates(standard_dtos, db)
             
             # Combine all records
             all_records = standard_dtos + ankkumam_records
@@ -520,6 +548,7 @@ class DisbursementRepository:
             )
             data_dtos = [DisbursementTrackerDTO.model_validate(r) for r in data]
             DisbursementRepository._populate_fda_completed_dates(data_dtos, db)
+            DisbursementRepository._populate_agency_nomination_dates(data_dtos, db)
             return {
                 "total_count": total_count,
                 "data": data_dtos
@@ -571,6 +600,7 @@ class DisbursementRepository:
         
         data_dtos = [DisbursementTrackerDTO.model_validate(r) for r in disbursement]
         DisbursementRepository._populate_fda_completed_dates(data_dtos, db)
+        DisbursementRepository._populate_agency_nomination_dates(data_dtos, db)
 
         return {
             "total_count": total_count,

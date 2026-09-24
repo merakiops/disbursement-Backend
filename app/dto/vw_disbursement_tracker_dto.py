@@ -55,18 +55,6 @@ class DisbursementTrackerDTO(BaseModel):
         "from_attributes": True
     }
 
-    @model_validator(mode='before')
-    @classmethod
-    def strict_agency_nomination_date_to_created_on(cls, data: Any) -> Any:
-        if isinstance(data, dict):
-            if "agency_nomination_date" in data:
-                data["created_on"] = data.get("agency_nomination_date")
-        else:
-            nom_date = getattr(data, "agency_nomination_date", None)
-            if nom_date is not None:
-                setattr(data, "created_on", nom_date)
-        return data
-
     @model_validator(mode='after')
     def apply_status_rules(self) -> 'DisbursementTrackerDTO':
         pda = (self.pda_status or "").strip().lower().replace("-", " ")
