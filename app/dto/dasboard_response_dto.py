@@ -32,7 +32,7 @@ class OverallProgressDTO(BaseModel):
 
 class SavingsDTO(BaseModel):
     savingsPercentage: float
-    overallSavingsAmount: int
+    overallSavingsAmount: float
     pdaSavings: int
     fdaSavings: int
     percentage_savings_fda: float
