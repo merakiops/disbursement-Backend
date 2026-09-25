@@ -290,7 +290,9 @@ class DashboardRepository:
     @staticmethod
     def get_savings_graph(client_ids: List[int], from_date, to_date, data_source: Optional[str] = "all", db: Session = None):
         """
-        Get month-wise PDA and FDA savings for the last 6 months.
+        Get month-wise PDA and FDA savings for the last 6 months using:
+        - FDA savings date: txn_fda.fda_receive_date
+        - PDA savings date: txn_pda.updated_on
         """
         if db is None:
             raise ValueError("Database session (db) cannot be None")
@@ -301,34 +303,12 @@ class DashboardRepository:
         from dateutil import parser
         from app.db import SCHEMA_NAME
 
-        is_excel_client = False
-        is_kamba_client = False
-        if client_ids:
-            try:
-                c_ids = [int(x) for x in client_ids if str(x).isdigit()]
-                is_excel_client = 84 in c_ids and len(c_ids) == 1
-                is_kamba_client = 85 in c_ids and len(c_ids) == 1
-            except (ValueError, TypeError):
-                pass
-                
         ds = (data_source or "all").lower()
         six_months_ago = (datetime.now() - relativedelta(months=5)).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-        
-        prod_cid_to_excel, excel_to_prod_cid = DashboardRepository._get_dynamic_client_mapping(db)
-        ankkumam_clients = []
-        if client_ids:
-            c_list = client_ids if isinstance(client_ids, list) else [client_ids]
-            for cid in c_list:
-                if cid and str(cid).isdigit() and int(cid) in prod_cid_to_excel:
-                    ankkumam_clients.append(prod_cid_to_excel[int(cid)])
-                elif str(cid) == '85' and "ALGHAF" in excel_to_prod_cid:
-                    ankkumam_clients.append("ALGHAF")
-        else:
-            ankkumam_clients = list(excel_to_prod_cid.keys())
 
         expanded_client_ids = get_all_prod_ids_for_client_list(client_ids) if client_ids else None
-        
-        # Initialize last 6 months
+
+        # Initialize last 6 months map
         monthly_data = {}
         for i in range(5, -1, -1):
             month_date = datetime.now() - relativedelta(months=i)
@@ -340,37 +320,74 @@ class DashboardRepository:
                 "fda_savings": 0.0
             }
 
-        # Query standard production data (vw_dashboard_data)
-        if not is_kamba_client and not is_excel_client and ds not in ["kamba", "excel"]:
-            base_where = ["etd >= :six_months_ago"]
+        # 1. Query Production PDA Savings (Grouped by txn_pda.updated_on)
+        if ds not in ["kamba", "excel"]:
+            pda_where = ["pda.updated_on >= :six_months_ago"]
             params = {"six_months_ago": six_months_ago}
-            
+
             if expanded_client_ids:
                 int_cids = [int(x) for x in expanded_client_ids if str(x).isdigit()]
                 if int_cids:
-                    base_where.append("client_id = ANY(:cids)")
+                    pda_where.append("td.client_id = ANY(:cids)")
                     params["cids"] = int_cids
-            
-            where_clause = " AND ".join(base_where)
-            sql = f'''
+
+            pda_sql = f'''
                 SELECT 
-                    to_char(etd, 'YYYY-MM') as month_key,
-                    SUM(COALESCE(loss_prevention_pda, 0)) as pda_savings,
-                    SUM(COALESCE(loss_prevention_fda, 0)) as fda_savings
-                FROM {SCHEMA_NAME}.vw_dashboard_data
-                WHERE {where_clause}
-                GROUP BY to_char(etd, 'YYYY-MM')
+                    to_char(pda.updated_on, 'YYYY-MM') as month_key,
+                    SUM(COALESCE(vw.loss_prevention_pda, 0)) as pda_savings
+                FROM {SCHEMA_NAME}.txn_pda pda
+                JOIN {SCHEMA_NAME}.txn_disbursement td ON pda.disbursement_seq = td.disbursement_seq
+                JOIN {SCHEMA_NAME}.vw_dashboard_data vw ON td.disbursement_seq = vw.disbursement_seq
+                WHERE {" AND ".join(pda_where)}
+                GROUP BY to_char(pda.updated_on, 'YYYY-MM')
             '''
             
-            records = db.execute(text(sql), params).mappings().all()
-            for r in records:
+            pda_records = db.execute(text(pda_sql), params).mappings().all()
+            for r in pda_records:
                 mk = r["month_key"]
                 if mk in monthly_data:
                     monthly_data[mk]["pda_savings"] += float(r["pda_savings"] or 0)
+
+        # 2. Query Production FDA Savings (Grouped by txn_fda.fda_receive_date)
+        if ds not in ["kamba", "excel"]:
+            fda_where = ["fda.fda_receive_date >= :six_months_ago"]
+            params = {"six_months_ago": six_months_ago}
+
+            if expanded_client_ids:
+                int_cids = [int(x) for x in expanded_client_ids if str(x).isdigit()]
+                if int_cids:
+                    fda_where.append("td.client_id = ANY(:cids)")
+                    params["cids"] = int_cids
+
+            fda_sql = f'''
+                SELECT 
+                    to_char(fda.fda_receive_date, 'YYYY-MM') as month_key,
+                    SUM(COALESCE(vw.loss_prevention_fda, 0)) as fda_savings
+                FROM {SCHEMA_NAME}.txn_fda fda
+                JOIN {SCHEMA_NAME}.txn_disbursement td ON fda.disbursement_seq = td.disbursement_seq
+                JOIN {SCHEMA_NAME}.vw_dashboard_data vw ON td.disbursement_seq = vw.disbursement_seq
+                WHERE {" AND ".join(fda_where)}
+                GROUP BY to_char(fda.fda_receive_date, 'YYYY-MM')
+            '''
+            
+            fda_records = db.execute(text(fda_sql), params).mappings().all()
+            for r in fda_records:
+                mk = r["month_key"]
+                if mk in monthly_data:
                     monthly_data[mk]["fda_savings"] += float(r["fda_savings"] or 0)
 
-        # Query excel/ankkumam data using dedup logic
-        if (ankkumam_clients and ds in ["all", "excel"]) or is_excel_client or (is_kamba_client and "ALGHAF" in ankkumam_clients):
+        # 3. Query Excel / Ankkumam Records (Grouped by pda_received_date & fda_received_date)
+        prod_cid_to_excel, excel_to_prod_cid = DashboardRepository._get_dynamic_client_mapping(db)
+        ankkumam_clients = []
+        if client_ids:
+            c_list = client_ids if isinstance(client_ids, list) else [client_ids]
+            for cid in c_list:
+                if cid and str(cid).isdigit() and int(cid) in prod_cid_to_excel:
+                    ankkumam_clients.append(prod_cid_to_excel[int(cid)])
+        else:
+            ankkumam_clients = list(excel_to_prod_cid.keys())
+
+        if ankkumam_clients and ds in ["all", "excel"]:
             class DummyDataRequest:
                 tableFilter = None
                 pageSize = -1
@@ -378,22 +395,33 @@ class DashboardRepository:
                 clientId = None
             
             deduped, _ = DashboardRepository._get_ankkumam_records(
-                ankkumam_clients, DummyDataRequest(), False, True, 0, db, only_completed_fda=True
+                ankkumam_clients, DummyDataRequest(), False, True, 0, db, only_completed_fda=False
             )
             for r in deduped:
-                raw_date = str(r.get("date") or "").strip()
-                if not raw_date or raw_date.lower() == "n/a" or raw_date.lower() == "none":
-                    continue
-                try:
-                    parsed_date = parser.parse(raw_date, dayfirst=True)
-                    if parsed_date >= six_months_ago:
-                        mk = parsed_date.strftime("%Y-%m")
-                        if mk in monthly_data:
-                            monthly_data[mk]["pda_savings"] += float(r.get("loss_prevention_pda") or 0.0)
-                            monthly_data[mk]["fda_savings"] += float(r.get("loss_prevention_fda") or 0.0)
-                except Exception:
-                    pass
-        
+                # Parse PDA Received Date
+                raw_pda_date = str(r.get("pda_received_date") or "").strip()
+                if raw_pda_date and raw_pda_date.lower() not in ["n/a", "none"]:
+                    try:
+                        pda_dt = parser.parse(raw_pda_date, dayfirst=True)
+                        if pda_dt >= six_months_ago:
+                            mk = pda_dt.strftime("%Y-%m")
+                            if mk in monthly_data:
+                                monthly_data[mk]["pda_savings"] += float(r.get("loss_prevention_pda") or 0.0)
+                    except Exception:
+                        pass
+
+                # Parse FDA Received Date
+                raw_fda_date = str(r.get("fda_received_date") or "").strip()
+                if raw_fda_date and raw_fda_date.lower() not in ["n/a", "none"]:
+                    try:
+                        fda_dt = parser.parse(raw_fda_date, dayfirst=True)
+                        if fda_dt >= six_months_ago:
+                            mk = fda_dt.strftime("%Y-%m")
+                            if mk in monthly_data:
+                                monthly_data[mk]["fda_savings"] += float(r.get("loss_prevention_fda") or 0.0)
+                    except Exception:
+                        pass
+
         sorted_keys = sorted(list(monthly_data.keys()))
         result_list = [monthly_data[k] for k in sorted_keys]
         
