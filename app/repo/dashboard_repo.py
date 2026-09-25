@@ -291,8 +291,8 @@ class DashboardRepository:
     def get_savings_graph(client_ids: List[int], from_date, to_date, data_source: Optional[str] = "all", db: Session = None):
         """
         Get month-wise PDA and FDA savings for the last 6 months using:
-        - FDA savings date: txn_fda.fda_receive_date
-        - PDA savings date: txn_pda.updated_on
+        - FDA savings date: fda_receive_date (fallback to updated_on)
+        - PDA savings date: pda_received_date / updated_on
         """
         if db is None:
             raise ValueError("Database session (db) cannot be None")
@@ -308,7 +308,7 @@ class DashboardRepository:
 
         expanded_client_ids = get_all_prod_ids_for_client_list(client_ids) if client_ids else None
 
-        # Initialize last 6 months map
+        # Initialize last 6 months structure
         monthly_data = {}
         for i in range(5, -1, -1):
             month_date = datetime.now() - relativedelta(months=i)
@@ -320,9 +320,9 @@ class DashboardRepository:
                 "fda_savings": 0.0
             }
 
-        # 1. Query Production PDA Savings (Grouped by txn_pda.updated_on)
+        # 1. Query Production PDA Savings
         if ds not in ["kamba", "excel"]:
-            pda_where = ["pda.updated_on >= :six_months_ago"]
+            pda_where = ["COALESCE(pda.updated_on, td.createdon) >= :six_months_ago"]
             params = {"six_months_ago": six_months_ago}
 
             if expanded_client_ids:
@@ -333,13 +333,13 @@ class DashboardRepository:
 
             pda_sql = f'''
                 SELECT 
-                    to_char(pda.updated_on, 'YYYY-MM') as month_key,
+                    to_char(COALESCE(pda.updated_on, td.createdon), 'YYYY-MM') as month_key,
                     SUM(COALESCE(vw.loss_prevention_pda, 0)) as pda_savings
                 FROM {SCHEMA_NAME}.txn_pda pda
                 JOIN {SCHEMA_NAME}.txn_disbursement td ON pda.disbursement_seq = td.disbursement_seq
                 JOIN {SCHEMA_NAME}.vw_dashboard_data vw ON td.disbursement_seq = vw.disbursement_seq
-                WHERE {" AND ".join(pda_where)}
-                GROUP BY to_char(pda.updated_on, 'YYYY-MM')
+                WHERE {" AND ".join(pda_where)} AND COALESCE(vw.loss_prevention_pda, 0) > 0
+                GROUP BY to_char(COALESCE(pda.updated_on, td.createdon), 'YYYY-MM')
             '''
             
             pda_records = db.execute(text(pda_sql), params).mappings().all()
@@ -348,9 +348,9 @@ class DashboardRepository:
                 if mk in monthly_data:
                     monthly_data[mk]["pda_savings"] += float(r["pda_savings"] or 0)
 
-        # 2. Query Production FDA Savings (Grouped by txn_fda.fda_receive_date)
+        # 2. Query Production FDA Savings (COALESCE fda_receive_date to updated_on)
         if ds not in ["kamba", "excel"]:
-            fda_where = ["fda.fda_receive_date >= :six_months_ago"]
+            fda_where = ["COALESCE(fda.fda_receive_date, fda.updated_on, td.createdon) >= :six_months_ago"]
             params = {"six_months_ago": six_months_ago}
 
             if expanded_client_ids:
@@ -361,13 +361,13 @@ class DashboardRepository:
 
             fda_sql = f'''
                 SELECT 
-                    to_char(fda.fda_receive_date, 'YYYY-MM') as month_key,
+                    to_char(COALESCE(fda.fda_receive_date, fda.updated_on, td.createdon), 'YYYY-MM') as month_key,
                     SUM(COALESCE(vw.loss_prevention_fda, 0)) as fda_savings
                 FROM {SCHEMA_NAME}.txn_fda fda
                 JOIN {SCHEMA_NAME}.txn_disbursement td ON fda.disbursement_seq = td.disbursement_seq
                 JOIN {SCHEMA_NAME}.vw_dashboard_data vw ON td.disbursement_seq = vw.disbursement_seq
-                WHERE {" AND ".join(fda_where)}
-                GROUP BY to_char(fda.fda_receive_date, 'YYYY-MM')
+                WHERE {" AND ".join(fda_where)} AND COALESCE(vw.loss_prevention_fda, 0) > 0
+                GROUP BY to_char(COALESCE(fda.fda_receive_date, fda.updated_on, td.createdon), 'YYYY-MM')
             '''
             
             fda_records = db.execute(text(fda_sql), params).mappings().all()
@@ -376,7 +376,7 @@ class DashboardRepository:
                 if mk in monthly_data:
                     monthly_data[mk]["fda_savings"] += float(r["fda_savings"] or 0)
 
-        # 3. Query Excel / Ankkumam Records (Grouped by pda_received_date & fda_received_date)
+        # 3. Query Excel / Ankkumam Records with Fallback to loaded_at / etd
         prod_cid_to_excel, excel_to_prod_cid = DashboardRepository._get_dynamic_client_mapping(db)
         ankkumam_clients = []
         if client_ids:
@@ -398,29 +398,34 @@ class DashboardRepository:
                 ankkumam_clients, DummyDataRequest(), False, True, 0, db, only_completed_fda=False
             )
             for r in deduped:
-                # Parse PDA Received Date
-                raw_pda_date = str(r.get("pda_received_date") or "").strip()
-                if raw_pda_date and raw_pda_date.lower() not in ["n/a", "none"]:
-                    try:
-                        pda_dt = parser.parse(raw_pda_date, dayfirst=True)
-                        if pda_dt >= six_months_ago:
-                            mk = pda_dt.strftime("%Y-%m")
-                            if mk in monthly_data:
-                                monthly_data[mk]["pda_savings"] += float(r.get("loss_prevention_pda") or 0.0)
-                    except Exception:
-                        pass
+                pda_sav = float(r.get("loss_prevention_pda") or 0.0)
+                fda_sav = float(r.get("loss_prevention_fda") or 0.0)
 
-                # Parse FDA Received Date
-                raw_fda_date = str(r.get("fda_received_date") or "").strip()
-                if raw_fda_date and raw_fda_date.lower() not in ["n/a", "none"]:
-                    try:
-                        fda_dt = parser.parse(raw_fda_date, dayfirst=True)
-                        if fda_dt >= six_months_ago:
-                            mk = fda_dt.strftime("%Y-%m")
-                            if mk in monthly_data:
-                                monthly_data[mk]["fda_savings"] += float(r.get("loss_prevention_fda") or 0.0)
-                    except Exception:
-                        pass
+                # Process PDA Savings Date Fallback
+                if pda_sav > 0:
+                    raw_pda_date = str(r.get("pda_received_date") or r.get("pda_processing_date") or r.get("etd") or "").strip()
+                    if raw_pda_date and raw_pda_date.lower() not in ["n/a", "none"]:
+                        try:
+                            pda_dt = parser.parse(raw_pda_date, dayfirst=True)
+                            if pda_dt >= six_months_ago:
+                                mk = pda_dt.strftime("%Y-%m")
+                                if mk in monthly_data:
+                                    monthly_data[mk]["pda_savings"] += pda_sav
+                        except Exception:
+                            pass
+
+                # Process FDA Savings Date Fallback
+                if fda_sav > 0:
+                    raw_fda_date = str(r.get("fda_received_date") or r.get("fda_processing_date") or r.get("etd") or "").strip()
+                    if raw_fda_date and raw_fda_date.lower() not in ["n/a", "none"]:
+                        try:
+                            fda_dt = parser.parse(raw_fda_date, dayfirst=True)
+                            if fda_dt >= six_months_ago:
+                                mk = fda_dt.strftime("%Y-%m")
+                                if mk in monthly_data:
+                                    monthly_data[mk]["fda_savings"] += fda_sav
+                        except Exception:
+                            pass
 
         sorted_keys = sorted(list(monthly_data.keys()))
         result_list = [monthly_data[k] for k in sorted_keys]
