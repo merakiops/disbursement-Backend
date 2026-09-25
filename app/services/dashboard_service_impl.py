@@ -87,24 +87,21 @@ class DashboardServiceImpl(DashboardService):
                 if not total or total <= 0:
                     return 0.0
                 pct = (savings * 100.0) / total
-                val = round(pct, 2)
-                if val == 0.0 and pct != 0:
-                    return round(pct, 4)
-                return val
-    
+                return round(pct, 2)
+
             pct_pda = calc_pct(pda_savings, pda_total + pda_savings)
             pct_fda = calc_pct(fda_savings, fda_total + fda_savings)
             pct_overall = calc_pct(overall_savings, fda_total)
-    
+
             savings = SavingsDTO(
                 savingsPercentage=pct_overall if pct_overall > 0 else round(float(result.get("percentage_savings") or 0.0), 2),
-                overallSavingsAmount=overall_savings,
-                pdaSavings=pda_savings,
-                fdaSavings=fda_savings,
+                overallSavingsAmount=round(overall_savings, 2),
+                pdaSavings=round(pda_savings, 2),
+                fdaSavings=round(fda_savings, 2),
                 percentage_savings_fda=pct_fda,
                 percentage_savings_pda=pct_pda,
-                pda_total_amount=pda_total,
-                fda_total_amount=fda_total,
+                pda_total_amount=round(pda_total, 2),
+                fda_total_amount=round(fda_total, 2),
             )
             
             overall_summary = OverallSummaryDTO(
