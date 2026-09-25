@@ -81,7 +81,7 @@ class DashboardServiceImpl(DashboardService):
             fda_savings = int(round(float(result.get("fdasavings") or 0.0)))
             
             # Enforce overall_savings = pda_savings + fda_savings across the project
-            overall_savings = pda_savings + fda_savings
+            overall_savings = float(result.get("overallsavingsamount") or (pda_savings + fda_savings))
     
             def calc_pct(savings, total):
                 if not total or total <= 0:
