@@ -142,9 +142,14 @@ class DashboardRepository:
                 pageSize = -1
                 page = 1
                 clientId = None
-            
-            # FIX: Pass only_completed_fda=False to include savings from all rows
-            deduped_ankkumam, _ = DashboardRepository._get_ankkumam_records(
+
+            # Fetch records for overallProgress (Old process: Completed FDA only)
+            completed_records, _ = DashboardRepository._get_ankkumam_records(
+                ankkumam_clients, DummyDataRequest(), False, True, 0, db, only_completed_fda=True
+            )
+
+            # Fetch records for savings & amounts (New process: All records)
+            all_records, _ = DashboardRepository._get_ankkumam_records(
                 ankkumam_clients, DummyDataRequest(), False, True, 0, db, only_completed_fda=False
             )
             
@@ -152,26 +157,41 @@ class DashboardRepository:
             p_set = set()
             v_set = set()
             
-            pda_total = 0.0
-            fda_total = 0.0
-            pda_sav = 0.0
-            fda_sav = 0.0
-            tot_sav = 0.0
-            
             completed_pda = 0
             under_process_pda = 0
             completed_fda = 0
             under_process_fda = 0
             UNDER_PROCESS_STATUSES = {"under process", "in process", "in processs", "unixting"}
 
-            for r in deduped_ankkumam:
+            # --- OLD PROCESS: Progress Counts (from completed_records) ---
+            for r in completed_records:
                 if r.get("country_name") and r["country_name"] != "N/A": 
                     c_set.add(str(r["country_name"]).strip().upper())
                 if r.get("port_name") and r["port_name"] != "N/A": 
                     p_set.add(str(r["port_name"]).strip().upper())
                 if r.get("vessel_name"): 
                     v_set.add(str(r["vessel_name"]).strip().upper())
+
+                pda_stat = str(r.get("pda_status") or "").strip().lower()
+                if pda_stat == "completed":
+                    completed_pda += 1
+                elif pda_stat in UNDER_PROCESS_STATUSES:
+                    under_process_pda += 1
                 
+                fda_stat = str(r.get("fda_status") or "").strip().lower()
+                if fda_stat == "completed":
+                    completed_fda += 1
+                elif fda_stat in UNDER_PROCESS_STATUSES:
+                    under_process_fda += 1
+
+            # --- NEW PROCESS: Financial Totals & Savings (from all_records) ---
+            pda_total = 0.0
+            fda_total = 0.0
+            pda_sav = 0.0
+            fda_sav = 0.0
+            tot_sav = 0.0
+
+            for r in all_records:
                 try:
                     pda_val = float(str(r.get("pda_amount") or "0").replace(",", ""))
                 except Exception:
@@ -184,23 +204,10 @@ class DashboardRepository:
                     fda_val = 0.0
                 fda_total += fda_val
                 
-                # Aggregate savings across all records
                 pda_sav += float(r.get("loss_prevention_pda") or 0.0)
                 fda_sav += float(r.get("loss_prevention_fda") or 0.0)
                 tot_sav += float(r.get("total_loss_prevented") or 0.0)
-                
-                pda_stat = str(r.get("pda_status") or "").strip().lower()
-                if pda_stat == "completed":
-                    completed_pda += 1
-                elif pda_stat in UNDER_PROCESS_STATUSES:
-                    under_process_pda += 1
-                
-                fda_stat = str(r.get("fda_status") or "").strip().lower()
-                if fda_stat == "completed":
-                    completed_fda += 1
-                elif fda_stat in UNDER_PROCESS_STATUSES:
-                    under_process_fda += 1
-                
+
             return {
                 "country_list": list(c_set),
                 "port_list": list(p_set),

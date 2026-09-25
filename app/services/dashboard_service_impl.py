@@ -40,12 +40,12 @@ class DashboardServiceImpl(DashboardService):
             pda_completed = result.get("completed_pda") or 0
             pda_under_process = result.get("under_process_pda") or 0
             pda_total_count = pda_completed + pda_under_process
-            
+
             fda_completed = result.get("completed_fda") or 0
             fda_under_process = result.get("under_process_fda") or 0
             fda_yet_to_process = result.get("yet_to_process") or 0
             fda_total_count = fda_completed + fda_under_process
-    
+
             summary_cards = SummaryCardsDTO(
                 countries=result.get("countries") or 0,
                 ports=result.get("ports") or 0,
@@ -53,41 +53,38 @@ class DashboardServiceImpl(DashboardService):
                 totalPDA=pda_total_count,
                 totalFDA=fda_total_count
             )
-    
+
             pda_progress = ProgressDetailDTO(
                 Completed=pda_completed,
                 Underprogress=pda_under_process,
                 total=pda_total_count,
                 pdaCompletedNoFda=result.get("pda_completed_no_fda") or 0
             )
-    
+
             fda_progress = FDAProgressDetailDTO(
                 Completed=fda_completed,
                 Underprogress=fda_under_process,
                 yetToProcess=fda_yet_to_process,
                 total=fda_total_count
             )
-            
+
             overall_progress = OverallProgressDTO(
                 pda=pda_progress,
                 fda=fda_progress
             )
-            
-            pda_total = int(round(float(result.get("pda_total_amount") or 0.0)))
-            fda_total = int(round(float(result.get("fda_total_amount") or 0.0)))
-            
-            # Original logic for saving percentages
-            pda_savings = int(round(float(result.get("pdasavings") or 0.0)))
-            fda_savings = int(round(float(result.get("fdasavings") or 0.0)))
-            
-            # Enforce overall_savings = pda_savings + fda_savings across the project
+
+            # New Process Financials for savings card
+            pda_total = float(result.get("pda_total_amount") or 0.0)
+            fda_total = float(result.get("fda_total_amount") or 0.0)
+
+            pda_savings = float(result.get("pdasavings") or 0.0)
+            fda_savings = float(result.get("fdasavings") or 0.0)
             overall_savings = float(result.get("overallsavingsamount") or (pda_savings + fda_savings))
-    
+
             def calc_pct(savings, total):
                 if not total or total <= 0:
                     return 0.0
-                pct = (savings * 100.0) / total
-                return round(pct, 2)
+                return round((savings * 100.0) / total, 2)
 
             pct_pda = calc_pct(pda_savings, pda_total + pda_savings)
             pct_fda = calc_pct(fda_savings, fda_total + fda_savings)
@@ -95,22 +92,22 @@ class DashboardServiceImpl(DashboardService):
 
             savings = SavingsDTO(
                 savingsPercentage=pct_overall if pct_overall > 0 else round(float(result.get("percentage_savings") or 0.0), 2),
-                overallSavingsAmount=round(overall_savings, 2),
-                pdaSavings=round(pda_savings, 2),
-                fdaSavings=round(fda_savings, 2),
+                overallSavingsAmount=round(overall_savings, 2), # 18374392.43
+                pdaSavings=round(pda_savings, 2),               # 0.00
+                fdaSavings=round(fda_savings, 2),               # 18358907.57
                 percentage_savings_fda=pct_fda,
                 percentage_savings_pda=pct_pda,
-                pda_total_amount=round(pda_total, 2),
-                fda_total_amount=round(fda_total, 2),
+                pda_total_amount=round(pda_total, 2),           # 829051179.04
+                fda_total_amount=round(fda_total, 2),           # 1011021196.99
             )
-            
-            overall_summary = OverallSummaryDTO(
-                summaryCards=summary_cards,
-                overallProgress=overall_progress,
-                savings=savings
+
+            return DashboardResponseDTO(
+                overallSummary=OverallSummaryDTO(
+                    summaryCards=summary_cards,
+                    overallProgress=overall_progress,
+                    savings=savings
+                )
             )
-    
-            return DashboardResponseDTO(overallSummary=overall_summary)
 
     def get_savings_graph(self, payload: DashboardRequestDTO, db: Session):
         """
