@@ -292,7 +292,7 @@ class DashboardRepository:
         """
         Get month-wise PDA and FDA savings for the last 6 months using:
         - FDA savings date: fda_receive_date (fallback to updated_on)
-        - PDA savings date: pda_received_date / updated_on
+        - PDA savings date: updated_on (fallback to created_on)
         """
         if db is None:
             raise ValueError("Database session (db) cannot be None")
@@ -308,7 +308,7 @@ class DashboardRepository:
 
         expanded_client_ids = get_all_prod_ids_for_client_list(client_ids) if client_ids else None
 
-        # Initialize last 6 months structure
+        # Initialize last 6 months map
         monthly_data = {}
         for i in range(5, -1, -1):
             month_date = datetime.now() - relativedelta(months=i)
@@ -320,9 +320,9 @@ class DashboardRepository:
                 "fda_savings": 0.0
             }
 
-        # 1. Query Production PDA Savings
+        # 1. Query Production PDA Savings (fixed td.created_on)
         if ds not in ["kamba", "excel"]:
-            pda_where = ["COALESCE(pda.updated_on, td.createdon) >= :six_months_ago"]
+            pda_where = ["COALESCE(pda.updated_on, td.created_on) >= :six_months_ago"]
             params = {"six_months_ago": six_months_ago}
 
             if expanded_client_ids:
@@ -333,13 +333,13 @@ class DashboardRepository:
 
             pda_sql = f'''
                 SELECT 
-                    to_char(COALESCE(pda.updated_on, td.createdon), 'YYYY-MM') as month_key,
+                    to_char(COALESCE(pda.updated_on, td.created_on), 'YYYY-MM') as month_key,
                     SUM(COALESCE(vw.loss_prevention_pda, 0)) as pda_savings
                 FROM {SCHEMA_NAME}.txn_pda pda
                 JOIN {SCHEMA_NAME}.txn_disbursement td ON pda.disbursement_seq = td.disbursement_seq
                 JOIN {SCHEMA_NAME}.vw_dashboard_data vw ON td.disbursement_seq = vw.disbursement_seq
                 WHERE {" AND ".join(pda_where)} AND COALESCE(vw.loss_prevention_pda, 0) > 0
-                GROUP BY to_char(COALESCE(pda.updated_on, td.createdon), 'YYYY-MM')
+                GROUP BY to_char(COALESCE(pda.updated_on, td.created_on), 'YYYY-MM')
             '''
             
             pda_records = db.execute(text(pda_sql), params).mappings().all()
@@ -348,9 +348,9 @@ class DashboardRepository:
                 if mk in monthly_data:
                     monthly_data[mk]["pda_savings"] += float(r["pda_savings"] or 0)
 
-        # 2. Query Production FDA Savings (COALESCE fda_receive_date to updated_on)
+        # 2. Query Production FDA Savings (fixed td.created_on)
         if ds not in ["kamba", "excel"]:
-            fda_where = ["COALESCE(fda.fda_receive_date, fda.updated_on, td.createdon) >= :six_months_ago"]
+            fda_where = ["COALESCE(fda.fda_receive_date, fda.updated_on, td.created_on) >= :six_months_ago"]
             params = {"six_months_ago": six_months_ago}
 
             if expanded_client_ids:
@@ -361,13 +361,13 @@ class DashboardRepository:
 
             fda_sql = f'''
                 SELECT 
-                    to_char(COALESCE(fda.fda_receive_date, fda.updated_on, td.createdon), 'YYYY-MM') as month_key,
+                    to_char(COALESCE(fda.fda_receive_date, fda.updated_on, td.created_on), 'YYYY-MM') as month_key,
                     SUM(COALESCE(vw.loss_prevention_fda, 0)) as fda_savings
                 FROM {SCHEMA_NAME}.txn_fda fda
                 JOIN {SCHEMA_NAME}.txn_disbursement td ON fda.disbursement_seq = td.disbursement_seq
                 JOIN {SCHEMA_NAME}.vw_dashboard_data vw ON td.disbursement_seq = vw.disbursement_seq
                 WHERE {" AND ".join(fda_where)} AND COALESCE(vw.loss_prevention_fda, 0) > 0
-                GROUP BY to_char(COALESCE(fda.fda_receive_date, fda.updated_on, td.createdon), 'YYYY-MM')
+                GROUP BY to_char(COALESCE(fda.fda_receive_date, fda.updated_on, td.created_on), 'YYYY-MM')
             '''
             
             fda_records = db.execute(text(fda_sql), params).mappings().all()
@@ -376,7 +376,7 @@ class DashboardRepository:
                 if mk in monthly_data:
                     monthly_data[mk]["fda_savings"] += float(r["fda_savings"] or 0)
 
-        # 3. Query Excel / Ankkumam Records with Fallback to loaded_at / etd
+        # 3. Query Excel / Ankkumam Records
         prod_cid_to_excel, excel_to_prod_cid = DashboardRepository._get_dynamic_client_mapping(db)
         ankkumam_clients = []
         if client_ids:
