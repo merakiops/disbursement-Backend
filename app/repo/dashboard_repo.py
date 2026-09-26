@@ -1,3 +1,4 @@
+from typing import Any
 from app.models.purpose import MaPurpose
 from sqlalchemy.orm import Session
 from sqlalchemy import func, desc, text, extract
@@ -288,10 +289,10 @@ class DashboardRepository:
 
 
     @staticmethod
-    def get_savings_graph(client_ids: List[int], from_date, to_date, data_source: Optional[str] = "all", db: Session = None):
+    def get_savings_graph(client_ids: Any, from_date=None, to_date=None, data_source: Optional[str] = "all", db: Session = None):
         """
-        Get month-wise PDA and FDA savings for the last 6 months.
-        Aligns date fallback and USD conversion logic with get_savings_details_table.
+        Get month-wise PDA and FDA savings for the last 6 months including current month.
+        Includes robust client filtering, currency conversion, and timestamp casting.
         """
         if db is None:
             raise ValueError("Database session (db) cannot be None")
@@ -304,14 +305,25 @@ class DashboardRepository:
         from app.db import SCHEMA_NAME
 
         ds = (data_source or "all").lower()
-        six_months_ago = (datetime.now() - relativedelta(months=5)).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        now = datetime.now()
+        
+        # Define exact 6-month window from 5 months ago start-of-month to current end-of-month
+        six_months_ago = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0) - relativedelta(months=5)
 
-        expanded_client_ids = get_all_prod_ids_for_client_list(client_ids) if client_ids else None
+        # Normalize client_ids input into a clean list of integers
+        parsed_cids = []
+        if client_ids is not None:
+            if isinstance(client_ids, list):
+                parsed_cids = [int(x) for x in client_ids if str(x).isdigit()]
+            elif str(client_ids).isdigit():
+                parsed_cids = [int(client_ids)]
+
+        expanded_client_ids = get_all_prod_ids_for_client_list(parsed_cids) if parsed_cids else None
 
         # Initialize last 6 months map
         monthly_data = {}
         for i in range(5, -1, -1):
-            month_date = datetime.now() - relativedelta(months=i)
+            month_date = now - relativedelta(months=i)
             month_str = month_date.strftime("%b")
             month_key = month_date.strftime("%Y-%m")
             monthly_data[month_key] = {
@@ -320,7 +332,7 @@ class DashboardRepository:
                 "fda_savings": 0.0
             }
 
-        # Helper function for USD currency conversion matching table logic
+        # Helper function for USD currency conversion
         def convert_to_usd(raw_amount, roe_val, conv_rate, manual_str, curr_from):
             amount = float(raw_amount or 0.0)
             if amount == 0.0 and manual_str:
@@ -346,19 +358,17 @@ class DashboardRepository:
             return round(amount, 2)
 
         if ds not in ["kamba", "excel"]:
-            pda_where = ["COALESCE(pda.updated_on, td.created_on) >= :six_months_ago"]
+            where_clauses = ["COALESCE(fda.fda_receive_date, fda.updated_on, pda.updated_on, td.created_on, vw.etd)::timestamp >= :six_months_ago"]
             params = {"six_months_ago": six_months_ago}
 
+            # Strict client filter enforcement
             if expanded_client_ids:
-                int_cids = [int(x) for x in expanded_client_ids if str(x).isdigit()]
-                if int_cids:
-                    pda_where.append("td.client_id = ANY(:cids)")
-                    params["cids"] = int_cids
+                where_clauses.append("td.client_id = ANY(:cids)")
+                params["cids"] = [int(x) for x in expanded_client_ids if str(x).isdigit()]
 
-            # Fetch row-by-row to guarantee identical date/currency processing
             graph_sql = f'''
                 SELECT 
-                    to_char(COALESCE(fda.fda_receive_date, fda.updated_on, pda.updated_on, td.created_on, vw.etd), 'YYYY-MM') as month_key,
+                    to_char(COALESCE(fda.fda_receive_date, fda.updated_on, pda.updated_on, td.created_on, vw.etd)::timestamp, 'YYYY-MM') as month_key,
                     COALESCE(vw.loss_prevention_pda, 0) as raw_pda_savings,
                     COALESCE(vw.loss_prevention_fda, 0) as raw_fda_savings,
                     pda.pda_roe,
@@ -373,8 +383,13 @@ class DashboardRepository:
                 LEFT JOIN {SCHEMA_NAME}.txn_pda pda ON td.disbursement_seq = pda.disbursement_seq
                 LEFT JOIN {SCHEMA_NAME}.txn_fda fda ON td.disbursement_seq = fda.disbursement_seq
                 LEFT JOIN {SCHEMA_NAME}.vw_dashboard_data vw ON td.disbursement_seq = vw.disbursement_seq
-                WHERE COALESCE(fda.fda_receive_date, fda.updated_on, pda.updated_on, td.created_on, vw.etd) >= :six_months_ago
-                  AND (COALESCE(vw.loss_prevention_pda, 0) > 0 OR COALESCE(vw.loss_prevention_fda, 0) > 0)
+                WHERE {" AND ".join(where_clauses)}
+                  AND (
+                    COALESCE(vw.loss_prevention_pda, 0) > 0 
+                    OR COALESCE(vw.loss_prevention_fda, 0) > 0
+                    OR fda.manual_fda_amount IS NOT NULL
+                    OR pda.manual_pda_amount IS NOT NULL
+                  )
             '''
             
             records = db.execute(text(graph_sql), params).mappings().all()
@@ -402,11 +417,10 @@ class DashboardRepository:
         # Process Excel / Ankkumam dataset
         prod_cid_to_excel, excel_to_prod_cid = DashboardRepository._get_dynamic_client_mapping(db)
         ankkumam_clients = []
-        if client_ids:
-            c_list = client_ids if isinstance(client_ids, list) else [client_ids]
-            for cid in c_list:
-                if cid and str(cid).isdigit() and int(cid) in prod_cid_to_excel:
-                    ankkumam_clients.append(prod_cid_to_excel[int(cid)])
+        if parsed_cids:
+            for cid in parsed_cids:
+                if cid in prod_cid_to_excel:
+                    ankkumam_clients.append(prod_cid_to_excel[cid])
         else:
             ankkumam_clients = list(excel_to_prod_cid.keys())
 
@@ -452,7 +466,6 @@ class DashboardRepository:
             })
         
         return {"data": result_list}
-
 
 
 
