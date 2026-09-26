@@ -789,14 +789,13 @@ class DashboardRepository:
                 where_clauses.append("td.client_id = ANY(:cids)")
                 params["cids"] = int_cids
 
-        # Filter by Year
+        # Filter by Year (Key matches :year_val)
         if year_filter and str(year_filter).upper() != "ALL":
             where_clauses.append("to_char(COALESCE(fda.fda_receive_date, fda.updated_on, td.created_on), 'YYYY') = :year_val")
-            params["year"] = str(year_filter)
+            params["year_val"] = str(year_filter)
 
-        # Filter by Month (e.g. "Jan", "Feb", "Mar")
+        # Filter by Month (Key matches :month_val)
         if month_filter and str(month_filter).upper() not in ["ALL", "ALL MONTHS / FULL GRAPH"]:
-            # Extract month string if range or single month
             clean_month = month_filter.split(" - ")[0].strip() if " - " in month_filter else month_filter.strip()
             if len(clean_month) == 3:
                 where_clauses.append("to_char(COALESCE(fda.fda_receive_date, fda.updated_on, td.created_on), 'Mon') = :month_val")
@@ -826,7 +825,7 @@ class DashboardRepository:
             LEFT JOIN {SCHEMA_NAME}.vw_dashboard_data vw ON td.disbursement_seq = vw.disbursement_seq
             LEFT JOIN {SCHEMA_NAME}.ma_purpose purp ON td.purpose_id = purp.purpose_id
             WHERE {where_sql}
-              AND (COALESCE(vw.loss_prevention_pda, 0) > 0 OR COALESCE(vw.loss_prevention_fda, 0) > 0)
+            AND (COALESCE(vw.loss_prevention_pda, 0) > 0 OR COALESCE(vw.loss_prevention_fda, 0) > 0)
             ORDER BY COALESCE(fda.fda_receive_date, fda.updated_on, td.created_on) DESC
         '''
 
@@ -867,7 +866,7 @@ class DashboardRepository:
             "totalRecords": len(table_data),
             "data": table_data
         }
-        
+
     @staticmethod
     def get_dashboard_summary(client_ids: List[int], from_date, to_date, data_source: Optional[str] = "all", db: Session = None):
         """
