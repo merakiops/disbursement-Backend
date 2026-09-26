@@ -1,3 +1,4 @@
+from app.dto.dashboard_dto import SavingsDetailsTableRequestDTO
 from abc import ABC, abstractmethod
 from sqlalchemy.orm import Session
 from app.dto.dashboard_dto import DashboardRequestDTO
@@ -29,4 +30,8 @@ class DashboardService(ABC):
 
     @abstractmethod
     def get_savings_graph(self, payload: DashboardRequestDTO, db: Session):
+        pass
+    
+    @abstractmethod
+    def get_savings_details_table(self, payload: SavingsDetailsTableRequestDTO, db: Session):
         pass

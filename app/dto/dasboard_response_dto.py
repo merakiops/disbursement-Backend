@@ -223,3 +223,17 @@ class DashboardHoverStatsResponseDTO(BaseModel):
     port_calls: HoverPortCallsDTO
     vessels: HoverVesselsDTO
     fda: HoverFdaDTO
+
+class SavingsDetailsTableRowDTO(BaseModel):
+    sno: int
+    vessel: str
+    port: str
+    purpose: str
+    year: str
+    pdaSavings: float
+    fdaSavings: float
+    totalSavings: float
+
+class SavingsDetailsTableResponseDTO(BaseModel):
+    totalRecords: int
+    data: List[SavingsDetailsTableRowDTO]

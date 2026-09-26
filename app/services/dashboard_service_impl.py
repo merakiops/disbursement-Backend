@@ -1,3 +1,5 @@
+from app.dto.dasboard_response_dto import SavingsDetailsTableResponseDTO
+from app.dto.dashboard_dto import SavingsDetailsTableRequestDTO
 from app.dto.dasboard_response_dto import FilterDataRequestDTO
 from sqlalchemy.orm import Session
 from typing import Optional
@@ -109,6 +111,15 @@ class DashboardServiceImpl(DashboardService):
                     savings=savings
                 )
             )
+    def get_savings_details_table(self, payload: SavingsDetailsTableRequestDTO, db: Session) -> SavingsDetailsTableResponseDTO:
+        result = DashboardRepository.get_savings_details_table(
+            client_ids=payload.clientId or payload.client_id,
+            year_filter=payload.year,
+            month_filter=payload.month,
+            data_source=getattr(payload, 'dataSource', None) or getattr(payload, 'data_source', 'all'),
+            db=db
+        )
+        return SavingsDetailsTableResponseDTO(**result)        
 
     def get_savings_graph(self, payload: DashboardRequestDTO, db: Session):
         """

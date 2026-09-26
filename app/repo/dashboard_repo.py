@@ -743,7 +743,131 @@ class DashboardRepository:
                 completion_percentage=fda_completion_pct
             )
         )
+    @staticmethod
+    def get_savings_details_table(client_ids: List[int], year_filter: Optional[str] = "All", month_filter: Optional[str] = "All", data_source: Optional[str] = "all", db: Session = None):
+        if db is None:
+            raise ValueError("Database session (db) cannot be None")
 
+        from sqlalchemy import text
+        import re
+        from app.db import SCHEMA_NAME
+
+        ds = (data_source or "all").lower()
+        expanded_client_ids = get_all_prod_ids_for_client_list(client_ids) if client_ids else None
+
+        # Helper function for USD currency conversion
+        def convert_to_usd(raw_amount, roe_val, conv_rate, manual_str, curr_from):
+            amount = float(raw_amount or 0.0)
+            if amount == 0.0 and manual_str:
+                match = re.search(r'[\d,]+(?:\.\d+)?', str(manual_str))
+                if match:
+                    try:
+                        amount = float(match.group(0).replace(',', ''))
+                    except ValueError:
+                        amount = 0.0
+
+            if amount == 0.0:
+                return 0.0
+
+            roe = float(conv_rate or roe_val or 1.0)
+            curr_from_str = str(curr_from or "").upper().strip()
+            
+            if curr_from_str and curr_from_str != "USD" and roe > 1.0:
+                return round(amount / roe, 2)
+            
+            if ("AED" in str(manual_str).upper() or "EUR" in str(manual_str).upper()) and roe > 1.0:
+                return round(amount / roe, 2)
+
+            return round(amount, 2)
+
+        where_clauses = ["1=1"]
+        params = {}
+
+        if expanded_client_ids:
+            int_cids = [int(x) for x in expanded_client_ids if str(x).isdigit()]
+            if int_cids:
+                where_clauses.append("td.client_id = ANY(:cids)")
+                params["cids"] = int_cids
+
+        # Filter by Year
+        if year_filter and str(year_filter).upper() != "ALL":
+            where_clauses.append("to_char(COALESCE(fda.fda_receive_date, fda.updated_on, td.created_on), 'YYYY') = :year_val")
+            params["year"] = str(year_filter)
+
+        # Filter by Month (e.g. "Jan", "Feb", "Mar")
+        if month_filter and str(month_filter).upper() not in ["ALL", "ALL MONTHS / FULL GRAPH"]:
+            # Extract month string if range or single month
+            clean_month = month_filter.split(" - ")[0].strip() if " - " in month_filter else month_filter.strip()
+            if len(clean_month) == 3:
+                where_clauses.append("to_char(COALESCE(fda.fda_receive_date, fda.updated_on, td.created_on), 'Mon') = :month_val")
+                params["month_val"] = clean_month
+
+        where_sql = " AND ".join(where_clauses)
+
+        sql = f'''
+            SELECT 
+                COALESCE(vw.vessel_name, 'N/A') as vessel,
+                COALESCE(vw.port_name, 'N/A') as port,
+                COALESCE(purp.name, 'N/A') as purpose,
+                to_char(COALESCE(fda.fda_receive_date, fda.updated_on, td.created_on), 'YYYY') as record_year,
+                COALESCE(vw.loss_prevention_pda, 0) as raw_pda_savings,
+                COALESCE(vw.loss_prevention_fda, 0) as raw_fda_savings,
+                pda.pda_roe,
+                pda.conversion_rate as pda_conv_rate,
+                pda.manual_pda_amount,
+                pda.pda_currency_from,
+                fda.fda_roe,
+                fda.conversion_rate as fda_conv_rate,
+                fda.manual_fda_amount,
+                fda.fda_currency_from
+            FROM {SCHEMA_NAME}.txn_disbursement td
+            LEFT JOIN {SCHEMA_NAME}.txn_pda pda ON td.disbursement_seq = pda.disbursement_seq
+            LEFT JOIN {SCHEMA_NAME}.txn_fda fda ON td.disbursement_seq = fda.disbursement_seq
+            LEFT JOIN {SCHEMA_NAME}.vw_dashboard_data vw ON td.disbursement_seq = vw.disbursement_seq
+            LEFT JOIN {SCHEMA_NAME}.ma_purpose purp ON td.purpose_id = purp.purpose_id
+            WHERE {where_sql}
+              AND (COALESCE(vw.loss_prevention_pda, 0) > 0 OR COALESCE(vw.loss_prevention_fda, 0) > 0)
+            ORDER BY COALESCE(fda.fda_receive_date, fda.updated_on, td.created_on) DESC
+        '''
+
+        rows = db.execute(text(sql), params).mappings().all()
+
+        table_data = []
+        for idx, r in enumerate(rows, start=1):
+            pda_usd = convert_to_usd(
+                raw_amount=r.get("raw_pda_savings"),
+                roe_val=r.get("pda_roe"),
+                conv_rate=r.get("pda_conv_rate"),
+                manual_str=r.get("manual_pda_amount"),
+                curr_from=r.get("pda_currency_from")
+            )
+
+            fda_usd = convert_to_usd(
+                raw_amount=r.get("raw_fda_savings"),
+                roe_val=r.get("fda_roe"),
+                conv_rate=r.get("fda_conv_rate"),
+                manual_str=r.get("manual_fda_amount"),
+                curr_from=r.get("fda_currency_from")
+            )
+
+            total_usd = round(pda_usd + fda_usd, 2)
+
+            table_data.append({
+                "sno": idx,
+                "vessel": r.get("vessel") or "N/A",
+                "port": r.get("port") or "N/A",
+                "purpose": r.get("purpose") or "N/A",
+                "year": r.get("record_year") or "N/A",
+                "pdaSavings": pda_usd,
+                "fdaSavings": fda_usd,
+                "totalSavings": total_usd
+            })
+
+        return {
+            "totalRecords": len(table_data),
+            "data": table_data
+        }
+        
     @staticmethod
     def get_dashboard_summary(client_ids: List[int], from_date, to_date, data_source: Optional[str] = "all", db: Session = None):
         """

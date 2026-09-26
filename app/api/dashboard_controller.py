@@ -1,3 +1,5 @@
+from app.dto.dashboard_dto import SavingsDetailsTableRequestDTO
+from app.dto.dasboard_response_dto import SavingsDetailsTableResponseDTO
 from fastapi import APIRouter, Depends, status, HTTPException, Request, Query
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
@@ -214,6 +216,38 @@ async def get_savings_graph(request: Request, payload: DashboardRequestDTO, db: 
                         payload.clientId = [user_id]
 
         return dashboard_service.get_savings_graph(payload, db)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
+@DashboardController.post("/api/v1/dashboard/savings-details-table", response_model=SavingsDetailsTableResponseDTO)
+@jwt_required
+async def get_savings_details_table(request: Request, payload: SavingsDetailsTableRequestDTO, db: Session = Depends(get_db)):
+    """
+    Get detailed row-by-row vessel port calls and savings for the savings modal.
+    Filters by Year and Month dynamically.
+    """
+    try:
+        user_info = getattr(request.state, 'user', {}) or {}
+        user_role = user_info.get('roleId', '')
+        raw_username = str(user_info.get('username') or user_info.get('user') or '').lower()
+        is_meraki_user = ("meraki" in raw_username) or (user_role == 1 or user_role == '1')
+        
+        if not payload.clientId and not payload.client_id:
+            if not is_meraki_user:
+                company_id = user_info.get('company')
+                if company_id:
+                    payload.clientId = [company_id]
+                else:
+                    user_id = user_info.get('user_id')
+                    if user_id:
+                        payload.clientId = [user_id]
+
+        return dashboard_service.get_savings_details_table(payload, db)
     except HTTPException:
         raise
     except Exception as e:
