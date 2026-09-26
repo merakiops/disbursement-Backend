@@ -230,6 +230,7 @@ class SavingsDetailsTableRowDTO(BaseModel):
     port: str
     purpose: str
     year: str
+    fda_receive_date: Optional[str] = "N/A"
     pdaSavings: float
     fdaSavings: float
     totalSavings: float

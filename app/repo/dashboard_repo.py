@@ -809,7 +809,7 @@ class DashboardRepository:
                 COALESCE(vw.port_name, 'N/A') as port,
                 COALESCE(purp.name, 'N/A') as purpose,
                 to_char(COALESCE(fda.fda_receive_date, fda.updated_on, td.created_on), 'YYYY') as record_year,
-                to_char(COALESCE(fda.fda_receive_date, fda.updated_on, td.created_on), 'YYYY-MM-DD') as fda_completed_date,
+                fda.fda_receive_date::text AS fda_receive_date,
                 COALESCE(vw.loss_prevention_pda, 0) as raw_pda_savings,
                 COALESCE(vw.loss_prevention_fda, 0) as raw_fda_savings,
                 pda.pda_roe,
@@ -858,12 +858,12 @@ class DashboardRepository:
                 "port": r.get("port") or "N/A",
                 "purpose": r.get("purpose") or "N/A",
                 "year": r.get("record_year") or "N/A",
-                "fdaCompletedDate": r.get("fda_completed_date") or "N/A",  # Added to output JSON
+                "fda_receive_date": str(r.get("fda_receive_date") or "N/A"),
                 "pdaSavings": pda_usd,
                 "fdaSavings": fda_usd,
                 "totalSavings": total_usd
             })
-
+        
         return {
             "totalRecords": len(table_data),
             "data": table_data
