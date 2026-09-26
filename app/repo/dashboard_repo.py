@@ -789,12 +789,12 @@ class DashboardRepository:
                 where_clauses.append("td.client_id = ANY(:cids)")
                 params["cids"] = int_cids
 
-        # Filter by Year (Key matches :year_val)
+        # Filter by Year
         if year_filter and str(year_filter).upper() != "ALL":
             where_clauses.append("to_char(COALESCE(fda.fda_receive_date, fda.updated_on, td.created_on), 'YYYY') = :year_val")
             params["year_val"] = str(year_filter)
 
-        # Filter by Month (Key matches :month_val)
+        # Filter by Month
         if month_filter and str(month_filter).upper() not in ["ALL", "ALL MONTHS / FULL GRAPH"]:
             clean_month = month_filter.split(" - ")[0].strip() if " - " in month_filter else month_filter.strip()
             if len(clean_month) == 3:
@@ -809,6 +809,7 @@ class DashboardRepository:
                 COALESCE(vw.port_name, 'N/A') as port,
                 COALESCE(purp.name, 'N/A') as purpose,
                 to_char(COALESCE(fda.fda_receive_date, fda.updated_on, td.created_on), 'YYYY') as record_year,
+                to_char(COALESCE(fda.fda_receive_date, fda.updated_on, td.created_on), 'DD-MM-YYYY') as fda_completed_date,
                 COALESCE(vw.loss_prevention_pda, 0) as raw_pda_savings,
                 COALESCE(vw.loss_prevention_fda, 0) as raw_fda_savings,
                 pda.pda_roe,
@@ -857,6 +858,7 @@ class DashboardRepository:
                 "port": r.get("port") or "N/A",
                 "purpose": r.get("purpose") or "N/A",
                 "year": r.get("record_year") or "N/A",
+                "fdaCompletedDate": r.get("fda_completed_date") or "N/A",
                 "pdaSavings": pda_usd,
                 "fdaSavings": fda_usd,
                 "totalSavings": total_usd

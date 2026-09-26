@@ -52,11 +52,12 @@ class UpdateDashboardRowDTO(BaseModel):
     advance_amount_remitted: Optional[float] = None
     outstanding_balance: Optional[float] = None
     remark: Optional[str] = None
-    
+
 class SavingsDetailsTableRequestDTO(BaseModel):
     clientId: Optional[Union[List[Union[int, str]], int, str]] = None
     client_id: Optional[Union[List[Union[int, str]], int, str]] = None
-    year: Optional[str] = "All"      # "All", "2024", "2025", "2026"
-    month: Optional[str] = "All"     # "All", "Jan", "Feb", "Mar", "Jan - Mar", etc.
+    year: Optional[str] = "2026"  
+    fdaCompletedDate: Optional[str] = "N/A"    
+    month: Optional[str] = "All"     
     dataSource: Optional[str] = "all"
     data_source: Optional[str] = None
