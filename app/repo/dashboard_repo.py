@@ -1458,9 +1458,22 @@ class DashboardRepository:
             
     @staticmethod
     def get_dashboard_filter_data(filter_req, db: Session = None):
-        client_id = filter_req.client_id
-        data_source = filter_req.data_source or "all"
-        
+        """
+        Get unique filter data for dashboard filters with bidirectional cascading.
+        Accepts FilterDataRequestDTO object or legacy client_id.
+        """
+        # Handle both FilterDataRequestDTO and raw client_id for backward compatibility
+        if hasattr(filter_req, 'client_id'):
+            client_id = filter_req.client_id
+            data_source = filter_req.data_source or "all"
+            selected_vessel = getattr(filter_req, 'selected_vessel', []) or []
+            selected_country = getattr(filter_req, 'selected_country', []) or []
+            selected_port = getattr(filter_req, 'selected_port', []) or []
+        else:
+            client_id = filter_req
+            data_source = "all"
+            selected_vessel, selected_country, selected_port = [], [], []
+
         # 1. Fetch Client List
         clients_result = db.query(MaCompany.company_id, MaCompany.company_name).filter(
             MaCompany.company_type_id == 2,
@@ -1469,30 +1482,34 @@ class DashboardRepository:
         
         clients_list = [{"id": c[0], "name": c[1]} for c in clients_result] if clients_result else []
 
-        # 2. Build Dynamic Filters for PostgreSQL View (VwFdaProcessingDetails)
+        # 2. Build Base Query on VwFdaProcessingDetails
         query = db.query(VwFdaProcessingDetails)
 
-        if client_id:
+        # Apply client_id filter if present
+        if client_id is not None:
             if isinstance(client_id, list):
-                query = query.filter(VwFdaProcessingDetails.client_id.in_([int(x) for x in client_id if str(x).isdigit()]))
+                cids = [int(x) for x in client_id if str(x).isdigit()]
+                if cids:
+                    query = query.filter(VwFdaProcessingDetails.client_id.in_(cids))
             elif str(client_id).isdigit():
                 query = query.filter(VwFdaProcessingDetails.client_id == int(client_id))
 
-        # Apply selected vessel/country/port dynamically for bidirectional narrowing
-        if filter_req.selected_vessel and len(filter_req.selected_vessel) > 0:
-            query = query.filter(func.upper(VwFdaProcessingDetails.vessel_name).in_([v.upper() for v in filter_req.selected_vessel]))
+        # 3. Apply Bidirectional Filter Conditions dynamically
+        if selected_vessel and len(selected_vessel) > 0:
+            query = query.filter(func.upper(VwFdaProcessingDetails.vessel_name).in_([v.upper() for v in selected_vessel]))
             
-        if filter_req.selected_country and len(filter_req.selected_country) > 0:
-            query = query.filter(func.upper(VwFdaProcessingDetails.country_name).in_([c.upper() for c in filter_req.selected_country]))
+        if selected_country and len(selected_country) > 0:
+            query = query.filter(func.upper(VwFdaProcessingDetails.country_name).in_([c.upper() for c in selected_country]))
 
-        if filter_req.selected_port and len(filter_req.selected_port) > 0:
-            query = query.filter(func.upper(VwFdaProcessingDetails.port_name).in_([p.upper() for p in filter_req.selected_port]))
+        if selected_port and len(selected_port) > 0:
+            query = query.filter(func.upper(VwFdaProcessingDetails.port_name).in_([p.upper() for p in selected_port]))
 
-        # Execute distinct queries on filtered dataset
+        # 4. Fetch distinct attributes from the dynamically filtered dataset
         vessel_names = sorted([v[0] for v in query.with_entities(VwFdaProcessingDetails.vessel_name).distinct().all() if v[0]])
         country_names = sorted([c[0] for c in query.with_entities(VwFdaProcessingDetails.country_name).distinct().all() if c[0]])
         port_names = sorted([p[0] for p in query.with_entities(VwFdaProcessingDetails.port_name).distinct().all() if p[0]])
 
+        # 5. Range Stats
         loa_stats = query.with_entities(
             func.min(VwFdaProcessingDetails.loa).label('min_loa'),
             func.max(VwFdaProcessingDetails.loa).label('max_loa')
@@ -1513,7 +1530,7 @@ class DashboardRepository:
             func.max(VwFdaProcessingDetails.rgrt).label('max_rgrt')
         ).filter(VwFdaProcessingDetails.rgrt.isnot(None)).first()
 
-        filter_data = {
+        return {
             "clients": clients_list,
             "vessel_name": vessel_names,
             "country_name": country_names,
@@ -1527,5 +1544,3 @@ class DashboardRepository:
             "cargo_grade": [],
             "counterparty_short_name": []
         }
-        
-        return filter_data
