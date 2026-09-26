@@ -290,10 +290,8 @@ class DashboardRepository:
     @staticmethod
     def get_savings_graph(client_ids: List[int], from_date, to_date, data_source: Optional[str] = "all", db: Session = None):
         """
-        Get month-wise PDA and FDA savings for the last 6 months using:
-        - FDA savings date: fda_receive_date (fallback to updated_on, then created_on)
-        - PDA savings date: updated_on (fallback to created_on)
-        - Currency conversion: Converts both PDA and FDA savings from local currency (fda_currency_from / pda_currency_from) to USD using ROE.
+        Get month-wise PDA and FDA savings for the last 6 months.
+        Aligns date fallback and USD conversion logic with get_savings_details_table.
         """
         if db is None:
             raise ValueError("Database session (db) cannot be None")
@@ -322,11 +320,9 @@ class DashboardRepository:
                 "fda_savings": 0.0
             }
 
-        # Helper function to convert raw amounts from local currency (currency_from) to USD
+        # Helper function for USD currency conversion matching table logic
         def convert_to_usd(raw_amount, roe_val, conv_rate, manual_str, curr_from):
             amount = float(raw_amount or 0.0)
-            
-            # Parse manual string if numeric value is missing or zero
             if amount == 0.0 and manual_str:
                 match = re.search(r'[\d,]+(?:\.\d+)?', str(manual_str))
                 if match:
@@ -341,17 +337,14 @@ class DashboardRepository:
             roe = float(conv_rate or roe_val or 1.0)
             curr_from_str = str(curr_from or "").upper().strip()
             
-            # If currency_from is NOT USD, convert to USD by dividing by ROE
             if curr_from_str and curr_from_str != "USD" and roe > 1.0:
                 return round(amount / roe, 2)
             
-            # Additional check for manual strings containing non-USD currency codes (e.g., 'AED 167808.63')
             if ("AED" in str(manual_str).upper() or "EUR" in str(manual_str).upper()) and roe > 1.0:
                 return round(amount / roe, 2)
 
             return round(amount, 2)
 
-        # 1. Query Production PDA Savings (Converting pda_currency_from -> USD)
         if ds not in ["kamba", "excel"]:
             pda_where = ["COALESCE(pda.updated_on, td.created_on) >= :six_months_ago"]
             params = {"six_months_ago": six_months_ago}
@@ -362,74 +355,51 @@ class DashboardRepository:
                     pda_where.append("td.client_id = ANY(:cids)")
                     params["cids"] = int_cids
 
-            pda_sql = f'''
+            # Fetch row-by-row to guarantee identical date/currency processing
+            graph_sql = f'''
                 SELECT 
-                    to_char(COALESCE(pda.updated_on, td.created_on), 'YYYY-MM') as month_key,
-                    COALESCE(vw.loss_prevention_pda, 0) as pda_savings,
+                    to_char(COALESCE(fda.fda_receive_date, fda.updated_on, pda.updated_on, td.created_on, vw.etd), 'YYYY-MM') as month_key,
+                    COALESCE(vw.loss_prevention_pda, 0) as raw_pda_savings,
+                    COALESCE(vw.loss_prevention_fda, 0) as raw_fda_savings,
                     pda.pda_roe,
-                    pda.conversion_rate,
+                    pda.conversion_rate as pda_conv_rate,
                     pda.manual_pda_amount,
-                    pda.pda_currency_from
-                FROM {SCHEMA_NAME}.txn_pda pda
-                JOIN {SCHEMA_NAME}.txn_disbursement td ON pda.disbursement_seq = td.disbursement_seq
-                JOIN {SCHEMA_NAME}.vw_dashboard_data vw ON td.disbursement_seq = vw.disbursement_seq
-                WHERE {" AND ".join(pda_where)} AND COALESCE(vw.loss_prevention_pda, 0) > 0
+                    pda.pda_currency_from,
+                    fda.fda_roe,
+                    fda.conversion_rate as fda_conv_rate,
+                    fda.manual_fda_amount,
+                    fda.fda_currency_from
+                FROM {SCHEMA_NAME}.txn_disbursement td
+                LEFT JOIN {SCHEMA_NAME}.txn_pda pda ON td.disbursement_seq = pda.disbursement_seq
+                LEFT JOIN {SCHEMA_NAME}.txn_fda fda ON td.disbursement_seq = fda.disbursement_seq
+                LEFT JOIN {SCHEMA_NAME}.vw_dashboard_data vw ON td.disbursement_seq = vw.disbursement_seq
+                WHERE COALESCE(fda.fda_receive_date, fda.updated_on, pda.updated_on, td.created_on, vw.etd) >= :six_months_ago
+                  AND (COALESCE(vw.loss_prevention_pda, 0) > 0 OR COALESCE(vw.loss_prevention_fda, 0) > 0)
             '''
             
-            pda_records = db.execute(text(pda_sql), params).mappings().all()
-            for r in pda_records:
+            records = db.execute(text(graph_sql), params).mappings().all()
+            for r in records:
                 mk = r["month_key"]
                 if mk in monthly_data:
-                    raw_sav = float(r["pda_savings"] or 0)
-                    usd_sav = convert_to_usd(
-                        raw_amount=raw_sav,
+                    pda_usd = convert_to_usd(
+                        raw_amount=r.get("raw_pda_savings"),
                         roe_val=r.get("pda_roe"),
-                        conv_rate=r.get("conversion_rate"),
+                        conv_rate=r.get("pda_conv_rate"),
                         manual_str=r.get("manual_pda_amount"),
                         curr_from=r.get("pda_currency_from")
                     )
-                    monthly_data[mk]["pda_savings"] += usd_sav
-
-        # 2. Query Production FDA Savings (Preferring fda_receive_date & Converting fda_currency_from -> USD)
-        if ds not in ["kamba", "excel"]:
-            fda_where = ["COALESCE(fda.fda_receive_date, fda.updated_on, td.created_on) >= :six_months_ago"]
-            params = {"six_months_ago": six_months_ago}
-
-            if expanded_client_ids:
-                int_cids = [int(x) for x in expanded_client_ids if str(x).isdigit()]
-                if int_cids:
-                    fda_where.append("td.client_id = ANY(:cids)")
-                    params["cids"] = int_cids
-
-            fda_sql = f'''
-                SELECT 
-                    to_char(COALESCE(fda.fda_receive_date, fda.updated_on, td.created_on), 'YYYY-MM') as month_key,
-                    COALESCE(vw.loss_prevention_fda, 0) as fda_savings,
-                    fda.fda_roe,
-                    fda.conversion_rate,
-                    fda.manual_fda_amount,
-                    fda.fda_currency_from
-                FROM {SCHEMA_NAME}.txn_fda fda
-                JOIN {SCHEMA_NAME}.txn_disbursement td ON fda.disbursement_seq = td.disbursement_seq
-                JOIN {SCHEMA_NAME}.vw_dashboard_data vw ON td.disbursement_seq = vw.disbursement_seq
-                WHERE {" AND ".join(fda_where)} AND COALESCE(vw.loss_prevention_fda, 0) > 0
-            '''
-            
-            fda_records = db.execute(text(fda_sql), params).mappings().all()
-            for r in fda_records:
-                mk = r["month_key"]
-                if mk in monthly_data:
-                    raw_sav = float(r["fda_savings"] or 0)
-                    usd_sav = convert_to_usd(
-                        raw_amount=raw_sav,
+                    fda_usd = convert_to_usd(
+                        raw_amount=r.get("raw_fda_savings"),
                         roe_val=r.get("fda_roe"),
-                        conv_rate=r.get("conversion_rate"),
+                        conv_rate=r.get("fda_conv_rate"),
                         manual_str=r.get("manual_fda_amount"),
                         curr_from=r.get("fda_currency_from")
                     )
-                    monthly_data[mk]["fda_savings"] += usd_sav
 
-        # 3. Query Excel / Ankkumam Records
+                    monthly_data[mk]["pda_savings"] += pda_usd
+                    monthly_data[mk]["fda_savings"] += fda_usd
+
+        # Process Excel / Ankkumam dataset
         prod_cid_to_excel, excel_to_prod_cid = DashboardRepository._get_dynamic_client_mapping(db)
         ankkumam_clients = []
         if client_ids:
@@ -454,47 +424,24 @@ class DashboardRepository:
                 pda_sav = float(r.get("loss_prevention_pda") or 0.0)
                 fda_sav = float(r.get("loss_prevention_fda") or 0.0)
 
-                # Process PDA Savings Date Fallback
-                if pda_sav > 0:
-                    raw_pda_date = str(r.get("pda_received_date") or r.get("pda_processing_date") or r.get("etd") or "").strip()
-                    if raw_pda_date and raw_pda_date.lower() not in ["n/a", "none"]:
-                        try:
-                            pda_dt = parser.parse(raw_pda_date, dayfirst=True)
-                            if pda_dt >= six_months_ago:
-                                mk = pda_dt.strftime("%Y-%m")
-                                if mk in monthly_data:
-                                    usd_pda_sav = convert_to_usd(
-                                        raw_amount=pda_sav,
-                                        roe_val=r.get("pda_roe"),
-                                        conv_rate=r.get("conversion_rate"),
-                                        manual_str=r.get("manual_pda_amount"),
-                                        curr_from=r.get("pda_currency_from")
-                                    )
-                                    monthly_data[mk]["pda_savings"] += usd_pda_sav
-                        except Exception:
-                            pass
+                raw_fda_date = str(r.get("fda_receive_date") or r.get("fda_received_date") or r.get("fda_processing_date") or r.get("etd") or "").strip()
+                if raw_fda_date and raw_fda_date.lower() not in ["n/a", "none"]:
+                    try:
+                        fda_dt = parser.parse(raw_fda_date, dayfirst=True)
+                        if fda_dt >= six_months_ago:
+                            mk = fda_dt.strftime("%Y-%m")
+                            if mk in monthly_data:
+                                usd_fda_sav = convert_to_usd(
+                                    raw_amount=fda_sav,
+                                    roe_val=r.get("fda_roe"),
+                                    conv_rate=r.get("conversion_rate"),
+                                    manual_str=r.get("manual_fda_amount"),
+                                    curr_from=r.get("fda_currency_from")
+                                )
+                                monthly_data[mk]["fda_savings"] += usd_fda_sav
+                    except Exception:
+                        pass
 
-                # Process FDA Savings Date Fallback (Preferring fda_receive_date / fda_received_date)
-                if fda_sav > 0:
-                    raw_fda_date = str(r.get("fda_receive_date") or r.get("fda_received_date") or r.get("fda_processing_date") or r.get("etd") or "").strip()
-                    if raw_fda_date and raw_fda_date.lower() not in ["n/a", "none"]:
-                        try:
-                            fda_dt = parser.parse(raw_fda_date, dayfirst=True)
-                            if fda_dt >= six_months_ago:
-                                mk = fda_dt.strftime("%Y-%m")
-                                if mk in monthly_data:
-                                    usd_fda_sav = convert_to_usd(
-                                        raw_amount=fda_sav,
-                                        roe_val=r.get("fda_roe"),
-                                        conv_rate=r.get("conversion_rate"),
-                                        manual_str=r.get("manual_fda_amount"),
-                                        curr_from=r.get("fda_currency_from")
-                                    )
-                                    monthly_data[mk]["fda_savings"] += usd_fda_sav
-                        except Exception:
-                            pass
-
-        # Round sums to 2 decimal places
         sorted_keys = sorted(list(monthly_data.keys()))
         result_list = []
         for k in sorted_keys:
@@ -505,6 +452,7 @@ class DashboardRepository:
             })
         
         return {"data": result_list}
+
 
 
 
