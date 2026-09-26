@@ -845,6 +845,9 @@ class DashboardRepository:
                 if tf.port and len(tf.port) > 0:
                     where_clauses.append("UPPER(d.port) = ANY(:ports)")
                     params["ports"] = [str(x).upper() for x in tf.port]
+                if getattr(tf, 'purpose', None) and len(tf.purpose) > 0:
+                    where_clauses.append("UPPER(d.purpose) = ANY(:purpose_names)")
+                    params["purpose_names"] = [str(x).upper() for x in tf.purpose]    
 
             current_year = datetime.now().year
             has_year_filter = False
