@@ -1460,7 +1460,7 @@ class DashboardRepository:
     def get_dashboard_filter_data(filter_req, db: Session = None):
         """
         Get unique filter data for dashboard filters with bidirectional cascading.
-        Accepts FilterDataRequestDTO object or legacy client_id.
+        Preserves standard DB + Ankkumam excel dataset merging logic.
         """
         # Handle both FilterDataRequestDTO and raw client_id for backward compatibility
         if hasattr(filter_req, 'client_id'):
@@ -1482,10 +1482,9 @@ class DashboardRepository:
         
         clients_list = [{"id": c[0], "name": c[1]} for c in clients_result] if clients_result else []
 
-        # 2. Build Base Query on VwFdaProcessingDetails
+        # 2. Build Query for Standard Production View (VwFdaProcessingDetails)
         query = db.query(VwFdaProcessingDetails)
 
-        # Apply client_id filter if present
         if client_id is not None:
             if isinstance(client_id, list):
                 cids = [int(x) for x in client_id if str(x).isdigit()]
@@ -1494,7 +1493,7 @@ class DashboardRepository:
             elif str(client_id).isdigit():
                 query = query.filter(VwFdaProcessingDetails.client_id == int(client_id))
 
-        # 3. Apply Bidirectional Filter Conditions dynamically
+        # Apply bidirectional selection filters on Standard dataset
         if selected_vessel and len(selected_vessel) > 0:
             query = query.filter(func.upper(VwFdaProcessingDetails.vessel_name).in_([v.upper() for v in selected_vessel]))
             
@@ -1504,41 +1503,79 @@ class DashboardRepository:
         if selected_port and len(selected_port) > 0:
             query = query.filter(func.upper(VwFdaProcessingDetails.port_name).in_([p.upper() for p in selected_port]))
 
-        # 4. Fetch distinct attributes from the dynamically filtered dataset
         vessel_names = sorted([v[0] for v in query.with_entities(VwFdaProcessingDetails.vessel_name).distinct().all() if v[0]])
         country_names = sorted([c[0] for c in query.with_entities(VwFdaProcessingDetails.country_name).distinct().all() if c[0]])
         port_names = sorted([p[0] for p in query.with_entities(VwFdaProcessingDetails.port_name).distinct().all() if p[0]])
 
-        # 5. Range Stats
-        loa_stats = query.with_entities(
-            func.min(VwFdaProcessingDetails.loa).label('min_loa'),
-            func.max(VwFdaProcessingDetails.loa).label('max_loa')
-        ).filter(VwFdaProcessingDetails.loa.isnot(None)).first()
+        loa_stats = query.with_entities(func.min(VwFdaProcessingDetails.loa), func.max(VwFdaProcessingDetails.loa)).first()
+        nrt_stats = query.with_entities(func.min(VwFdaProcessingDetails.nrt), func.max(VwFdaProcessingDetails.nrt)).first()
+        grt_stats = query.with_entities(func.min(VwFdaProcessingDetails.grt), func.max(VwFdaProcessingDetails.grt)).first()
+        rgrt_stats = query.with_entities(func.min(VwFdaProcessingDetails.rgrt), func.max(VwFdaProcessingDetails.rgrt)).first()
 
-        nrt_stats = query.with_entities(
-            func.min(VwFdaProcessingDetails.nrt).label('min_nrt'),
-            func.max(VwFdaProcessingDetails.nrt).label('max_nrt')
-        ).filter(VwFdaProcessingDetails.nrt.isnot(None)).first()
+        # 3. Check and Query Ankkumam Data (ankkumam_data_excel.data)
+        prod_cid_to_excel, excel_to_prod_cid = DashboardRepository._get_dynamic_client_mapping(db)
+        should_merge_ankkumam = False
+        ankkumam_clients = []
 
-        grt_stats = query.with_entities(
-            func.min(VwFdaProcessingDetails.grt).label('min_grt'),
-            func.max(VwFdaProcessingDetails.grt).label('max_grt')
-        ).filter(VwFdaProcessingDetails.grt.isnot(None)).first()
+        if client_id is None:
+            should_merge_ankkumam = True
+            ankkumam_clients = list(excel_to_prod_cid.keys())
+        elif client_id:
+            c_list = client_id if isinstance(client_id, list) else [client_id]
+            for cid in c_list:
+                if cid and str(cid).isdigit() and int(cid) in prod_cid_to_excel:
+                    should_merge_ankkumam = True
+                    ankkumam_clients.append(prod_cid_to_excel[int(cid)])
+                elif str(cid) == '85' and "ALGHAF" in excel_to_prod_cid:
+                    should_merge_ankkumam = True
+                    ankkumam_clients.append("ALGHAF")
 
-        rgrt_stats = query.with_entities(
-            func.min(VwFdaProcessingDetails.rgrt).label('min_rgrt'),
-            func.max(VwFdaProcessingDetails.rgrt).label('max_rgrt')
-        ).filter(VwFdaProcessingDetails.rgrt.isnot(None)).first()
+        if should_merge_ankkumam and ankkumam_clients:
+            try:
+                ids_str = ",".join(f"'{c}'" for c in ankkumam_clients)
+                ank_where = [f"d.client IN ({ids_str})"]
+                ank_params = {}
+
+                # Apply bidirectional filter conditions to Ankkumam query
+                if selected_vessel and len(selected_vessel) > 0:
+                    ank_where.append("UPPER(d.vessel) = ANY(:vessels)")
+                    ank_params["vessels"] = [v.upper() for v in selected_vessel]
+                if selected_country and len(selected_country) > 0:
+                    ank_where.append("UPPER(d.country) = ANY(:countries)")
+                    ank_params["countries"] = [c.upper() for c in selected_country]
+                if selected_port and len(selected_port) > 0:
+                    ank_where.append("UPPER(d.port) = ANY(:ports)")
+                    ank_params["ports"] = [p.upper() for p in selected_port]
+
+                where_sql = " AND ".join(ank_where)
+
+                ank_vessels = db.execute(text(f"SELECT DISTINCT d.vessel FROM ankkumam_data_excel.data d WHERE {where_sql} AND d.vessel IS NOT NULL"), ank_params).scalars().all()
+                ank_countries = db.execute(text(f"SELECT DISTINCT d.country FROM ankkumam_data_excel.data d WHERE {where_sql} AND d.country IS NOT NULL"), ank_params).scalars().all()
+                ank_ports = db.execute(text(f"SELECT DISTINCT d.port FROM ankkumam_data_excel.data d WHERE {where_sql} AND d.port IS NOT NULL"), ank_params).scalars().all()
+
+                # Merge Ankkumam results with standard database results
+                vessel_names = sorted(list(set(vessel_names + [str(v).strip().upper() for v in ank_vessels if v])))
+                country_names = sorted(list(set(country_names + [str(c).strip().upper() for c in ank_countries if c])))
+                port_names = sorted(list(set(port_names + [str(p).strip().upper() for p in ank_ports if p])))
+
+            except Exception as e:
+                print(f"Error querying Ankkumam filter data: {e}")
+
+        # 4. Range stats helper
+        def get_range(stat_tuple):
+            if stat_tuple and stat_tuple[0] is not None and stat_tuple[1] is not None:
+                return {"min_value": float(stat_tuple[0]), "max_value": float(stat_tuple[1])}
+            return None
 
         return {
             "clients": clients_list,
             "vessel_name": vessel_names,
             "country_name": country_names,
             "port_name": port_names,
-            "loa": {"min_value": float(loa_stats.min_loa), "max_value": float(loa_stats.max_loa)} if loa_stats and loa_stats.min_loa is not None else None,
-            "nrt": {"min_value": float(nrt_stats.min_nrt), "max_value": float(nrt_stats.max_nrt)} if nrt_stats and nrt_stats.min_nrt is not None else None,
-            "grt": {"min_value": float(grt_stats.min_grt), "max_value": float(grt_stats.max_grt)} if grt_stats and grt_stats.min_grt is not None else None,
-            "rgrt": {"min_value": float(rgrt_stats.min_rgrt), "max_value": float(rgrt_stats.max_rgrt)} if rgrt_stats and rgrt_stats.min_rgrt is not None else None,
+            "loa": get_range(loa_stats),
+            "nrt": get_range(nrt_stats),
+            "grt": get_range(grt_stats),
+            "rgrt": get_range(rgrt_stats),
             "vessel_type": [],
             "agent": [],
             "cargo_grade": [],
