@@ -291,7 +291,7 @@ class DashboardRepository:
     def get_savings_graph(client_ids: List[int], from_date, to_date, data_source: Optional[str] = "all", db: Session = None):
         """
         Get month-wise PDA and FDA savings for the last 6 months using:
-        - FDA savings date: fda_receive_date (fallback to updated_on)
+        - FDA savings date: fda_receive_date (fallback to updated_on, then created_on)
         - PDA savings date: updated_on (fallback to created_on)
         """
         if db is None:
@@ -348,7 +348,7 @@ class DashboardRepository:
                 if mk in monthly_data:
                     monthly_data[mk]["pda_savings"] += float(r["pda_savings"] or 0)
 
-        # 2. Query Production FDA Savings (fixed td.created_on)
+        # 2. Query Production FDA Savings (Preferring fda_receive_date)
         if ds not in ["kamba", "excel"]:
             fda_where = ["COALESCE(fda.fda_receive_date, fda.updated_on, td.created_on) >= :six_months_ago"]
             params = {"six_months_ago": six_months_ago}
@@ -414,9 +414,9 @@ class DashboardRepository:
                         except Exception:
                             pass
 
-                # Process FDA Savings Date Fallback
+                # Process FDA Savings Date Fallback (Preferring fda_receive_date / fda_received_date)
                 if fda_sav > 0:
-                    raw_fda_date = str(r.get("fda_received_date") or r.get("fda_processing_date") or r.get("etd") or "").strip()
+                    raw_fda_date = str(r.get("fda_receive_date") or r.get("fda_received_date") or r.get("fda_processing_date") or r.get("etd") or "").strip()
                     if raw_fda_date and raw_fda_date.lower() not in ["n/a", "none"]:
                         try:
                             fda_dt = parser.parse(raw_fda_date, dayfirst=True)
@@ -431,6 +431,7 @@ class DashboardRepository:
         result_list = [monthly_data[k] for k in sorted_keys]
         
         return {"data": result_list}
+
 
     @staticmethod
     def get_dashboard_hover_stats(client_ids: List[int], from_date, to_date, data_source: Optional[str] = "all", payload=None, db: Session = None):
