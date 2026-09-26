@@ -1,4 +1,3 @@
-from typing import Any
 from app.models.purpose import MaPurpose
 from sqlalchemy.orm import Session
 from sqlalchemy import func, desc, text, extract
@@ -289,10 +288,10 @@ class DashboardRepository:
 
 
     @staticmethod
-    def get_savings_graph(client_ids: Any, from_date=None, to_date=None, data_source: Optional[str] = "all", db: Session = None):
+    def get_savings_graph(client_ids=None, from_date=None, to_date=None, data_source: Optional[str] = "all", db: Session = None):
         """
-        Get month-wise PDA and FDA savings for the last 6 months including current month.
-        Includes robust client filtering, currency conversion, and timestamp casting.
+        Get month-wise PDA and FDA savings for the last 6 months of the current year.
+        Dynamically converts ALL foreign currencies to USD.
         """
         if db is None:
             raise ValueError("Database session (db) cannot be None")
@@ -306,11 +305,16 @@ class DashboardRepository:
 
         ds = (data_source or "all").lower()
         now = datetime.now()
-        
-        # Define exact 6-month window from 5 months ago start-of-month to current end-of-month
-        six_months_ago = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0) - relativedelta(months=5)
+        current_year = now.year
 
-        # Normalize client_ids input into a clean list of integers
+        # 1. Strict last 6 months window constrained to current year (e.g. Apr 2026 to Sep 2026)
+        start_month_date = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0) - relativedelta(months=5)
+        
+        # Ensure start date does not roll back into previous year if current year focus is required
+        year_start = datetime(current_year, 1, 1, 0, 0, 0)
+        graph_start_date = max(start_month_date, year_start)
+
+        # Normalize client IDs
         parsed_cids = []
         if client_ids is not None:
             if isinstance(client_ids, list):
@@ -320,21 +324,23 @@ class DashboardRepository:
 
         expanded_client_ids = get_all_prod_ids_for_client_list(parsed_cids) if parsed_cids else None
 
-        # Initialize last 6 months map
+        # Initialize last 6 months of the current year
         monthly_data = {}
-        for i in range(5, -1, -1):
-            month_date = now - relativedelta(months=i)
-            month_str = month_date.strftime("%b")
-            month_key = month_date.strftime("%Y-%m")
-            monthly_data[month_key] = {
-                "month": month_str,
+        temp_date = graph_start_date
+        while temp_date <= now:
+            mk = temp_date.strftime("%Y-%m")
+            monthly_data[mk] = {
+                "month": temp_date.strftime("%b"),
                 "pda_savings": 0.0,
                 "fda_savings": 0.0
             }
+            temp_date += relativedelta(months=1)
 
-        # Helper function for USD currency conversion
+        # 2. Universal Currency Converter to USD for ALL currency types
         def convert_to_usd(raw_amount, roe_val, conv_rate, manual_str, curr_from):
             amount = float(raw_amount or 0.0)
+            
+            # Fallback to parse numeric string from manual input if main numeric amount is 0
             if amount == 0.0 and manual_str:
                 match = re.search(r'[\d,]+(?:\.\d+)?', str(manual_str))
                 if match:
@@ -347,21 +353,41 @@ class DashboardRepository:
                 return 0.0
 
             roe = float(conv_rate or roe_val or 1.0)
-            curr_from_str = str(curr_from or "").upper().strip()
+            if roe <= 0:
+                roe = 1.0
+
+            curr_from_clean = str(curr_from or "").upper().strip()
             
-            if curr_from_str and curr_from_str != "USD" and roe > 1.0:
+            # Detect currency from string if missing
+            if not curr_from_clean and manual_str:
+                curr_match = re.search(r'([A-Z]{3})', str(manual_str).upper())
+                if curr_match:
+                    curr_from_clean = curr_match.group(1)
+
+            # If already USD or currency code is USD, no conversion needed
+            if curr_from_clean == "USD":
+                return round(amount, 2)
+
+            # Universal ROE handling for ALL non-USD currencies:
+            # If ROE > 1.0 (e.g. 3.67 AED/USD, 90.50 INR/USD, 34.50 TRY/USD), divide
+            if roe > 1.0:
                 return round(amount / roe, 2)
-            
-            if ("AED" in str(manual_str).upper() or "EUR" in str(manual_str).upper()) and roe > 1.0:
-                return round(amount / roe, 2)
+            # If ROE < 1.0 (e.g. 0.27 USD/AED or 1.08 USD/EUR multiplier), multiply
+            elif roe < 1.0:
+                return round(amount * roe, 2)
 
             return round(amount, 2)
 
         if ds not in ["kamba", "excel"]:
-            where_clauses = ["COALESCE(fda.fda_receive_date, fda.updated_on, pda.updated_on, td.created_on, vw.etd)::timestamp >= :six_months_ago"]
-            params = {"six_months_ago": six_months_ago}
+            where_clauses = [
+                "COALESCE(fda.fda_receive_date, fda.updated_on, pda.updated_on, td.created_on, vw.etd)::timestamp >= :start_date",
+                "EXTRACT(YEAR FROM COALESCE(fda.fda_receive_date, fda.updated_on, pda.updated_on, td.created_on, vw.etd)::timestamp) = :current_year"
+            ]
+            params = {
+                "start_date": graph_start_date,
+                "current_year": current_year
+            }
 
-            # Strict client filter enforcement
             if expanded_client_ids:
                 where_clauses.append("td.client_id = ANY(:cids)")
                 params["cids"] = [int(x) for x in expanded_client_ids if str(x).isdigit()]
@@ -384,12 +410,12 @@ class DashboardRepository:
                 LEFT JOIN {SCHEMA_NAME}.txn_fda fda ON td.disbursement_seq = fda.disbursement_seq
                 LEFT JOIN {SCHEMA_NAME}.vw_dashboard_data vw ON td.disbursement_seq = vw.disbursement_seq
                 WHERE {" AND ".join(where_clauses)}
-                  AND (
+                AND (
                     COALESCE(vw.loss_prevention_pda, 0) > 0 
                     OR COALESCE(vw.loss_prevention_fda, 0) > 0
                     OR fda.manual_fda_amount IS NOT NULL
                     OR pda.manual_pda_amount IS NOT NULL
-                  )
+                )
             '''
             
             records = db.execute(text(graph_sql), params).mappings().all()
@@ -413,48 +439,6 @@ class DashboardRepository:
 
                     monthly_data[mk]["pda_savings"] += pda_usd
                     monthly_data[mk]["fda_savings"] += fda_usd
-
-        # Process Excel / Ankkumam dataset
-        prod_cid_to_excel, excel_to_prod_cid = DashboardRepository._get_dynamic_client_mapping(db)
-        ankkumam_clients = []
-        if parsed_cids:
-            for cid in parsed_cids:
-                if cid in prod_cid_to_excel:
-                    ankkumam_clients.append(prod_cid_to_excel[cid])
-        else:
-            ankkumam_clients = list(excel_to_prod_cid.keys())
-
-        if ankkumam_clients and ds in ["all", "excel"]:
-            class DummyDataRequest:
-                tableFilter = None
-                pageSize = -1
-                page = 1
-                clientId = None
-            
-            deduped, _ = DashboardRepository._get_ankkumam_records(
-                ankkumam_clients, DummyDataRequest(), False, True, 0, db, only_completed_fda=False
-            )
-            for r in deduped:
-                pda_sav = float(r.get("loss_prevention_pda") or 0.0)
-                fda_sav = float(r.get("loss_prevention_fda") or 0.0)
-
-                raw_fda_date = str(r.get("fda_receive_date") or r.get("fda_received_date") or r.get("fda_processing_date") or r.get("etd") or "").strip()
-                if raw_fda_date and raw_fda_date.lower() not in ["n/a", "none"]:
-                    try:
-                        fda_dt = parser.parse(raw_fda_date, dayfirst=True)
-                        if fda_dt >= six_months_ago:
-                            mk = fda_dt.strftime("%Y-%m")
-                            if mk in monthly_data:
-                                usd_fda_sav = convert_to_usd(
-                                    raw_amount=fda_sav,
-                                    roe_val=r.get("fda_roe"),
-                                    conv_rate=r.get("conversion_rate"),
-                                    manual_str=r.get("manual_fda_amount"),
-                                    curr_from=r.get("fda_currency_from")
-                                )
-                                monthly_data[mk]["fda_savings"] += usd_fda_sav
-                    except Exception:
-                        pass
 
         sorted_keys = sorted(list(monthly_data.keys()))
         result_list = []
