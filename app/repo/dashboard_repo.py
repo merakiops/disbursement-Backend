@@ -1460,19 +1460,19 @@ class DashboardRepository:
     def get_dashboard_filter_data(filter_req, db: Session = None):
         """
         Get unique filter data for dashboard filters with bidirectional cascading.
-        Preserves standard DB + Ankkumam excel dataset merging logic.
+        Includes purpose_name for both Standard and Ankkumam datasets.
         """
-        # Handle both FilterDataRequestDTO and raw client_id for backward compatibility
         if hasattr(filter_req, 'client_id'):
             client_id = filter_req.client_id
             data_source = filter_req.data_source or "all"
             selected_vessel = getattr(filter_req, 'selected_vessel', []) or []
             selected_country = getattr(filter_req, 'selected_country', []) or []
             selected_port = getattr(filter_req, 'selected_port', []) or []
+            selected_purpose = getattr(filter_req, 'selected_purpose', []) or []
         else:
             client_id = filter_req
             data_source = "all"
-            selected_vessel, selected_country, selected_port = [], [], []
+            selected_vessel, selected_country, selected_port, selected_purpose = [], [], [], []
 
         # 1. Fetch Client List
         clients_result = db.query(MaCompany.company_id, MaCompany.company_name).filter(
@@ -1482,8 +1482,22 @@ class DashboardRepository:
         
         clients_list = [{"id": c[0], "name": c[1]} for c in clients_result] if clients_result else []
 
-        # 2. Build Query for Standard Production View (VwFdaProcessingDetails)
-        query = db.query(VwFdaProcessingDetails)
+        # 2. Build Query for Standard Production View
+        # We join TxnDisbursement and MaPurpose to get purpose names aligned with FDA processing details
+        query = db.query(
+            VwFdaProcessingDetails.vessel_name,
+            VwFdaProcessingDetails.country_name,
+            VwFdaProcessingDetails.port_name,
+            MaPurpose.name.label("purpose_name"),
+            VwFdaProcessingDetails.loa,
+            VwFdaProcessingDetails.nrt,
+            VwFdaProcessingDetails.grt,
+            VwFdaProcessingDetails.rgrt
+        ).outerjoin(
+            TxnDisbursement, VwFdaProcessingDetails.disbursement_seq == TxnDisbursement.disbursement_seq
+        ).outerjoin(
+            MaPurpose, TxnDisbursement.purpose_id == MaPurpose.purpose_id
+        )
 
         if client_id is not None:
             if isinstance(client_id, list):
@@ -1503,16 +1517,16 @@ class DashboardRepository:
         if selected_port and len(selected_port) > 0:
             query = query.filter(func.upper(VwFdaProcessingDetails.port_name).in_([p.upper() for p in selected_port]))
 
-        vessel_names = sorted([v[0] for v in query.with_entities(VwFdaProcessingDetails.vessel_name).distinct().all() if v[0]])
-        country_names = sorted([c[0] for c in query.with_entities(VwFdaProcessingDetails.country_name).distinct().all() if c[0]])
-        port_names = sorted([p[0] for p in query.with_entities(VwFdaProcessingDetails.port_name).distinct().all() if p[0]])
+        if selected_purpose and len(selected_purpose) > 0:
+            query = query.filter(func.upper(MaPurpose.name).in_([p.upper() for p in selected_purpose]))
 
-        loa_stats = query.with_entities(func.min(VwFdaProcessingDetails.loa), func.max(VwFdaProcessingDetails.loa)).first()
-        nrt_stats = query.with_entities(func.min(VwFdaProcessingDetails.nrt), func.max(VwFdaProcessingDetails.nrt)).first()
-        grt_stats = query.with_entities(func.min(VwFdaProcessingDetails.grt), func.max(VwFdaProcessingDetails.grt)).first()
-        rgrt_stats = query.with_entities(func.min(VwFdaProcessingDetails.rgrt), func.max(VwFdaProcessingDetails.rgrt)).first()
+        # Distinct filter values
+        vessel_names = sorted(list(set([r.vessel_name for r in query.all() if r.vessel_name])))
+        country_names = sorted(list(set([r.country_name for r in query.all() if r.country_name])))
+        port_names = sorted(list(set([r.port_name for r in query.all() if r.port_name])))
+        purpose_names = sorted(list(set([r.purpose_name for r in query.all() if r.purpose_name])))
 
-        # 3. Check and Query Ankkumam Data (ankkumam_data_excel.data)
+        # 3. Ankkumam Data Merge (ankkumam_data_excel.data)
         prod_cid_to_excel, excel_to_prod_cid = DashboardRepository._get_dynamic_client_mapping(db)
         should_merge_ankkumam = False
         ankkumam_clients = []
@@ -1536,7 +1550,6 @@ class DashboardRepository:
                 ank_where = [f"d.client IN ({ids_str})"]
                 ank_params = {}
 
-                # Apply bidirectional filter conditions to Ankkumam query
                 if selected_vessel and len(selected_vessel) > 0:
                     ank_where.append("UPPER(d.vessel) = ANY(:vessels)")
                     ank_params["vessels"] = [v.upper() for v in selected_vessel]
@@ -1546,22 +1559,31 @@ class DashboardRepository:
                 if selected_port and len(selected_port) > 0:
                     ank_where.append("UPPER(d.port) = ANY(:ports)")
                     ank_params["ports"] = [p.upper() for p in selected_port]
+                if selected_purpose and len(selected_purpose) > 0:
+                    ank_where.append("UPPER(d.purpose) = ANY(:purposes)")
+                    ank_params["purposes"] = [p.upper() for p in selected_purpose]
 
                 where_sql = " AND ".join(ank_where)
 
                 ank_vessels = db.execute(text(f"SELECT DISTINCT d.vessel FROM ankkumam_data_excel.data d WHERE {where_sql} AND d.vessel IS NOT NULL"), ank_params).scalars().all()
                 ank_countries = db.execute(text(f"SELECT DISTINCT d.country FROM ankkumam_data_excel.data d WHERE {where_sql} AND d.country IS NOT NULL"), ank_params).scalars().all()
                 ank_ports = db.execute(text(f"SELECT DISTINCT d.port FROM ankkumam_data_excel.data d WHERE {where_sql} AND d.port IS NOT NULL"), ank_params).scalars().all()
+                ank_purposes = db.execute(text(f"SELECT DISTINCT d.purpose FROM ankkumam_data_excel.data d WHERE {where_sql} AND d.purpose IS NOT NULL"), ank_params).scalars().all()
 
-                # Merge Ankkumam results with standard database results
                 vessel_names = sorted(list(set(vessel_names + [str(v).strip().upper() for v in ank_vessels if v])))
                 country_names = sorted(list(set(country_names + [str(c).strip().upper() for c in ank_countries if c])))
                 port_names = sorted(list(set(port_names + [str(p).strip().upper() for p in ank_ports if p])))
+                purpose_names = sorted(list(set(purpose_names + [str(p).strip().upper() for p in ank_purposes if p])))
 
             except Exception as e:
                 print(f"Error querying Ankkumam filter data: {e}")
 
-        # 4. Range stats helper
+        # Range stats calculation
+        loa_stats = db.query(func.min(VwFdaProcessingDetails.loa), func.max(VwFdaProcessingDetails.loa)).first()
+        nrt_stats = db.query(func.min(VwFdaProcessingDetails.nrt), func.max(VwFdaProcessingDetails.nrt)).first()
+        grt_stats = db.query(func.min(VwFdaProcessingDetails.grt), func.max(VwFdaProcessingDetails.grt)).first()
+        rgrt_stats = db.query(func.min(VwFdaProcessingDetails.rgrt), func.max(VwFdaProcessingDetails.rgrt)).first()
+
         def get_range(stat_tuple):
             if stat_tuple and stat_tuple[0] is not None and stat_tuple[1] is not None:
                 return {"min_value": float(stat_tuple[0]), "max_value": float(stat_tuple[1])}
@@ -1572,6 +1594,7 @@ class DashboardRepository:
             "vessel_name": vessel_names,
             "country_name": country_names,
             "port_name": port_names,
+            "purpose_name": purpose_names,
             "loa": get_range(loa_stats),
             "nrt": get_range(nrt_stats),
             "grt": get_range(grt_stats),

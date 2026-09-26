@@ -422,7 +422,7 @@ class DashboardServiceImpl(DashboardService):
         """
         return DashboardRepository.update_dashboard_row(payload, db)
 
-    def get_dashboard_filter_data(self, filter_request: FilterDataRequestDTO, db: Session = None) -> FilterDataDTO:
+    def get_dashboard_filter_data(self, filter_request, db: Session = None) -> FilterDataDTO:
         filter_data_dict = DashboardRepository.get_dashboard_filter_data(filter_request, db)
         
         clients = [ClientFilterDTO(**client) for client in filter_data_dict.get("clients", [])]
@@ -432,6 +432,7 @@ class DashboardServiceImpl(DashboardService):
             vessel_name=filter_data_dict.get("vessel_name", []),
             country_name=filter_data_dict.get("country_name", []),
             port_name=filter_data_dict.get("port_name", []),
+            purpose_name=filter_data_dict.get("purpose_name", []), # FIX: Added purpose_name
             loa=RangeDataDTO(**filter_data_dict["loa"]) if filter_data_dict.get("loa") else None,
             nrt=RangeDataDTO(**filter_data_dict["nrt"]) if filter_data_dict.get("nrt") else None,
             grt=RangeDataDTO(**filter_data_dict["grt"]) if filter_data_dict.get("grt") else None,
