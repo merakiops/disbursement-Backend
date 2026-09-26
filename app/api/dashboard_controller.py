@@ -121,12 +121,10 @@ async def export_fda_processing_details(request: Request, data_request: Dashboar
 @jwt_required
 async def get_dashboard_filter_data(request: Request, filter_request: FilterDataRequestDTO, db: Session = Depends(get_db)):
     """
-    Get unique filter data for dashboard filters.
-    Returns distinct values for client_id, client_name, vessel_name, country_name, port_name.
+    Get unique bidirectional filter data for dashboard filters.
     """
     try:
-        data_src = getattr(filter_request, 'data_source', 'all')
-        result = dashboard_service.get_dashboard_filter_data(filter_request.client_id, data_src, db)
+        result = dashboard_service.get_dashboard_filter_data(filter_request, db)
         return result
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))

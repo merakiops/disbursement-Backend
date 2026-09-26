@@ -1,3 +1,4 @@
+from app.dto.dasboard_response_dto import FilterDataRequestDTO
 from sqlalchemy.orm import Session
 from typing import Optional
 from app.dto.dashboard_dto import DashboardRequestDTO
@@ -421,11 +422,8 @@ class DashboardServiceImpl(DashboardService):
         """
         return DashboardRepository.update_dashboard_row(payload, db)
 
-    def get_dashboard_filter_data(self, client_id: Optional[int], data_source: Optional[str] = "all", db: Session = None) -> FilterDataDTO:
-        """
-        Get data for dashboard filters.
-        """
-        filter_data_dict = DashboardRepository.get_dashboard_filter_data(client_id, data_source, db)
+    def get_dashboard_filter_data(self, filter_request: FilterDataRequestDTO, db: Session = None) -> FilterDataDTO:
+        filter_data_dict = DashboardRepository.get_dashboard_filter_data(filter_request, db)
         
         clients = [ClientFilterDTO(**client) for client in filter_data_dict.get("clients", [])]
         

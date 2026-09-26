@@ -1457,12 +1457,11 @@ class DashboardRepository:
             return {}
             
     @staticmethod
-    def get_dashboard_filter_data(client_id: Optional[int], data_source: Optional[str] = "all", db: Session = None):
-        """
-        Get unique filter data for dashboard filters.
-        For clients with kamba mapping or when no client is selected, merges filter data from both schemas.
-        """
-        # Get client details (id and name) from the MaCompany table (company_type_id = 2 is Client)
+    def get_dashboard_filter_data(filter_req, db: Session = None):
+        client_id = filter_req.client_id
+        data_source = filter_req.data_source or "all"
+        
+        # 1. Fetch Client List
         clients_result = db.query(MaCompany.company_id, MaCompany.company_name).filter(
             MaCompany.company_type_id == 2,
             MaCompany.status == 'Y'
@@ -1470,170 +1469,49 @@ class DashboardRepository:
         
         clients_list = [{"id": c[0], "name": c[1]} for c in clients_result] if clients_result else []
 
-        # Backward compatibility: client_id=85 ("Kamba") shows all kamba data
-        if client_id == 85 or (data_source and data_source.lower() in ["kamba", "mysql"]):
-            try:
-                vessel_names = sorted([v[0] for v in db.execute(text("SELECT DISTINCT vessel FROM kamba_data_prod.vessels WHERE vessel IS NOT NULL AND vessel != ''")).all() if v[0]])
-                country_names = sorted([c[0] for c in db.execute(text("SELECT DISTINCT country FROM kamba_data_prod.countries WHERE country IS NOT NULL AND country != ''")).all() if c[0]])
-                port_names = sorted([p[0] for p in db.execute(text("SELECT DISTINCT port FROM kamba_data_prod.ports WHERE port IS NOT NULL AND port != ''")).all() if p[0]])
-                purpose_names = sorted([p[0] for p in db.query(MaPurpose.name).distinct().all() if p[0]])
-                grt_res = db.execute(text("SELECT MIN(grt), MAX(grt) FROM kamba_data_prod.vessels WHERE grt IS NOT NULL")).first()
-                min_grt = float(grt_res[0]) if grt_res and grt_res[0] is not None else None
-                max_grt = float(grt_res[1]) if grt_res and grt_res[1] is not None else None
+        # 2. Build Dynamic Filters for PostgreSQL View (VwFdaProcessingDetails)
+        query = db.query(VwFdaProcessingDetails)
 
-                kamba_filters = {
-                    "clients": clients_list,
-                    "vessel_name": vessel_names,
-                    "country_name": country_names,
-                    "port_name": port_names,
-                    "loa": None,
-                    "nrt": None,
-                    "grt": {"min_value": min_grt, "max_value": max_grt} if min_grt is not None else None,
-                    "rgrt": None,
-                    "vessel_type": [],
-                    "agent": [],
-                    "cargo_grade": [],
-                    "counterparty_short_name": []
-                }
-                _, excel_to_prod_cid = DashboardRepository._get_dynamic_client_mapping(db)
-                alghaf_only = ["ALGHAF"] if "ALGHAF" in excel_to_prod_cid else []
-                ankkumam_filters = DashboardRepository._get_ankkumam_filter_data(alghaf_only, db)
-                if ankkumam_filters:
-                    kamba_filters["vessel_name"] = sorted(list(set(kamba_filters["vessel_name"] + ankkumam_filters.get("vessel_name", []))))
-                    kamba_filters["country_name"] = sorted(list(set(kamba_filters["country_name"] + ankkumam_filters.get("country_name", []))))
-                    kamba_filters["port_name"] = sorted(list(set(kamba_filters["port_name"] + ankkumam_filters.get("port_name", []))))
-                return kamba_filters
-            except Exception as e:
-                print("Error querying PostgreSQL kamba_data_prod filter data:", e)
+        if client_id:
+            if isinstance(client_id, list):
+                query = query.filter(VwFdaProcessingDetails.client_id.in_([int(x) for x in client_id if str(x).isdigit()]))
+            elif str(client_id).isdigit():
+                query = query.filter(VwFdaProcessingDetails.client_id == int(client_id))
 
+        # Apply selected vessel/country/port dynamically for bidirectional narrowing
+        if filter_req.selected_vessel and len(filter_req.selected_vessel) > 0:
+            query = query.filter(func.upper(VwFdaProcessingDetails.vessel_name).in_([v.upper() for v in filter_req.selected_vessel]))
+            
+        if filter_req.selected_country and len(filter_req.selected_country) > 0:
+            query = query.filter(func.upper(VwFdaProcessingDetails.country_name).in_([c.upper() for c in filter_req.selected_country]))
 
-        # If client_id is 84 ("X-Platform") or data_source is explicitly "excel", return Excel schema data only
-        if client_id == 84 or (data_source and data_source.lower() == "excel"):
-            distinct_vessel_types = []
-            distinct_agents = []
-            distinct_cargo_grades = []
-            distinct_counterparties = []
+        if filter_req.selected_port and len(filter_req.selected_port) > 0:
+            query = query.filter(func.upper(VwFdaProcessingDetails.port_name).in_([p.upper() for p in filter_req.selected_port]))
 
-            try:
-                with db.begin_nested():
-                    vessel_names = sorted([v[0] for v in db.query(ExcelVessel.vessel_name).distinct().all() if v[0]])
-                    country_names = sorted([c[0] for c in db.query(ExcelCountry.country_name).distinct().all() if c[0]])
-                    port_names = sorted([p[0] for p in db.query(ExcelPort.port_name).distinct().all() if p[0]])
-                    
-                    v_types_1 = [r[0] for r in db.query(ExcelDisbursementsIndividualItemsCost.vessel_type).distinct().all() if r[0]]
-                    v_types_2 = [r[0] for r in db.query(ExcelDisbursementsPaidAmountsAnalysis.vessel_type).distinct().all() if r[0]]
-                    v_types_3 = [r[0] for r in db.query(ExcelDisbursementsTotalPortCost.vessel_type).distinct().all() if r[0]]
-                    distinct_vessel_types = sorted(list(set(v_types_1 + v_types_2 + v_types_3)))
+        # Execute distinct queries on filtered dataset
+        vessel_names = sorted([v[0] for v in query.with_entities(VwFdaProcessingDetails.vessel_name).distinct().all() if v[0]])
+        country_names = sorted([c[0] for c in query.with_entities(VwFdaProcessingDetails.country_name).distinct().all() if c[0]])
+        port_names = sorted([p[0] for p in query.with_entities(VwFdaProcessingDetails.port_name).distinct().all() if p[0]])
 
-                    agents_1 = [r[0] for r in db.query(ExcelDisbursementsIndividualItemsCost.agent).distinct().all() if r[0]]
-                    agents_2 = [r[0] for r in db.query(ExcelDisbursementsPaidAmountsAnalysis.agent).distinct().all() if r[0]]
-                    agents_3 = [r[0] for r in db.query(ExcelDisbursementsTotalPortCost.vendor_short_name).distinct().all() if r[0]]
-                    distinct_agents = sorted(list(set(agents_1 + agents_2 + agents_3)))
-
-                    distinct_cargo_grades = sorted([r[0] for r in db.query(ExcelDisbursementsTotalPortCost.cargo_grades).distinct().all() if r[0]])
-                    distinct_counterparties = sorted([r[0] for r in db.query(ExcelDisbursementsTotalPortCost.counterparty_short_name).distinct().all() if r[0]])
-
-                    grt_stats = db.query(
-                        func.min(ExcelDisbursementsTotalPortCost.grt).label('min_grt'),
-                        func.max(ExcelDisbursementsTotalPortCost.grt).label('max_grt')
-                    ).filter(ExcelDisbursementsTotalPortCost.grt.isnot(None)).first()
-
-                    return {
-                        "clients": clients_list,
-                        "vessel_name": vessel_names,
-                        "country_name": country_names,
-                        "port_name": port_names,
-                        "purpose_name": purpose_names,
-                        "loa": None,
-                        "nrt": None,
-                        "grt": {"min_value": float(grt_stats.min_grt), "max_value": float(grt_stats.max_grt)} if grt_stats and grt_stats.min_grt is not None else None,
-                        "rgrt": None,
-                        "vessel_type": distinct_vessel_types,
-                        "agent": distinct_agents,
-                        "cargo_grade": distinct_cargo_grades,
-                        "counterparty_short_name": distinct_counterparties
-                    }
-            except Exception:
-                db.rollback()
-
-        # --- Standard + Kamba merged flow ---
-        # Get standard prod filter data
-        vessel_names = sorted([v[0] for v in db.query(VwFdaProcessingDetails.vessel_name).distinct().all() if v[0]])
-        country_names = sorted([c[0] for c in db.query(VwFdaProcessingDetails.country_name).distinct().all() if c[0]])
-        port_names = sorted([p[0] for p in db.query(VwFdaProcessingDetails.port_name).distinct().all() if p[0]])
-
-        loa_stats = db.query(
+        loa_stats = query.with_entities(
             func.min(VwFdaProcessingDetails.loa).label('min_loa'),
             func.max(VwFdaProcessingDetails.loa).label('max_loa')
         ).filter(VwFdaProcessingDetails.loa.isnot(None)).first()
-        
-        nrt_stats = db.query(
+
+        nrt_stats = query.with_entities(
             func.min(VwFdaProcessingDetails.nrt).label('min_nrt'),
             func.max(VwFdaProcessingDetails.nrt).label('max_nrt')
         ).filter(VwFdaProcessingDetails.nrt.isnot(None)).first()
-        
-        grt_stats = db.query(
+
+        grt_stats = query.with_entities(
             func.min(VwFdaProcessingDetails.grt).label('min_grt'),
             func.max(VwFdaProcessingDetails.grt).label('max_grt')
         ).filter(VwFdaProcessingDetails.grt.isnot(None)).first()
-        
-        rgrt_stats = db.query(
+
+        rgrt_stats = query.with_entities(
             func.min(VwFdaProcessingDetails.rgrt).label('min_rgrt'),
             func.max(VwFdaProcessingDetails.rgrt).label('max_rgrt')
         ).filter(VwFdaProcessingDetails.rgrt.isnot(None)).first()
-
-        # Determine if we need to merge ankkumam data
-        prod_cid_to_excel, excel_to_prod_cid = DashboardRepository._get_dynamic_client_mapping(db)
-        should_merge_ankkumam = False
-        ankkumam_clients = []
-        if client_id is None:
-            should_merge_ankkumam = True
-            ankkumam_clients = list(excel_to_prod_cid.keys())
-        elif client_id and int(client_id) in prod_cid_to_excel:
-            should_merge_ankkumam = True
-            ankkumam_clients = [prod_cid_to_excel[int(client_id)]]
-        elif str(client_id) == '85':
-            should_merge_ankkumam = True
-            if "ALGHAF" in excel_to_prod_cid:
-                ankkumam_clients = ["ALGHAF"]
-
-        if should_merge_ankkumam and ankkumam_clients:
-            ankkumam_filter = DashboardRepository._get_ankkumam_filter_data(ankkumam_clients, db)
-            if ankkumam_filter:
-                # Merge vessel/country/port lists (deduplicate and sort)
-                vessel_names = sorted(list(set(vessel_names + ankkumam_filter.get("vessel_name", []))))
-                country_names = sorted(list(set(country_names + ankkumam_filter.get("country_name", []))))
-                port_names = sorted(list(set(port_names + ankkumam_filter.get("port_name", []))))
-
-                # Merge range stats (take min of mins, max of maxes)
-                def merge_range(prod_stat_obj, prod_min_attr, prod_max_attr, ankkumam_min_val, ankkumam_max_val):
-                    prod_min = float(getattr(prod_stat_obj, prod_min_attr)) if prod_stat_obj and getattr(prod_stat_obj, prod_min_attr, None) is not None else None
-                    prod_max = float(getattr(prod_stat_obj, prod_max_attr)) if prod_stat_obj and getattr(prod_stat_obj, prod_max_attr, None) is not None else None
-                    vals_min = [v for v in [prod_min, ankkumam_min_val] if v is not None]
-                    vals_max = [v for v in [prod_max, ankkumam_max_val] if v is not None]
-                    if vals_min and vals_max:
-                        return {"min_value": min(vals_min), "max_value": max(vals_max)}
-                    return {"min_value": prod_min, "max_value": prod_max} if prod_min is not None else None
-
-                loa_merged = merge_range(loa_stats, 'min_loa', 'max_loa', None, None)
-                nrt_merged = merge_range(nrt_stats, 'min_nrt', 'max_nrt', None, None)
-                grt_merged = merge_range(grt_stats, 'min_grt', 'max_grt', None, None)
-                rgrt_merged = merge_range(rgrt_stats, 'min_rgrt', 'max_rgrt', None, None)
-
-                return {
-                    "clients": clients_list,
-                    "vessel_name": vessel_names,
-                    "country_name": country_names,
-                    "port_name": port_names,
-                    "loa": loa_merged,
-                    "nrt": nrt_merged,
-                    "grt": grt_merged,
-                    "rgrt": rgrt_merged,
-                    "vessel_type": [],
-                    "agent": [],
-                    "cargo_grade": [],
-                    "counterparty_short_name": []
-                }
 
         filter_data = {
             "clients": clients_list,

@@ -160,6 +160,10 @@ class ClientFilterDTO(BaseModel):
 class FilterDataRequestDTO(BaseModel):
     client_id: Optional[int] = None
     data_source: Optional[str] = "all"
+    data_source: Optional[str] = "all"
+    selected_vessel: Optional[List[str]] = []
+    selected_country: Optional[List[str]] = []
+    selected_port: Optional[List[str]] = []
 class RangeDataDTO(BaseModel):
     min_value: float
     max_value: float
