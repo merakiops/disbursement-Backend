@@ -291,7 +291,8 @@ class DashboardRepository:
     def get_savings_graph(client_ids=None, from_date=None, to_date=None, data_source: Optional[str] = "all", db: Session = None):
         """
         Get month-wise PDA and FDA savings for the last 6 months of the current year.
-        Dynamically converts ALL foreign currencies to USD.
+        Uses the exact same query and calculation logic as get_savings_details_table
+        to ensure 100% data consistency between the graph and the details modal table.
         """
         if db is None:
             raise ValueError("Database session (db) cannot be None")
@@ -299,7 +300,6 @@ class DashboardRepository:
         from sqlalchemy import text
         from datetime import datetime
         from dateutil.relativedelta import relativedelta
-        from dateutil import parser
         import re
         from app.db import SCHEMA_NAME
 
@@ -307,10 +307,8 @@ class DashboardRepository:
         now = datetime.now()
         current_year = now.year
 
-        # 1. Strict last 6 months window constrained to current year (e.g. Apr 2026 to Sep 2026)
+        # 1. Calculate strict 6-month window for current year
         start_month_date = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0) - relativedelta(months=5)
-        
-        # Ensure start date does not roll back into previous year if current year focus is required
         year_start = datetime(current_year, 1, 1, 0, 0, 0)
         graph_start_date = max(start_month_date, year_start)
 
@@ -324,7 +322,7 @@ class DashboardRepository:
 
         expanded_client_ids = get_all_prod_ids_for_client_list(parsed_cids) if parsed_cids else None
 
-        # Initialize last 6 months of the current year
+        # Initialize month buckets
         monthly_data = {}
         temp_date = graph_start_date
         while temp_date <= now:
@@ -336,11 +334,9 @@ class DashboardRepository:
             }
             temp_date += relativedelta(months=1)
 
-        # 2. Universal Currency Converter to USD for ALL currency types
+        # 2. Universal Currency Converter matching get_savings_details_table
         def convert_to_usd(raw_amount, roe_val, conv_rate, manual_str, curr_from):
             amount = float(raw_amount or 0.0)
-            
-            # Fallback to parse numeric string from manual input if main numeric amount is 0
             if amount == 0.0 and manual_str:
                 match = re.search(r'[\d,]+(?:\.\d+)?', str(manual_str))
                 if match:
@@ -356,90 +352,82 @@ class DashboardRepository:
             if roe <= 0:
                 roe = 1.0
 
-            curr_from_clean = str(curr_from or "").upper().strip()
+            curr_from_str = str(curr_from or "").upper().strip()
             
-            # Detect currency from string if missing
-            if not curr_from_clean and manual_str:
-                curr_match = re.search(r'([A-Z]{3})', str(manual_str).upper())
-                if curr_match:
-                    curr_from_clean = curr_match.group(1)
-
-            # If already USD or currency code is USD, no conversion needed
-            if curr_from_clean == "USD":
-                return round(amount, 2)
-
-            # Universal ROE handling for ALL non-USD currencies:
-            # If ROE > 1.0 (e.g. 3.67 AED/USD, 90.50 INR/USD, 34.50 TRY/USD), divide
-            if roe > 1.0:
+            if curr_from_str and curr_from_str != "USD" and roe > 1.0:
                 return round(amount / roe, 2)
-            # If ROE < 1.0 (e.g. 0.27 USD/AED or 1.08 USD/EUR multiplier), multiply
-            elif roe < 1.0:
-                return round(amount * roe, 2)
+            
+            if ("AED" in str(manual_str).upper() or "EUR" in str(manual_str).upper()) and roe > 1.0:
+                return round(amount / roe, 2)
 
             return round(amount, 2)
 
-        if ds not in ["kamba", "excel"]:
-            where_clauses = [
-                "COALESCE(fda.fda_receive_date, fda.updated_on, pda.updated_on, td.created_on, vw.etd)::timestamp >= :start_date",
-                "EXTRACT(YEAR FROM COALESCE(fda.fda_receive_date, fda.updated_on, pda.updated_on, td.created_on, vw.etd)::timestamp) = :current_year"
-            ]
-            params = {
-                "start_date": graph_start_date,
-                "current_year": current_year
-            }
+        where_clauses = [
+            "COALESCE(fda.fda_receive_date, fda.updated_on, td.created_on) >= :graph_start_date",
+            "to_char(COALESCE(fda.fda_receive_date, fda.updated_on, td.created_on), 'YYYY') = :current_year"
+        ]
+        params = {
+            "graph_start_date": graph_start_date,
+            "current_year": str(current_year)
+        }
 
-            if expanded_client_ids:
+        if expanded_client_ids:
+            int_cids = [int(x) for x in expanded_client_ids if str(x).isdigit()]
+            if int_cids:
                 where_clauses.append("td.client_id = ANY(:cids)")
-                params["cids"] = [int(x) for x in expanded_client_ids if str(x).isdigit()]
+                params["cids"] = int_cids
 
-            graph_sql = f'''
-                SELECT 
-                    to_char(COALESCE(fda.fda_receive_date, fda.updated_on, pda.updated_on, td.created_on, vw.etd)::timestamp, 'YYYY-MM') as month_key,
-                    COALESCE(vw.loss_prevention_pda, 0) as raw_pda_savings,
-                    COALESCE(vw.loss_prevention_fda, 0) as raw_fda_savings,
-                    pda.pda_roe,
-                    pda.conversion_rate as pda_conv_rate,
-                    pda.manual_pda_amount,
-                    pda.pda_currency_from,
-                    fda.fda_roe,
-                    fda.conversion_rate as fda_conv_rate,
-                    fda.manual_fda_amount,
-                    fda.fda_currency_from
-                FROM {SCHEMA_NAME}.txn_disbursement td
-                LEFT JOIN {SCHEMA_NAME}.txn_pda pda ON td.disbursement_seq = pda.disbursement_seq
-                LEFT JOIN {SCHEMA_NAME}.txn_fda fda ON td.disbursement_seq = fda.disbursement_seq
-                LEFT JOIN {SCHEMA_NAME}.vw_dashboard_data vw ON td.disbursement_seq = vw.disbursement_seq
-                WHERE {" AND ".join(where_clauses)}
-                AND (
-                    COALESCE(vw.loss_prevention_pda, 0) > 0 
-                    OR COALESCE(vw.loss_prevention_fda, 0) > 0
-                    OR fda.manual_fda_amount IS NOT NULL
-                    OR pda.manual_pda_amount IS NOT NULL
+        where_sql = " AND ".join(where_clauses)
+
+        # 3. Exact SQL Query used in get_savings_details_table
+        sql = f'''
+            SELECT 
+                to_char(COALESCE(fda.fda_receive_date, fda.updated_on, td.created_on), 'YYYY-MM') as month_key,
+                COALESCE(vw.loss_prevention_pda, 0) as raw_pda_savings,
+                COALESCE(vw.loss_prevention_fda, 0) as raw_fda_savings,
+                pda.pda_roe,
+                pda.conversion_rate as pda_conv_rate,
+                pda.manual_pda_amount,
+                pda.pda_currency_from,
+                fda.fda_roe,
+                fda.conversion_rate as fda_conv_rate,
+                fda.manual_fda_amount,
+                fda.fda_currency_from
+            FROM {SCHEMA_NAME}.txn_disbursement td
+            LEFT JOIN {SCHEMA_NAME}.txn_pda pda ON td.disbursement_seq = pda.disbursement_seq
+            LEFT JOIN {SCHEMA_NAME}.txn_fda fda ON td.disbursement_seq = fda.disbursement_seq
+            LEFT JOIN {SCHEMA_NAME}.vw_dashboard_data vw ON td.disbursement_seq = vw.disbursement_seq
+            LEFT JOIN {SCHEMA_NAME}.ma_purpose purp ON td.purpose_id = purp.purpose_id
+            WHERE {where_sql}
+              AND (COALESCE(vw.loss_prevention_pda, 0) > 0 OR COALESCE(vw.loss_prevention_fda, 0) > 0)
+        '''
+
+        rows = db.execute(text(sql), params).mappings().all()
+
+        # 4. Sum month totals from exact same parsed row values
+        for r in rows:
+            mk = r.get("month_key")
+            if mk in monthly_data:
+                pda_usd = convert_to_usd(
+                    raw_amount=r.get("raw_pda_savings"),
+                    roe_val=r.get("pda_roe"),
+                    conv_rate=r.get("pda_conv_rate"),
+                    manual_str=r.get("manual_pda_amount"),
+                    curr_from=r.get("pda_currency_from")
                 )
-            '''
-            
-            records = db.execute(text(graph_sql), params).mappings().all()
-            for r in records:
-                mk = r["month_key"]
-                if mk in monthly_data:
-                    pda_usd = convert_to_usd(
-                        raw_amount=r.get("raw_pda_savings"),
-                        roe_val=r.get("pda_roe"),
-                        conv_rate=r.get("pda_conv_rate"),
-                        manual_str=r.get("manual_pda_amount"),
-                        curr_from=r.get("pda_currency_from")
-                    )
-                    fda_usd = convert_to_usd(
-                        raw_amount=r.get("raw_fda_savings"),
-                        roe_val=r.get("fda_roe"),
-                        conv_rate=r.get("fda_conv_rate"),
-                        manual_str=r.get("manual_fda_amount"),
-                        curr_from=r.get("fda_currency_from")
-                    )
 
-                    monthly_data[mk]["pda_savings"] += pda_usd
-                    monthly_data[mk]["fda_savings"] += fda_usd
+                fda_usd = convert_to_usd(
+                    raw_amount=r.get("raw_fda_savings"),
+                    roe_val=r.get("fda_roe"),
+                    conv_rate=r.get("fda_conv_rate"),
+                    manual_str=r.get("manual_fda_amount"),
+                    curr_from=r.get("fda_currency_from")
+                )
 
+                monthly_data[mk]["pda_savings"] += pda_usd
+                monthly_data[mk]["fda_savings"] += fda_usd
+
+        # Output final graph dataset
         sorted_keys = sorted(list(monthly_data.keys()))
         result_list = []
         for k in sorted_keys:
@@ -448,7 +436,7 @@ class DashboardRepository:
                 "pda_savings": round(monthly_data[k]["pda_savings"], 2),
                 "fda_savings": round(monthly_data[k]["fda_savings"], 2)
             })
-        
+
         return {"data": result_list}
 
 
