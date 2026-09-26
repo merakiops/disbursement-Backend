@@ -1460,19 +1460,27 @@ class DashboardRepository:
     def get_dashboard_filter_data(filter_req, db: Session = None):
         """
         Get unique filter data for dashboard filters with bidirectional cascading.
-        Includes purpose_name for both Standard and Ankkumam datasets.
+        Handles flexible client_id formats (int, str, list).
         """
         if hasattr(filter_req, 'client_id'):
-            client_id = filter_req.client_id
+            raw_client_id = filter_req.client_id
             data_source = filter_req.data_source or "all"
             selected_vessel = getattr(filter_req, 'selected_vessel', []) or []
             selected_country = getattr(filter_req, 'selected_country', []) or []
             selected_port = getattr(filter_req, 'selected_port', []) or []
             selected_purpose = getattr(filter_req, 'selected_purpose', []) or []
         else:
-            client_id = filter_req
+            raw_client_id = filter_req
             data_source = "all"
             selected_vessel, selected_country, selected_port, selected_purpose = [], [], [], []
+
+        # Parse raw_client_id into a normalized list of integer IDs
+        client_ids = []
+        if raw_client_id is not None:
+            if isinstance(raw_client_id, list):
+                client_ids = [int(x) for x in raw_client_id if str(x).isdigit()]
+            elif str(raw_client_id).isdigit():
+                client_ids = [int(raw_client_id)]
 
         # 1. Fetch Client List
         clients_result = db.query(MaCompany.company_id, MaCompany.company_name).filter(
@@ -1483,7 +1491,6 @@ class DashboardRepository:
         clients_list = [{"id": c[0], "name": c[1]} for c in clients_result] if clients_result else []
 
         # 2. Build Query for Standard Production View
-        # We join TxnDisbursement and MaPurpose to get purpose names aligned with FDA processing details
         query = db.query(
             VwFdaProcessingDetails.vessel_name,
             VwFdaProcessingDetails.country_name,
@@ -1499,13 +1506,8 @@ class DashboardRepository:
             MaPurpose, TxnDisbursement.purpose_id == MaPurpose.purpose_id
         )
 
-        if client_id is not None:
-            if isinstance(client_id, list):
-                cids = [int(x) for x in client_id if str(x).isdigit()]
-                if cids:
-                    query = query.filter(VwFdaProcessingDetails.client_id.in_(cids))
-            elif str(client_id).isdigit():
-                query = query.filter(VwFdaProcessingDetails.client_id == int(client_id))
+        if client_ids:
+            query = query.filter(VwFdaProcessingDetails.client_id.in_(client_ids))
 
         # Apply bidirectional selection filters on Standard dataset
         if selected_vessel and len(selected_vessel) > 0:
@@ -1520,27 +1522,27 @@ class DashboardRepository:
         if selected_purpose and len(selected_purpose) > 0:
             query = query.filter(func.upper(MaPurpose.name).in_([p.upper() for p in selected_purpose]))
 
-        # Distinct filter values
-        vessel_names = sorted(list(set([r.vessel_name for r in query.all() if r.vessel_name])))
-        country_names = sorted(list(set([r.country_name for r in query.all() if r.country_name])))
-        port_names = sorted(list(set([r.port_name for r in query.all() if r.port_name])))
-        purpose_names = sorted(list(set([r.purpose_name for r in query.all() if r.purpose_name])))
+        rows = query.all()
+
+        vessel_names = sorted(list(set([r.vessel_name for r in rows if r.vessel_name])))
+        country_names = sorted(list(set([r.country_name for r in rows if r.country_name])))
+        port_names = sorted(list(set([r.port_name for r in rows if r.port_name])))
+        purpose_names = sorted(list(set([r.purpose_name for r in rows if r.purpose_name])))
 
         # 3. Ankkumam Data Merge (ankkumam_data_excel.data)
         prod_cid_to_excel, excel_to_prod_cid = DashboardRepository._get_dynamic_client_mapping(db)
         should_merge_ankkumam = False
         ankkumam_clients = []
 
-        if client_id is None:
+        if not client_ids:
             should_merge_ankkumam = True
             ankkumam_clients = list(excel_to_prod_cid.keys())
-        elif client_id:
-            c_list = client_id if isinstance(client_id, list) else [client_id]
-            for cid in c_list:
-                if cid and str(cid).isdigit() and int(cid) in prod_cid_to_excel:
+        else:
+            for cid in client_ids:
+                if cid in prod_cid_to_excel:
                     should_merge_ankkumam = True
-                    ankkumam_clients.append(prod_cid_to_excel[int(cid)])
-                elif str(cid) == '85' and "ALGHAF" in excel_to_prod_cid:
+                    ankkumam_clients.append(prod_cid_to_excel[cid])
+                elif cid == 85 and "ALGHAF" in excel_to_prod_cid:
                     should_merge_ankkumam = True
                     ankkumam_clients.append("ALGHAF")
 

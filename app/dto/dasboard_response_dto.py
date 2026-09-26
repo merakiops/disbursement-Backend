@@ -158,7 +158,7 @@ class ClientFilterDTO(BaseModel):
     name: str
 
 class FilterDataRequestDTO(BaseModel):
-    client_id: Optional[int] = None
+    client_id: Optional[Union[List[Union[int, str]], int, str]] = None
     data_source: Optional[str] = "all"
     data_source: Optional[str] = "all"
     selected_vessel: Optional[List[str]] = []
